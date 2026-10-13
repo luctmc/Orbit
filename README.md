@@ -15,7 +15,10 @@ workspaces e missões.
 
 ## Rodando
 
-Requer Node ≥ 24.11 e, para o app nativo, Rust (`rustup`).
+Para desenvolver: Node ≥ 24.11 e, para o app nativo, Rust (`rustup`). O `Orbit.app` gerado não
+depende do Node da máquina: o build baixa o Node oficial (v24.21.0, Apple Silicon) de nodejs.org,
+confere o SHA-256 com o `SHASUMS256.txt` da versão, guarda em cache em `apps/desktop/build/` e o
+coloca dentro do app (`scripts/fetch-node.mjs`). `ORBIT_NODE` continua valendo para trocar o Node.
 
 ```bash
 npm install
@@ -28,7 +31,8 @@ O token do sidecar é novo a cada execução: no app o shell Rust o gera e repas
 IPC; no `npm run dev` o script o gera e o Vite o injeta. O sidecar só aceita conexões com esse
 token e vindas da origem da interface. Para usar outra pasta de dados: `ORBIT_HOME=/caminho`.
 
-No app, o sidecar roda com o `node` do seu login shell (ou `ORBIT_NODE`). Se o app cair, o
+No app de release, o sidecar e os hooks rodam no Node embutido; em `npm run app` (dev), no `node`
+do seu login shell (ou `ORBIT_NODE`). Se o app cair, o
 sidecar percebe o stdin fechado e encerra os agentes junto; se o sidecar cair, o shell o reinicia.
 
 ```bash
@@ -70,4 +74,4 @@ prompt; texto livre nunca vai direto para a linha de comando. O token do agente 
 ambiente dele (`ORBIT_PANE_TOKEN`) e o auto-update do Claude fica desligado nos agentes, para
 vários processos não atualizarem a mesma instalação ao mesmo tempo.
 
-Próximos passos: Node embutido no `.app`, assinatura e notarização.
+Próximos passos: assinatura e notarização do `.app`; build para Macs Intel.
