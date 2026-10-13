@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { EFFORTS, MODEL_ID, ROUTING_LIMITS, type AgentCliForRole, type Effort, type Routing, type TaskType } from '@orbit/protocol'
+import { MODEL_ID, ROUTING_LIMITS, type AgentCliForRole, type Routing, type TaskType } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
-import { CLI_LABEL, EFFORT_LABEL, MODEL_SUGGESTIONS } from '../orbit/labels.ts'
+import { CLI_LABEL } from '../orbit/labels.ts'
+import { EffortCycle, ModelInput } from './agentPickers.tsx'
+import { ClisPanel } from './ClisPanel.tsx'
 import { CloseIcon, PlusIcon } from './icons.tsx'
 
 const CLIS: AgentCliForRole[] = ['claude', 'codex']
@@ -19,19 +21,6 @@ function validate(draft: Routing): string | null {
   return null
 }
 
-/** Cycles none → low → medium → high, the way the prototype's effort bars do. */
-function EffortButton({ value, onChange, label }: { value: Effort | null; onChange: (e: Effort | null) => void; label: string }) {
-  const order: Array<Effort | null> = [null, ...EFFORTS]
-  const level = value ? EFFORTS.indexOf(value) + 1 : 0
-  return (
-    <button type="button" className="effort" aria-label={`${label}: esforço ${value ? EFFORT_LABEL[value] : 'padrão'}. Clique para trocar`}
-      onClick={() => onChange(order[(order.indexOf(value) + 1) % order.length] ?? null)}>
-      <span className="effort__bars" aria-hidden="true">{[1, 2, 3].map((n) => <span key={n} className={n <= level ? 'on' : ''} />)}</span>
-      <span>{value ? EFFORT_LABEL[value] : 'padrão'}</span>
-    </button>
-  )
-}
-
 function CliToggle({ value, onChange, label }: { value: AgentCliForRole; onChange: (cli: AgentCliForRole) => void; label: string }) {
   return (
     <div className="segmented" role="group" aria-label={label}>
@@ -40,18 +29,9 @@ function CliToggle({ value, onChange, label }: { value: AgentCliForRole; onChang
   )
 }
 
-function ModelInput({ id, cli, value, onChange, label }: { id: string; cli: AgentCliForRole; value: string | null; onChange: (v: string | null) => void; label: string }) {
-  return (
-    <>
-      <label className="sr-only" htmlFor={id}>{label}</label>
-      <input id={id} className="routing__model" list={`${id}-list`} value={value ?? ''} onChange={(e) => onChange(e.target.value.trim() || null)} placeholder={`padrão do ${CLI_LABEL[cli]}`} spellCheck={false} />
-      <datalist id={`${id}-list`}>{MODEL_SUGGESTIONS[cli].map((m) => <option key={m} value={m} />)}</datalist>
-    </>
-  )
-}
-
 /** Settings › "Quem faz cada tarefa": the table an agentic lead uses to staff its helpers. */
-export function RoutingDialog({ onClose }: { onClose: () => void }) {
+export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: () => void; initialTab?: 'routing' | 'clis' }) {
+  const [tab, setTab] = useState<'routing' | 'clis'>(initialTab)
   const client = useOrbitClient()
   const { routing } = useOrbit()
   const ref = useRef<HTMLDialogElement>(null)
@@ -93,13 +73,19 @@ export function RoutingDialog({ onClose }: { onClose: () => void }) {
     <dialog ref={ref} className="dialog dialog--wide" aria-labelledby={`${uid}-title`} onCancel={(e) => { e.preventDefault(); onClose() }}>
       <header className="dialog__head">
         <div>
-          <div className="eyebrow">Ajustes · Missão agêntica</div>
-          <h2 id={`${uid}-title`}>Quem faz cada tarefa</h2>
+          <div className="eyebrow">Ajustes</div>
+          <h2 id={`${uid}-title`}>{tab === 'routing' ? 'Quem faz cada tarefa' : 'Agentes e CLIs'}</h2>
+        </div>
+        <div className="segmented settings-tabs" role="group" aria-label="Seção dos ajustes">
+          <button type="button" aria-pressed={tab === 'routing'} onClick={() => setTab('routing')}>Quem faz cada tarefa</button>
+          <button type="button" aria-pressed={tab === 'clis'} onClick={() => setTab('clis')}>Agentes e CLIs</button>
         </div>
         <button type="button" className="icon-btn" aria-label="Fechar" onClick={onClose}><CloseIcon /></button>
       </header>
 
-      {!draft ? (
+      {tab === 'clis' ? (
+        <ClisPanel />
+      ) : !draft ? (
         <div className="dialog__body"><p className="muted">Carregando a tabela…</p></div>
       ) : (
         <form className="dialog__body routing" onSubmit={(e) => { e.preventDefault(); save() }}>
@@ -111,8 +97,8 @@ export function RoutingDialog({ onClose }: { onClose: () => void }) {
             <legend>Líder padrão das missões agênticas</legend>
             <div className="squads__row">
               <CliToggle label="Agente do líder" value={draft.lead.cli} onChange={(cli) => edit({ ...draft, lead: { ...draft.lead, cli, model: null } })} />
-              <ModelInput id={`${uid}-lead`} label="Modelo do líder" cli={draft.lead.cli} value={draft.lead.model} onChange={(model) => edit({ ...draft, lead: { ...draft.lead, model } })} />
-              <EffortButton label="Líder" value={draft.lead.effort} onChange={(effort) => edit({ ...draft, lead: { ...draft.lead, effort } })} />
+              <ModelInput id={`${uid}-lead`} className="routing__model" label="Modelo do líder" cli={draft.lead.cli} value={draft.lead.model} onChange={(model) => edit({ ...draft, lead: { ...draft.lead, model } })} />
+              <EffortCycle label="Líder" cli={draft.lead.cli} model={draft.lead.model} value={draft.lead.effort} onChange={(effort) => edit({ ...draft, lead: { ...draft.lead, effort } })} />
             </div>
           </fieldset>
 
@@ -138,8 +124,8 @@ export function RoutingDialog({ onClose }: { onClose: () => void }) {
                       <input id={`${uid}-d${i}`} className="routing__desc" value={t.description} maxLength={ROUTING_LIMITS.description} placeholder="Quando este tipo se aplica" onChange={(e) => patchRow(i, { description: e.target.value })} />
                     </td>
                     <td><CliToggle label={`Agente de ${t.name || `tipo ${i + 1}`}`} value={t.cli} onChange={(cli) => patchRow(i, { cli, model: null })} /></td>
-                    <td><ModelInput id={`${uid}-m${i}`} label={`Modelo de ${t.name || `tipo ${i + 1}`}`} cli={t.cli} value={t.model} onChange={(model) => patchRow(i, { model })} /></td>
-                    <td><EffortButton label={t.name || `Tipo ${i + 1}`} value={t.effort} onChange={(effort) => patchRow(i, { effort })} /></td>
+                    <td><ModelInput id={`${uid}-m${i}`} className="routing__model" label={`Modelo de ${t.name || `tipo ${i + 1}`}`} cli={t.cli} value={t.model} onChange={(model) => patchRow(i, { model })} /></td>
+                    <td><EffortCycle label={t.name || `Tipo ${i + 1}`} cli={t.cli} model={t.model} value={t.effort} onChange={(effort) => patchRow(i, { effort })} /></td>
                     <td>
                       <label className="sr-only" htmlFor={`${uid}-s${i}`}>Skills de {t.name}, separadas por vírgula</label>
                       <input id={`${uid}-s${i}`} className="routing__skills" value={t.skills.join(', ')} placeholder="nenhuma"

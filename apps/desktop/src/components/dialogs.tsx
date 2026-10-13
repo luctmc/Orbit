@@ -1,7 +1,8 @@
-import { useId, useState } from 'react'
-import { EFFORTS, MODEL_ID, type AgentCli, type Effort, type MissionMode, type Squad } from '@orbit/protocol'
+import { useCallback, useId, useRef, useState } from 'react'
+import { MODEL_ID, type AgentCli, type Effort, type MissionMode, type Squad } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
-import { CLI_LABEL, EFFORT_LABEL, MODEL_SUGGESTIONS, MODE_LABEL } from '../orbit/labels.ts'
+import { CLI_LABEL, EFFORT_LABEL, MODE_LABEL } from '../orbit/labels.ts'
+import { EffortChoice, ModelInput } from './agentPickers.tsx'
 import { Dialog } from './Dialog.tsx'
 
 const MODE_HINT: Record<MissionMode, string> = {
@@ -24,6 +25,10 @@ function describeSeat(cli: AgentCli, model: string | null, effort: Effort | null
 
 function AgentFields({ value, onChange, label = 'Agente' }: { value: AgentChoice; onChange: (next: AgentChoice) => void; label?: string }) {
   const id = useId()
+  const latest = useRef(value)
+  latest.current = value
+  // Stable, so the effort picker can reset an effort the new model does not accept.
+  const setEffort = useCallback((effort: Effort | null) => onChange({ ...latest.current, effort }), [onChange])
   return (
     <>
       <fieldset className="field">
@@ -39,22 +44,13 @@ function AgentFields({ value, onChange, label = 'Agente' }: { value: AgentChoice
       {value.cli !== 'shell' && (
         <div className="field">
           <label htmlFor={`${id}-model`}>Modelo <span className="muted">(vazio = padrão do {CLI_LABEL[value.cli]})</span></label>
-          <input id={`${id}-model`} list={`${id}-models`} value={value.model} onChange={(e) => onChange({ ...value, model: e.target.value.trim() })} placeholder="ex.: claude-opus-5-5" spellCheck={false} />
-          <datalist id={`${id}-models`}>
-            {MODEL_SUGGESTIONS[value.cli].map((m) => <option key={m} value={m} />)}
-          </datalist>
+          <ModelInput id={`${id}-model`} cli={value.cli} value={value.model || null} onChange={(model) => onChange({ ...value, model: model ?? '' })} />
         </div>
       )}
       {value.cli !== 'shell' && (
         <fieldset className="field">
           <legend>Esforço</legend>
-          <div className="segmented">
-            {[null, ...EFFORTS].map((effort) => (
-              <button key={effort ?? 'padrao'} type="button" aria-pressed={value.effort === effort} onClick={() => onChange({ ...value, effort })}>
-                {effort ? EFFORT_LABEL[effort] : 'Padrão'}
-              </button>
-            ))}
-          </div>
+          <EffortChoice cli={value.cli} model={value.model || null} value={value.effort} onChange={setEffort} />
         </fieldset>
       )}
     </>

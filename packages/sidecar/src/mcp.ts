@@ -83,7 +83,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
         ...roleField,
         agent: z.enum(['claude', 'codex']).optional().describe('Qual CLI usar sem papel nem tipo (padrão: claude)'),
         model: z.string().regex(MODEL_ID).optional().describe('Modelo sem papel nem tipo, ex.: claude-sonnet-5-5'),
-        effort: z.enum(EFFORTS as [Effort, ...Effort[]]).optional().describe('Esforço sem papel nem tipo: low, medium ou high'),
+        effort: z.enum(EFFORTS as [Effort, ...Effort[]]).optional().describe('Esforço sem papel nem tipo. Claude: low, medium, high, xhigh, max. Codex: depende do modelo (low a ultra).'),
       },
     }, guarded(({ title, task, role, kind, agent, model, effort }: { title?: string; task: string; role?: string; kind?: string; agent?: 'claude' | 'codex'; model?: string; effort?: Effort }) => {
       const pane = core.spawnHelper(caller, { title: title ?? '', task, cli: agent ?? 'claude', model: model ?? null, effort: effort ?? null, squadRoleId: role ?? null, taskTypeId: kind ?? null })

@@ -1,8 +1,9 @@
-import type { AgentCli, Effort, MissionMode, PaneStatus } from '@orbit/protocol'
+import { EFFORT_LABEL, type AgentCli, type Catalog, type MissionMode, type PaneStatus } from '@orbit/protocol'
+
+export { EFFORT_LABEL }
 
 export const MODE_LABEL: Record<MissionMode, string> = { livre: 'Livre', squad: 'Squad', agentica: 'Agêntica' }
 export const CLI_LABEL: Record<AgentCli, string> = { claude: 'Claude', codex: 'Codex', shell: 'Terminal' }
-export const EFFORT_LABEL: Record<Effort, string> = { low: 'baixo', medium: 'médio', high: 'alto' }
 
 export const STATUS: Record<PaneStatus, { label: string; tone: 'live' | 'idle' | 'wait' | 'off' }> = {
   starting: { label: 'iniciando', tone: 'live' },
@@ -12,11 +13,10 @@ export const STATUS: Record<PaneStatus, { label: string; tone: 'live' | 'idle' |
   exited: { label: 'encerrado', tone: 'off' },
 }
 
-/** Suggestions only; any id matching MODEL_ID is accepted. Empty = the CLI's own default. */
-export const MODEL_SUGGESTIONS: Record<AgentCli, string[]> = {
-  claude: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-fable-5-1'],
-  codex: [],
-  shell: [],
+/** Model suggestions for a CLI, from the catalog the sidecar read (any MODEL_ID is still accepted). */
+export function modelOptions(catalog: Catalog | null, cli: AgentCli): Array<{ id: string; label: string }> {
+  if (cli === 'shell' || !catalog) return []
+  return catalog[cli].models.map((m) => ({ id: m.id, label: m.label }))
 }
 
 /**

@@ -9,7 +9,7 @@ import type { SquadInput } from '@orbit/protocol'
 import { BUILTIN_SQUADS, normalizeSquad } from '../src/squads.ts'
 import { startServer } from '../src/server.ts'
 import type { AgentLaunch } from '../src/command.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, offline } from './helpers.ts'
 
 const custom = (patch: Partial<SquadInput> = {}): SquadInput => ({
   id: '',
@@ -53,7 +53,7 @@ const fakeAgent = (launch: AgentLaunch, shell: string) => ({ file: shell, args: 
 
 test('a squad mission briefs the lead with the script and opens helpers by role', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-data-'))
-  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', agentCommand: fakeAgent })
+  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline, agentCommand: fakeAgent })
   const ui = connect(server.port)
   let mcp: Client | undefined
   try {

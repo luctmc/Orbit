@@ -32,3 +32,6 @@ export function connect(port: number, token = TOKEN, origin = ORIGIN) {
   })
   return { ws, inbox, next, send, opened }
 }
+
+/** Stand-in for the login shell: no CLI probes or updates leave the test. */
+export const offline = async () => ({ code: 127, stdout: '', stderr: 'offline' })

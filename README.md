@@ -52,6 +52,15 @@ npm test
   conversa (`agent_send`), lê a tela deles (`agent_read`), fecha (`agent_close`) e consulta
   `agent_list`, `mission_status`, `handoff_list`. Ajudantes entregam com `handoff_submit`, que
   registra no fluxo e digita o retorno no terminal do líder.
+- **Modelos e esforços reais**: o catálogo do Codex vem de `codex debug models` (modelos listados
+  e os esforços que cada um aceita, de `low` a `ultra`); o Claude Code não lista modelos, então o
+  Orbit oferece os aliases (`opus`, `sonnet`, `haiku`, `fable`) e os ids atuais, com
+  `low`…`max`. Os seletores só mostram os esforços do modelo escolhido, e o sidecar recusa um
+  esforço que o modelo não aceita.
+- **Atualizar as CLIs** (Ajustes › Agentes e CLIs): versão instalada, forma de instalação (npm,
+  nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
+  `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
+  npm 12 bloqueia o script que copia o binário nativo.
 - **Hooks do Claude Code** (`POST /hooks`): status real (`rodando`, `ocioso`, `espera você` com o
   motivo; o Claude avisa alguns segundos depois de abrir o pedido de permissão). Codex e terminais
   usam a atividade do terminal, então um pedido de confirmação do Codex aparece como `rodando`.

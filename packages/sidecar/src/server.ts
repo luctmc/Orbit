@@ -15,6 +15,7 @@ export interface ServerOptions {
   dataDir: string
   shell: string
   agentCommand?: CoreOptions['agentCommand']
+  run?: CoreOptions['run']
 }
 
 export interface RunningServer {
@@ -38,6 +39,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     dataDir: options.dataDir,
     shell: options.shell,
     agentCommand: options.agentCommand,
+    run: options.run,
     broadcast: (message) => {
       for (const [ws, attaching] of clients) {
         const held = message.type === 'pane.data' ? attaching.get(message.paneId) : undefined
@@ -103,6 +105,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   const address = http.address()
   port = typeof address === 'object' && address ? address.port : options.port
   core.setEndpoint(`http://127.0.0.1:${port}`)
+  void core.refreshCatalog()
 
   return {
     port,

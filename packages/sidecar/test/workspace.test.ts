@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startServer } from '../src/server.ts'
 import type { AgentLaunch } from '../src/command.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, offline } from './helpers.ts'
 
 const folder = (name: string) => {
   const dir = join(realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-'))), name)
@@ -17,7 +17,7 @@ const fakeAgent = (launch: AgentLaunch, shell: string) => ({ file: shell, args: 
 
 test('a workspace can hold several folders and every agent gets all of them', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-data-'))
-  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', agentCommand: fakeAgent })
+  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline, agentCommand: fakeAgent })
   const ui = connect(server.port)
   try {
     await ui.opened
@@ -63,7 +63,7 @@ test('state files from before multi-folder workspaces still load', async () => {
     version: 1, nextPaneId: 1, missions: [], panes: [], events: [], customSquads: [],
     workspaces: [{ id: 'w1', path: old, name: 'antigo', lastOpenedAt: 1 }],
   }))
-  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh' })
+  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline })
   const ui = connect(server.port)
   try {
     await ui.opened

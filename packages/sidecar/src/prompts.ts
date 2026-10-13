@@ -1,13 +1,12 @@
-import type { Effort, Mission, Pane, Routing, Squad, SquadRole, TaskType } from '@orbit/protocol'
+import { EFFORT_LABEL, type Mission, type Pane, type Routing, type Squad, type SquadRole, type TaskType } from '@orbit/protocol'
 
 /** Role instructions Orbit gives its agents. They only describe how to use Orbit's tools. */
 
-const EFFORT_TEXT: Record<Effort, string> = { low: 'esforço baixo', medium: 'esforço médio', high: 'esforço alto' }
 
 function routingTable(routing: Routing): string {
   return routing.taskTypes
     .map((t) => {
-      const who = [t.cli === 'claude' ? 'Claude' : 'Codex', t.model, t.effort && EFFORT_TEXT[t.effort]].filter(Boolean).join(', ')
+      const who = [t.cli === 'claude' ? 'Claude' : 'Codex', t.model, t.effort && `esforço ${EFFORT_LABEL[t.effort]}`].filter(Boolean).join(', ')
       return `- kind "${t.id}" (${t.name}): ${t.description || 'sem descrição'} → ${who}`
     })
     .join('\n')

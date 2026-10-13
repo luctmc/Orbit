@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { MODEL_ID, SQUAD_LIMITS, type AgentCliForRole, type Squad, type SquadInput, type SquadRole } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
-import { CLI_LABEL, MODEL_SUGGESTIONS } from '../orbit/labels.ts'
+import { CLI_LABEL } from '../orbit/labels.ts'
+import { ModelInput } from './agentPickers.tsx'
 import { CloseIcon, PlusIcon } from './icons.tsx'
 
 const ROLE_CLIS: AgentCliForRole[] = ['claude', 'codex']
@@ -21,15 +22,6 @@ function validate(draft: SquadInput): string | null {
   }
   if (draft.lead.model && !MODEL_ID.test(draft.lead.model)) return 'Modelo inválido no líder.'
   return null
-}
-
-function ModelInput({ id, cli, value, onChange, disabled }: { id: string; cli: AgentCliForRole; value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
-  return (
-    <>
-      <input id={id} list={`${id}-list`} value={value ?? ''} onChange={(e) => onChange(e.target.value.trim() || null)} placeholder={`padrão do ${CLI_LABEL[cli]}`} spellCheck={false} disabled={disabled} />
-      <datalist id={`${id}-list`}>{MODEL_SUGGESTIONS[cli].map((m) => <option key={m} value={m} />)}</datalist>
-    </>
-  )
 }
 
 /** Squads: browse the builtins, duplicate them, and create or edit your own. */

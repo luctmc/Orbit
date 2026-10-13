@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import headless from '@xterm/headless'
 import type { ServerMessage } from '@orbit/protocol'
 import { startServer } from '../src/server.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, offline } from './helpers.ts'
 
 type Term = InstanceType<typeof headless.Terminal>
 
@@ -25,7 +25,7 @@ const FRAME = 'printf "\\033[2J\\033[1;1Hlinha do topo\\033[1;90Hcanto direito\\
 
 test('a view rebuilt from the snapshot matches the PTY screen; a raw replay at another width does not', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-data-'))
-  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh' })
+  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline })
   const ui = connect(server.port)
   try {
     await ui.opened
@@ -64,7 +64,7 @@ test('a view rebuilt from the snapshot matches the PTY screen; a raw replay at a
 
 test('a closed pane has no snapshot; an exited one keeps its last screen', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-data-'))
-  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh' })
+  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline })
   const ui = connect(server.port)
   try {
     await ui.opened

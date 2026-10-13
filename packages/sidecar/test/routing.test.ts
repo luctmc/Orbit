@@ -9,7 +9,7 @@ import type { Routing } from '@orbit/protocol'
 import { DEFAULT_ROUTING, normalizeRouting } from '../src/routing.ts'
 import { startServer } from '../src/server.ts'
 import type { AgentLaunch } from '../src/command.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, offline } from './helpers.ts'
 
 test('the default table is valid', () => {
   assert.deepEqual(normalizeRouting(DEFAULT_ROUTING), DEFAULT_ROUTING)
@@ -29,7 +29,7 @@ const fakeAgent = (launch: AgentLaunch, shell: string) => ({ file: shell, args: 
 
 test('an agentic lead routes helpers through the table; the table is saved and reset from the UI', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-data-'))
-  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', agentCommand: fakeAgent })
+  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline, agentCommand: fakeAgent })
   const ui = connect(server.port)
   let mcp: Client | undefined
   try {
