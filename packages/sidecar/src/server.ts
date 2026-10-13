@@ -1,8 +1,12 @@
-import { createServer, type Server } from 'node:http'
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { timingSafeEqual } from 'node:crypto'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { ClientMessage, ServerMessage } from '@orbit/protocol'
 import { OrbitCore } from './core.ts'
+import type { HookPayload } from './hooks.ts'
+import { handleMcp } from './mcp.ts'
+
+const MAX_BODY = 1024 * 1024
 
 export interface ServerOptions {
   port: number
@@ -19,22 +23,31 @@ export interface RunningServer {
 }
 
 /**
- * Loopback-only WebSocket server. Panes run arbitrary commands as the user, so every connection
- * must present the per-run token and come from an allowed origin.
+ * Loopback-only server with two audiences:
+ * - the UI, over WebSocket `/ws`, with the per-run token and an allowed Origin;
+ * - agents, over HTTP `/mcp` and `/hooks`, each with its own pane token and no browser Origin.
  */
 export async function startServer(options: ServerOptions): Promise<RunningServer> {
   const clients = new Set<WebSocket>()
   const send = (ws: WebSocket, message: ServerMessage) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message))
   }
-  const core = new OrbitCore(options.dataDir, options.shell, (message) => {
-    for (const ws of clients) send(ws, message)
+  const core = new OrbitCore({
+    dataDir: options.dataDir,
+    shell: options.shell,
+    broadcast: (message) => {
+      for (const ws of clients) send(ws, message)
+    },
   })
 
-  const http: Server = createServer((_req, res) => {
-    res.writeHead(404).end()
+  let port = options.port
+  const http: Server = createServer((req, res) => {
+    handleAgentRequest(core, port, req, res).catch((error) => {
+      if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain' })
+      res.end(error instanceof Error ? error.message : 'erro')
+    })
   })
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 })
+  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_BODY })
 
   http.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
@@ -62,7 +75,8 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
 
   await new Promise<void>((resolve) => http.listen(options.port, '127.0.0.1', resolve))
   const address = http.address()
-  const port = typeof address === 'object' && address ? address.port : options.port
+  port = typeof address === 'object' && address ? address.port : options.port
+  core.setEndpoint(`http://127.0.0.1:${port}`)
 
   return {
     port,
@@ -73,6 +87,40 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
       await new Promise<void>((resolve) => wss.close(() => http.close(() => resolve())))
     },
   }
+}
+
+async function handleAgentRequest(core: OrbitCore, port: number, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname
+  if (path !== '/mcp' && path !== '/hooks') return void res.writeHead(404).end()
+
+  // Agents are CLIs: a browser Origin or a foreign Host means a web page is trying to reach us.
+  const host = req.headers.host ?? ''
+  if (req.headers.origin || (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`)) return void res.writeHead(403).end()
+
+  const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]
+  const caller = core.identify(bearer)
+  if (!caller) return void res.writeHead(401).end()
+
+  if (req.method !== 'POST') return void res.writeHead(405, { allow: 'POST' }).end()
+  const body = await readJson(req)
+
+  if (path === '/hooks') {
+    core.hookReport(caller.id, (body ?? {}) as HookPayload)
+    return void res.writeHead(204).end()
+  }
+  await handleMcp(core, caller, req, res, body)
+}
+
+async function readJson(req: IncomingMessage): Promise<unknown> {
+  let size = 0
+  const chunks: Buffer[] = []
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length
+    if (size > MAX_BODY) throw new Error('Corpo grande demais')
+    chunks.push(chunk as Buffer)
+  }
+  const raw = Buffer.concat(chunks).toString('utf8')
+  return raw ? JSON.parse(raw) : undefined
 }
 
 function tokenMatches(given: string | null, expected: string): boolean {

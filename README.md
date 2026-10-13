@@ -34,7 +34,21 @@ npm test
 
 - Tela de missão: workspaces em abas, missões, tripulação, agentes em grade/foco com terminal real,
   barra de comando para o agente selecionado, fluxo da missão.
-- Status do agente vem da atividade do terminal (`rodando`/`ocioso`). `espera você` depende dos hooks.
+- **MCP do Orbit** (`POST /mcp`, um token por agente): o líder abre ajudantes (`agent_spawn`),
+  conversa (`agent_send`), lê a tela deles (`agent_read`), fecha (`agent_close`) e consulta
+  `agent_list`, `mission_status`, `handoff_list`. Ajudantes entregam com `handoff_submit`, que
+  registra no fluxo e digita o retorno no terminal do líder.
+- **Hooks do Claude Code** (`POST /hooks`): status real (`rodando`, `ocioso`, `espera você` com o
+  motivo). Codex e terminais usam a atividade do terminal.
+- Missão **agêntica**: o líder recebe o objetivo e as instruções de papel e monta o time sozinho.
 
-Próximos passos: shell Tauri (requer Rust), servidor MCP local para os agentes se coordenarem
-(abrir ajudantes, retornos/handoffs), hooks do Claude Code para status real.
+### Como um agente é lançado
+
+Para cada agente o sidecar escreve em `~/.orbit/panes/<id>/` (modo 0600): `mcp.json`,
+`settings.json` (hooks), `role.md` e `task.md`. O CLI roda num login shell com
+`--mcp-config`, `--settings`, `--append-system-prompt "$(cat role.md)"` e a tarefa como primeiro
+prompt; texto livre nunca vai direto para a linha de comando. O token do agente só existe no
+ambiente dele (`ORBIT_PANE_TOKEN`) e o auto-update do Claude fica desligado nos agentes, para
+vários processos não atualizarem a mesma instalação ao mesmo tempo.
+
+Próximos passos: shell Tauri (requer Rust), squads com roteiro.

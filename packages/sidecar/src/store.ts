@@ -22,6 +22,8 @@ export class Store {
     this.state = this.load()
     // Processes do not survive a sidecar restart.
     for (const pane of this.state.panes) {
+      pane.attention = null
+      pane.deliveredAt ??= null
       if (pane.status !== 'exited') Object.assign(pane, { status: 'exited', pid: null })
     }
   }

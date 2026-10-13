@@ -103,7 +103,8 @@ export function NewMissionDialog({ workspaceId, onClose }: { workspaceId: string
         </div>
       </fieldset>
       <AgentFields value={lead} onChange={setLead} />
-      {mode !== 'livre' && <p className="note">Nesta versão o líder abre sozinho; a montagem automática do time chega com o servidor MCP.</p>}
+      {mode === 'agentica' && <p className="note">O líder recebe o objetivo e abre os ajudantes sozinho pelo MCP do Orbit. Os retornos chegam no terminal dele.</p>}
+      {mode === 'squad' && <p className="note">Squads com roteiro ainda não existem: por enquanto só o líder abre, com as ferramentas do Orbit.</p>}
       {error && <p className="form-error" role="alert">{error}</p>}
     </Dialog>
   )
@@ -112,13 +113,14 @@ export function NewMissionDialog({ workspaceId, onClose }: { workspaceId: string
 export function AddAgentDialog({ missionId, onClose }: { missionId: string; onClose: () => void }) {
   const client = useOrbitClient()
   const [title, setTitle] = useState('')
+  const [task, setTask] = useState('')
   const [agent, setAgent] = useState<AgentChoice>({ cli: 'claude', model: '' })
   const [error, setError] = useState<string | null>(null)
 
   return (
     <Dialog eyebrow="Tripulação" title="Adicionar agente" submitLabel="Abrir agente" onClose={onClose} onSubmit={() => {
       if (invalidModel(agent)) return setError('Modelo inválido: use só letras, números, ponto, hífen ou dois-pontos.')
-      client.send({ type: 'pane.spawn', request: { missionId, role: 'crew', cli: agent.cli, model: modelOrNull(agent), title } })
+      client.send({ type: 'pane.spawn', request: { missionId, role: 'crew', cli: agent.cli, model: modelOrNull(agent), title, task: agent.cli === 'shell' ? null : task } })
       onClose()
     }}>
       <div className="field">
@@ -126,6 +128,12 @@ export function AddAgentDialog({ missionId, onClose }: { missionId: string; onCl
         <input id="a-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Mapear leituras do token" autoFocus />
       </div>
       <AgentFields value={agent} onChange={setAgent} />
+      {agent.cli !== 'shell' && (
+        <div className="field">
+          <label htmlFor="a-task">Tarefa <span className="muted">(opcional; vira o primeiro pedido do agente)</span></label>
+          <textarea id="a-task" rows={4} value={task} onChange={(e) => setTask(e.target.value)} placeholder="Mapeie onde o token de sessão é lido e devolva a lista de arquivos" />
+        </div>
+      )}
       {error && <p className="form-error" role="alert">{error}</p>}
     </Dialog>
   )

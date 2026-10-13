@@ -35,6 +35,10 @@ export interface Pane {
   title: string
   cwd: string
   status: PaneStatus
+  /** Why the agent needs a human, from its hook (e.g. a permission prompt). */
+  attention: string | null
+  /** Last time this helper submitted a handoff to the lead. */
+  deliveredAt: number | null
   pid: number | null
   exitCode: number | null
   createdAt: number
@@ -65,6 +69,8 @@ export interface SpawnPaneRequest {
   cli: AgentCli
   model: string | null
   title: string
+  /** First prompt handed to the agent when it starts. */
+  task?: string | null
 }
 
 export type ClientMessage =

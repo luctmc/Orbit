@@ -25,7 +25,14 @@ export function FlowTimeline({ events }: { events: MissionEvent[] }) {
                   <span>{e.title}</span>
                   <time dateTime={new Date(e.at).toISOString()}>{timeOf(e.at)}</time>
                 </div>
-                <p>{e.body}</p>
+                {e.kind === 'handoff' && e.body.length > 280 ? (
+                  <details>
+                    <summary>{e.body.slice(0, 200)}…</summary>
+                    <p className="flow__full">{e.body}</p>
+                  </details>
+                ) : (
+                  <p className="flow__full">{e.body}</p>
+                )}
               </div>
             </li>
           ))}

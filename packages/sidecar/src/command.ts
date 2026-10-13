@@ -5,18 +5,57 @@ export interface PaneCommand {
   args: string[]
 }
 
+/** Files Orbit prepared for this agent; every path is ours, never user text. */
+export interface AgentLaunch {
+  cli: AgentCli
+  model: string | null
+  /** Claude: MCP config file. */
+  mcpConfigPath?: string
+  /** Claude: settings file carrying the status hooks. */
+  settingsPath?: string
+  /** Codex: Orbit MCP endpoint; the token is read from ORBIT_PANE_TOKEN. */
+  mcpUrl?: string
+  /** Appended to Claude's system prompt; prefixed to the first prompt for Codex. */
+  rolePromptPath?: string
+  /** First prompt. */
+  taskPath?: string
+}
+
+export function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`
+}
+
+const fromFile = (path: string) => `"$(cat ${shellQuote(path)})"`
+
 /**
  * The agent runs inside a login shell so it sees the user's PATH. When the agent exits the pane
- * drops to an interactive shell instead of dying, like a terminal tab would.
+ * drops to an interactive shell instead of dying, like a terminal tab would. Free text (role,
+ * task) only reaches the command line as `$(cat <file>)`, so it is never parsed by the shell.
  */
-export function buildCommand(cli: AgentCli, model: string | null, shell: string): PaneCommand {
-  if (cli === 'shell') return { file: shell, args: ['-l'] }
+export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
+  if (launch.cli === 'shell') return { file: shell, args: ['-l'] }
+  const { model } = launch
   if (model !== null && !MODEL_ID.test(model)) throw new Error(`Modelo inválido: ${model}`)
 
-  const agent = cli === 'claude'
-    ? ['claude', ...(model ? ['--model', model] : [])]
-    : ['codex', ...(model ? ['-m', model] : [])]
-  return { file: shell, args: ['-l', '-c', `${agent.join(' ')}; exec ${shell} -l`] }
+  const parts: string[] = []
+  if (launch.cli === 'claude') {
+    parts.push('claude')
+    if (model) parts.push('--model', model)
+    if (launch.mcpConfigPath) parts.push('--mcp-config', shellQuote(launch.mcpConfigPath))
+    if (launch.settingsPath) parts.push('--settings', shellQuote(launch.settingsPath))
+    if (launch.rolePromptPath) parts.push('--append-system-prompt', fromFile(launch.rolePromptPath))
+    if (launch.taskPath) parts.push('--', fromFile(launch.taskPath))
+  } else {
+    parts.push('codex')
+    if (model) parts.push('-m', model)
+    if (launch.mcpUrl) {
+      parts.push('-c', shellQuote(`mcp_servers.orbit.url="${launch.mcpUrl}"`))
+      parts.push('-c', shellQuote('mcp_servers.orbit.bearer_token_env_var="ORBIT_PANE_TOKEN"'))
+    }
+    const prompt = [launch.rolePromptPath, launch.taskPath].filter((p): p is string => Boolean(p))
+    if (prompt.length) parts.push('--', `"$(cat ${prompt.map(shellQuote).join(' ')})"`)
+  }
+  return { file: shell, args: ['-l', '-c', `${parts.join(' ')}; exec ${shellQuote(shell)} -l`] }
 }
 
 /** Child environment: the user's env minus Orbit's own secrets, plus pane identity for hooks. */

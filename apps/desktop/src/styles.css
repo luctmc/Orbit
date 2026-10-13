@@ -120,6 +120,11 @@ h1, h2, p { margin: 0; }
 
 .pane { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
 .pane--selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(197 224 75 / 0.12); }
+.pane--waiting { border-color: var(--wait); box-shadow: 0 0 0 3px rgb(255 159 67 / 0.14); }
+.attention { flex: none; padding: 8px 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid #5a3a17; background: #21170c; }
+.attention__text { flex: 1 1 200px; min-width: 0; color: var(--wait); font-size: 13px; }
+.btn--attention { background: var(--wait); color: #1a1006; font-weight: 600; }
+.chip--done { color: var(--text-2); border-color: var(--line-strong); }
 .pane__head { height: 40px; flex: none; padding: 0 6px 0 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
 .role { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 7px; border-radius: 5px; border: 1px solid var(--line-2); color: var(--text-3); background: var(--surface-3); }
 .role--lead { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
@@ -144,7 +149,10 @@ h1, h2, p { margin: 0; }
 .flow__text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .flow__title { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; font-weight: 500; }
 .flow__title time { font: 11px var(--mono); color: var(--muted); font-weight: 400; }
-.flow__text p { font-size: 12.5px; color: var(--text-3); line-height: 1.5; overflow-wrap: anywhere; }
+.flow__text p, .flow__text summary { font-size: 12.5px; color: var(--text-3); line-height: 1.5; overflow-wrap: anywhere; }
+.flow__full { white-space: pre-wrap; }
+.flow__text summary { cursor: pointer; }
+.flow__text details[open] summary { display: none; }
 .tone-bg--live { background: var(--accent); }
 .tone-bg--wait { background: var(--wait); }
 .tone-bg--idle { background: var(--text-3); }
