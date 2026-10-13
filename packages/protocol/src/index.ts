@@ -46,6 +46,8 @@ export interface Pane {
   cli: AgentCli
   model: string | null
   effort: Effort | null
+  /** Account it runs as; null for terminals and for agents from before accounts existed. */
+  accountId: string | null
   title: string
   cwd: string
   status: PaneStatus
@@ -83,8 +85,9 @@ export interface RateWindow {
   windowMinutes: number
 }
 
-/** The account limits a CLI last reported. */
+/** The limits an account's CLI last reported. */
 export interface AccountLimits {
+  accountId: string
   cli: AgentCliForRole
   fiveHour: RateWindow | null
   weekly: RateWindow | null
@@ -198,6 +201,63 @@ export interface Routing {
   taskTypes: TaskType[]
 }
 
+/**
+ * Who an agent runs as. `assinatura`: a Claude or ChatGPT login, each in its own config folder
+ * (the built-in ones are the CLIs' own login on this Mac). `api`: an API key, for Claude
+ * optionally on an Anthropic-compatible provider (OpenRouter, a proxy…).
+ */
+export type AccountKind = 'assinatura' | 'api'
+
+export interface Account {
+  /** `claude` and `codex` are the built-in accounts. */
+  id: string
+  cli: AgentCliForRole
+  name: string
+  kind: AccountKind
+  builtin: boolean
+  /** Claude API accounts: Anthropic-compatible base URL; null = Anthropic's own API. */
+  baseUrl: string | null
+  /** Default model on this account (e.g. a provider's model id); also used for the aliases. */
+  model: string | null
+  /** A key is stored (only its last four characters ever leave the sidecar). */
+  keyHint: string | null
+  /** Taken into account when Orbit picks an account by itself. */
+  auto: boolean
+  createdAt: number
+}
+
+/** What the CLI says about an account's login. */
+export interface AccountStatus {
+  accountId: string
+  loggedIn: boolean | null
+  /** "claude.ai", "ChatGPT", "chave de API"… */
+  method: string | null
+  email: string | null
+  plan: string | null
+  checkedAt: number | null
+  busy: 'checking' | 'login' | null
+  /** Terminal running the login, while it is open. */
+  loginPaneId: number | null
+  message: string | null
+}
+
+export interface AccountInput {
+  /** Omit to create. */
+  id?: string
+  cli: AgentCliForRole
+  name: string
+  kind: AccountKind
+  baseUrl?: string | null
+  model?: string | null
+  /** New key; omit to keep the stored one. Never sent back. */
+  key?: string
+  auto?: boolean
+}
+
+export const ACCOUNT_LIMITS = { accounts: 12, name: 40, key: 512, url: 300 } as const
+/** Above this, a window counts as used up when Orbit picks an account. */
+export const ACCOUNT_FULL_PERCENT = 95
+
 export type MissionEventKind = 'mission.created' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff'
 
 export interface MissionEvent {
@@ -219,6 +279,7 @@ export interface Snapshot {
   routing: Routing
   usageDays: UsageDay[]
   limits: AccountLimits[]
+  accounts: Account[]
 }
 
 export interface SpawnPaneRequest {
@@ -234,6 +295,8 @@ export interface SpawnPaneRequest {
   /** Task type from the routing table; its CLI, model, effort and skills apply. */
   taskTypeId?: string | null
   effort?: Effort | null
+  /** Account to run as; omitted or null = the one with the most room left. */
+  accountId?: string | null
 }
 
 export type ClientMessage =
@@ -263,6 +326,12 @@ export type ClientMessage =
   | { type: 'cli.update'; cli: AgentCliForRole }
   /** Back to the table Orbit ships with. */
   | { type: 'routing.reset' }
+  | { type: 'account.save'; account: AccountInput }
+  | { type: 'account.delete'; accountId: string }
+  /** Ask each CLI about its accounts' logins again. */
+  | { type: 'account.check' }
+  /** Opens a terminal running the CLI's login for this account. */
+  | { type: 'account.login'; accountId: string }
 
 export type ServerMessage =
   | { type: 'snapshot'; snapshot: Snapshot }
@@ -286,10 +355,12 @@ export type ServerMessage =
   | { type: 'usage.day'; day: UsageDay }
   | { type: 'limits'; limits: AccountLimits[] }
   | { type: 'cli.status'; clis: CliStatus[] }
+  | { type: 'accounts'; accounts: Account[] }
+  | { type: 'account.status'; statuses: AccountStatus[] }
   | { type: 'error'; message: string }
 
-/** Model ids reach a shell command line, so only plain identifiers are accepted. */
-export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/
+/** Model ids reach a shell command line, so only plain identifiers are accepted (`/` for providers' ids). */
+export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$/
 /** Squad and role ids. */
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/
 

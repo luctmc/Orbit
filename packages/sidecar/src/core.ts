@@ -2,7 +2,8 @@ import { statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { EFFORT_LABEL, EFFORTS, WORKSPACE_LIMITS, effortsFor, type AgentCli, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, EFFORT_LABEL, EFFORTS, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, validKey } from './accounts.ts'
 import { normalizeRouting } from './routing.ts'
 import { codexHome, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
@@ -51,23 +52,36 @@ export class OrbitCore {
   /** Codex agent → its session file, once found. */
   private readonly codexRollouts = new Map<number, string>()
   private codexTimer: NodeJS.Timeout | null = null
+  private readonly accountFiles: AccountFiles
+  /** Login state per account, from the CLIs; kept in memory and asked again on start. */
+  private readonly accountStatus = new Map<string, AccountStatus>()
+  /** Terminals running a CLI login → the account they log in. Not part of any mission. */
+  private readonly loginPanes = new Map<number, string>()
 
   constructor({ dataDir, shell, broadcast, agentCommand, run }: CoreOptions) {
     this.broadcast = broadcast
     this.run = run ?? loginShellRunner(shell)
     this.dataDir = dataDir
     this.store = new Store(dataDir)
+    this.accountFiles = new AccountFiles(dataDir)
     removeAgentFiles(join(dataDir, 'panes'))
     this.panes = new PaneManager(shell, agentCommand)
     this.panes.on('data', (paneId, data) => this.broadcast({ type: 'pane.data', paneId, data }))
     this.panes.on('resized', (paneId, cols, rows) => this.broadcast({ type: 'pane.resized', paneId, cols, rows }))
     this.panes.on('status', (pane, previous) => {
+      if (this.loginPanes.has(pane.id)) return
       this.syncPane(pane)
       if (pane.status === 'waiting' && previous !== 'waiting') {
         this.event(pane.missionId, 'pane.waiting', `#${pane.id} espera você`, pane.attention ?? 'O agente precisa de você.', pane.id)
       }
     })
     this.panes.on('exit', (pane) => {
+      const login = this.loginPanes.get(pane.id)
+      if (login) {
+        // The terminal stays on screen (it may show an error) until the person closes it.
+        void this.checkAccount(login)
+        return
+      }
       if (!this.store.pane(pane.id)) return // closed by the user
       // Last word from a Codex session before it is gone.
       const rollout = this.codexRollouts.get(pane.id)
@@ -90,7 +104,11 @@ export class OrbitCore {
 
   /** What a newly connected client needs; terminal contents come per view via `pane.attach`. */
   welcome(): ServerMessage[] {
-    const messages: ServerMessage[] = [{ type: 'snapshot', snapshot: this.store.snapshot() }, { type: 'cli.status', clis: [...this.clis.values()] }]
+    const messages: ServerMessage[] = [
+      { type: 'snapshot', snapshot: this.store.snapshot() },
+      { type: 'cli.status', clis: [...this.clis.values()] },
+      { type: 'account.status', statuses: this.statuses() },
+    ]
     if (this.catalog) messages.push({ type: 'catalog', catalog: this.catalog })
     return messages
   }
@@ -131,6 +149,124 @@ export class OrbitCore {
     const works = ok && found.installed && found.version !== null
     this.setCli(cli, { ...found, busy: null, ok: works, checkedAt: Date.now(), message: works ? `Atualizado para ${found.version}.` : output || 'A atualização falhou.' })
     if (cli === 'codex') await this.refreshCatalog()
+  }
+
+  // ---- accounts ----
+
+  private statuses(): AccountStatus[] {
+    return this.store.accounts().map((a) => this.accountStatus.get(a.id) ?? blankAccountStatus(a.id))
+  }
+
+  private setAccountStatus(accountId: string, patch: Partial<AccountStatus>): void {
+    this.accountStatus.set(accountId, { ...(this.accountStatus.get(accountId) ?? blankAccountStatus(accountId)), ...patch })
+    this.broadcast({ type: 'account.status', statuses: this.statuses() })
+  }
+
+  private broadcastAccounts(): void {
+    this.broadcast({ type: 'accounts', accounts: this.store.accounts() })
+  }
+
+  /** Asks the CLI whether the account is logged in, and as whom. */
+  async checkAccount(accountId: string): Promise<void> {
+    const account = this.store.account(accountId)
+    if (!account) return
+    const current = this.accountStatus.get(accountId)
+    if (current?.busy === 'checking') return
+    this.setAccountStatus(accountId, { busy: current?.loginPaneId && this.panes.isAlive(current.loginPaneId) ? 'login' : 'checking' })
+    let found: Partial<AccountStatus>
+    try {
+      found = await this.accountFiles.check(this.run, account)
+    } catch (error) {
+      found = { loggedIn: null, message: error instanceof Error ? error.message : String(error) }
+    }
+    if (!this.store.account(accountId)) return // removed meanwhile
+    const loginPaneId = this.accountStatus.get(accountId)?.loginPaneId ?? null
+    this.setAccountStatus(accountId, { ...found, checkedAt: Date.now(), busy: loginPaneId && this.panes.isAlive(loginPaneId) ? 'login' : null })
+  }
+
+  async checkAccounts(): Promise<void> {
+    await Promise.all(this.store.accounts().map((a) => this.checkAccount(a.id)))
+  }
+
+  private async saveAccount(input: AccountInput): Promise<void> {
+    const existing = input.id ? this.store.account(input.id) : undefined
+    if (input.id && !existing) throw new Error('Conta desconhecida')
+    if (existing?.builtin) {
+      // Built-in accounts are the CLIs' own login: only automatic use can change.
+      if (typeof input.auto === 'boolean') this.store.setBuiltinAuto(existing.id, input.auto)
+      this.broadcastAccounts()
+      return
+    }
+    if (!existing && this.store.accounts().length >= ACCOUNT_LIMITS.accounts) throw new Error(`No máximo ${ACCOUNT_LIMITS.accounts} contas`)
+    const base = normalizeAccount(input, existing, existing?.id ?? randomBytes(6).toString('hex'))
+    const key = input.key === undefined || input.key === '' ? null : validKey(input.key)
+    if (base.kind === 'api' && !key && !existing?.keyHint) throw new Error('Cole a chave de API da conta')
+    const account: Account = { ...base, keyHint: key ? keyHint(key) : existing?.keyHint ?? null }
+    this.accountFiles.prepare(account)
+    if (key) this.accountFiles.saveKey(account, key)
+    this.store.saveAccount(account)
+    this.broadcastAccounts()
+    if (key && account.cli === 'codex') {
+      // Codex keeps its own copy of the key, in the account's folder.
+      this.setAccountStatus(account.id, { busy: 'checking' })
+      const { ok, message } = await this.accountFiles.codexKeyLogin(this.run, account)
+      this.setAccountStatus(account.id, { busy: null, message: ok ? null : message })
+    }
+    await this.checkAccount(account.id)
+  }
+
+  private async deleteAccount(accountId: string): Promise<void> {
+    const account = this.store.account(accountId)
+    if (!account) return
+    if (account.builtin) throw new Error('As contas deste Mac não podem ser removidas; desligue o uso automático')
+    const login = this.accountStatus.get(accountId)?.loginPaneId
+    if (login) this.closePane(login)
+    this.store.deleteAccount(accountId)
+    this.accountStatus.delete(accountId)
+    this.broadcastAccounts()
+    this.broadcast({ type: 'limits', limits: this.store.limits() })
+    this.broadcast({ type: 'account.status', statuses: this.statuses() })
+    try {
+      await this.accountFiles.logout(this.run, account)
+    } finally {
+      this.accountFiles.remove(account)
+    }
+  }
+
+  /** A terminal running the CLI's own login, as this account. */
+  private startLogin(accountId: string): void {
+    const account = this.store.account(accountId)
+    if (!account) throw new Error('Conta desconhecida')
+    if (account.kind === 'api') throw new Error('Contas de API entram com a chave; edite a conta para trocá-la')
+    const previous = this.accountStatus.get(accountId)?.loginPaneId
+    if (previous) this.closePane(previous)
+    this.accountFiles.prepare(account)
+    const id = this.store.allocatePaneId()
+    this.panes.spawn({
+      id,
+      request: { missionId: '', role: 'crew', cli: account.cli, model: null, title: `Entrar: ${account.name}` },
+      squadRole: null,
+      taskType: null,
+      cwd: this.dataDir,
+      launch: { cli: account.cli, model: null, login: true },
+      env: { ...this.accountFiles.env(account), DISABLE_AUTOUPDATER: '1' },
+      hookDriven: false,
+      accountId,
+    })
+    this.loginPanes.set(id, accountId)
+    this.setAccountStatus(accountId, { busy: 'login', loginPaneId: id, message: null })
+  }
+
+  /** The account a new agent runs as: the one asked for, or the one with the most room left. */
+  private accountFor(cli: AgentCli, requested: string | null | undefined): Account | null {
+    if (cli === 'shell') return null
+    if (requested) {
+      const account = this.store.account(requested)
+      if (!account) throw new Error('Conta desconhecida')
+      if (account.cli !== cli) throw new Error(`A conta ${account.name} é do ${CLI_LABEL[account.cli]}, não do ${CLI_LABEL[cli]}`)
+      return account
+    }
+    return pickAccount(cli, this.store.accounts(), this.statuses(), this.store.limits())
   }
 
   /** A pane's screen for a view that just mounted (see the server's attach handling). */
@@ -202,6 +338,18 @@ export class OrbitCore {
       case 'cli.update':
         if (message.cli !== 'claude' && message.cli !== 'codex') throw new Error('CLI desconhecida')
         void this.updateCli(message.cli)
+        return
+      case 'account.save':
+        void this.saveAccount(message.account).catch((error) => this.fail(error))
+        return
+      case 'account.delete':
+        void this.deleteAccount(message.accountId).catch((error) => this.fail(error))
+        return
+      case 'account.check':
+        void this.checkAccounts()
+        return
+      case 'account.login':
+        this.startLogin(message.accountId)
         return
       case 'routing.reset':
         this.store.saveRouting(null)
@@ -318,7 +466,7 @@ export class OrbitCore {
   private applyReport(paneId: number, report: UsageReport): void {
     const pane = this.store.pane(paneId)
     if (!pane) return
-    if (report.limits) this.broadcast({ type: 'limits', limits: this.store.setLimits(report.limits) })
+    if (report.limits) this.broadcast({ type: 'limits', limits: this.store.setLimits({ ...report.limits, accountId: pane.accountId ?? report.limits.cli }) })
     if (!report.usage && report.contextPercent === null) return
     if (report.usage && pane.cli !== 'shell') {
       const added = this.store.addUsage(pane.missionId, pane.cli, usageDelta(pane.usage, report.usage))
@@ -333,11 +481,12 @@ export class OrbitCore {
   /** Codex has no hooks: read each live Codex agent's session file for its totals. */
   private pollCodex(): void {
     const live = this.store.snapshot().panes.filter((p) => p.cli === 'codex' && this.panes.isAlive(p.id))
-    const home = codexHome()
     for (const pane of live) {
       try {
         let file = this.codexRollouts.get(pane.id)
         if (!file) {
+          const account = pane.accountId ? this.store.account(pane.accountId) : undefined
+          const home = (account && this.accountFiles.configDir(account)) ?? codexHome()
           file = findCodexRollout(home, pane.cwd, pane.createdAt, new Set(this.codexRollouts.values())) ?? undefined
           if (!file) continue
           this.codexRollouts.set(pane.id, file)
@@ -390,7 +539,7 @@ export class OrbitCore {
       ? { ...input, role: 'crew', cli: squadRole.cli, model: squadRole.model, effort: null }
       : taskType
         ? { ...input, role: 'crew', cli: taskType.cli, model: taskType.model, effort: taskType.effort }
-        : input
+        : { ...input }
     if (!CLIS.includes(request.cli)) throw new Error(`Agente inválido: ${request.cli}`)
     if (request.effort && !EFFORTS.includes(request.effort)) throw new Error(`Esforço inválido: ${request.effort}`)
     // Each model accepts its own levels (Codex lists them; Claude takes low…max).
@@ -398,6 +547,10 @@ export class OrbitCore {
     if (request.effort && request.cli !== 'shell' && !allowed.includes(request.effort)) {
       throw new Error(`Esforço "${EFFORT_LABEL[request.effort]}" não vale para ${request.model ?? `o modelo padrão do ${CLI_LABEL[request.cli]}`}; use ${allowed.map((e) => EFFORT_LABEL[e]).join(', ')}`)
     }
+
+    const account = this.accountFor(request.cli, request.accountId)
+    if (account && !request.model && account.model) request.model = account.model
+    if (account) this.accountFiles.prepare(account)
 
     const id = this.store.allocatePaneId()
     const title = request.title.trim().slice(0, 120) || squadRole?.name || taskType?.name || `${CLI_LABEL[request.cli]} #${id}`
@@ -412,6 +565,7 @@ export class OrbitCore {
       token,
       hookCommand: hookCommand(process.execPath, HOOK_SCRIPT),
       statusCommand: hookCommand(process.execPath, STATUS_SCRIPT),
+      apiKeyHelper: account ? this.accountFiles.apiKeyHelper(account) : undefined,
       addDirs: workspace.folders.slice(1),
       rolePrompt: workspaceNote(workspace.folders) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, lead, squadRole, taskType)),
       task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
@@ -427,7 +581,9 @@ export class OrbitCore {
         cwd: workspace.path,
         launch,
         hookDriven: request.cli === 'claude',
+        accountId: account?.id ?? null,
         env: {
+          ...(account ? this.accountFiles.env(account) : {}),
           ORBIT_PANE_ID: String(id),
           ORBIT_MISSION_ID: mission.id,
           ORBIT_PANE_TOKEN: token,
@@ -445,12 +601,23 @@ export class OrbitCore {
     if (request.cli === 'codex') this.watchCodex()
     this.syncPane(pane)
     const seat = request.role === 'lead' ? 'líder' : squadRole?.name.toLowerCase() ?? taskType?.name.toLowerCase() ?? 'ajudante'
-    const who = [CLI_LABEL[request.cli], request.model, request.effort && `esforço ${EFFORT_LABEL[request.effort]}`, seat].filter(Boolean).join(' · ')
+    const who = [CLI_LABEL[request.cli], account && !account.builtin && account.name, request.model, request.effort && `esforço ${EFFORT_LABEL[request.effort]}`, seat].filter(Boolean).join(' · ')
     this.event(mission.id, 'pane.spawned', `Agente #${id} aberto`, `${title} — ${who}`, id)
     return pane
   }
 
   private closePane(id: number): void {
+    const login = this.loginPanes.get(id)
+    if (login !== undefined) {
+      this.loginPanes.delete(id)
+      this.panes.forget(id)
+      this.broadcast({ type: 'pane.removed', paneId: id })
+      if (this.store.account(login)) {
+        this.setAccountStatus(login, { loginPaneId: null, busy: null })
+        void this.checkAccount(login)
+      }
+      return
+    }
     if (!this.store.pane(id)) return
     this.panes.forget(id)
     this.codexRollouts.delete(id)
@@ -475,6 +642,10 @@ export class OrbitCore {
     if (!this.store.pane(pane.id) && pane.status !== 'starting') return // closed meanwhile
     this.store.upsertPane(pane)
     this.broadcast({ type: 'pane.updated', pane })
+  }
+
+  private fail(error: unknown): void {
+    this.broadcast({ type: 'error', message: error instanceof Error ? error.message : String(error) })
   }
 
   private event(missionId: string, kind: MissionEventKind, title: string, body: string, paneId: number | null): void {

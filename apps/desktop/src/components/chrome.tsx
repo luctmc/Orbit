@@ -1,6 +1,6 @@
-import type { AccountLimits, RateWindow, Workspace } from '@orbit/protocol'
+import type { Account, AccountLimits, RateWindow, Workspace } from '@orbit/protocol'
 import type { OrbitState } from '../orbit/client.ts'
-import { CLI_LABEL } from '../orbit/labels.ts'
+import { accountLabel } from '../orbit/labels.ts'
 import { untilTime } from '../orbit/time.ts'
 import { HomeIcon, OrbitMark, PlusIcon } from './icons.tsx'
 
@@ -10,7 +10,7 @@ const CONNECTION_LABEL: Record<OrbitState['connection'], string> = {
   closed: 'Motor fora do ar',
 }
 
-export function TitleBar({ connection, liveAgents, limits }: { connection: OrbitState['connection']; liveAgents: number; limits: AccountLimits[] }) {
+export function TitleBar({ connection, liveAgents, limits, accounts }: { connection: OrbitState['connection']; liveAgents: number; limits: AccountLimits[]; accounts: Account[] }) {
   return (
     // data-tauri-drag-region only applies to the element itself, so every non-interactive piece carries it.
     <header className="titlebar" data-tauri-drag-region>
@@ -21,7 +21,10 @@ export function TitleBar({ connection, liveAgents, limits }: { connection: Orbit
       </div>
       <div className="titlebar__drag" data-tauri-drag-region />
       <div className="titlebar__status">
-        {limits.map((l) => <LimitMeter key={l.cli} limits={l} />)}
+        {accounts.map((a) => {
+          const l = limits.find((x) => x.accountId === a.id)
+          return l ? <LimitMeter key={a.id} limits={l} name={accountLabel(a, a.cli)} /> : null
+        })}
         <span className="muted">{liveAgents} {liveAgents === 1 ? 'agente vivo' : 'agentes vivos'}</span>
         <span className="status-pill" data-state={connection}>
           <span className={`dot ${connection === 'open' ? 'dot--live' : connection === 'closed' ? 'dot--wait' : 'dot--idle'}`} />
@@ -42,7 +45,7 @@ function windowUse(w: RateWindow | null, now: number): { percent: number; reset:
 const level = (percent: number) => (percent >= 90 ? 'danger' : percent >= 70 ? 'wait' : 'ok')
 
 /** The account's 5-hour and weekly use, as the CLI last reported it. */
-function LimitMeter({ limits }: { limits: AccountLimits }) {
+function LimitMeter({ limits, name: label }: { limits: AccountLimits; name: string }) {
   const now = Date.now()
   const windows: Array<[string, { percent: number; reset: string }]> = []
   for (const [label, raw] of [['5 h', limits.fiveHour], ['semana', limits.weekly]] as const) {
@@ -50,11 +53,11 @@ function LimitMeter({ limits }: { limits: AccountLimits }) {
     if (use) windows.push([label, use])
   }
   if (windows.length === 0) return null
-  const name = `${CLI_LABEL[limits.cli]}${limits.plan ? ` (${limits.plan})` : ''}`
+  const name = `${label}${limits.plan ? ` (${limits.plan})` : ''}`
   const detail = windows.map(([label, w]) => `${label}: ${w.percent}% usado, ${w.reset}`).join('\n')
   return (
-    <span className="limit" role="group" aria-label={`Limites do ${name}. ${detail}`} title={`Limites do ${name}\n${detail}`}>
-      <span className="limit__cli">{CLI_LABEL[limits.cli]}</span>
+    <span className="limit" role="group" aria-label={`Limites de ${name}. ${detail}`} title={`Limites de ${name}\n${detail}`}>
+      <span className="limit__cli">{label}</span>
       {windows.map(([label, w]) => (
         <span key={label} className="limit__window" data-level={level(w.percent)}>
           <span className="limit__label">{label}</span>

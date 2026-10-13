@@ -3,10 +3,13 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AccountLimits, RateWindow, TokenUsage } from '@orbit/protocol'
 
+/** Limits as a CLI reports them; the sidecar knows which account the agent runs as. */
+export type ReportedLimits = Omit<AccountLimits, 'accountId'>
+
 export interface UsageReport {
   usage: TokenUsage | null
   contextPercent: number | null
-  limits: AccountLimits | null
+  limits: ReportedLimits | null
 }
 
 const num = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
@@ -36,7 +39,7 @@ export function fromClaudeStatus(payload: unknown, now = Date.now()): UsageRepor
     ? { input, output, cacheRead: 0, cacheWrite: 0, total: input + output, costUsd: typeof p.cost?.total_cost_usd === 'number' ? p.cost.total_cost_usd : null }
     : null
   const rate = p.rate_limits
-  const limits: AccountLimits | null = rate
+  const limits: ReportedLimits | null = rate
     ? { cli: 'claude', fiveHour: window(rate.five_hour, 300, true), weekly: window(rate.seven_day, 10080, true), plan: null, updatedAt: now }
     : null
   return { usage, contextPercent: typeof ctx.used_percentage === 'number' ? ctx.used_percentage : null, limits }
@@ -64,7 +67,7 @@ export function fromCodexRollout(text: string, now = Date.now()): UsageReport {
     const last = payload.info?.last_token_usage
     const contextPercent = context && last ? Math.min(100, Math.round((num(last.input_tokens) / context) * 100)) : null
     const rate = payload.rate_limits
-    const limits: AccountLimits | null = rate
+    const limits: ReportedLimits | null = rate
       ? { cli: 'codex', fiveHour: window(rate.primary, 300, true), weekly: window(rate.secondary, 10080, true), plan: typeof rate.plan_type === 'string' ? rate.plan_type : null, updatedAt: now }
       : null
     return { usage, contextPercent, limits }

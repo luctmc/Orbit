@@ -1,4 +1,4 @@
-import { EFFORT_LABEL, type AgentCli, type Catalog, type MissionMode, type PaneStatus } from '@orbit/protocol'
+import { EFFORT_LABEL, type Account, type AgentCli, type Catalog, type MissionMode, type PaneStatus } from '@orbit/protocol'
 
 export { EFFORT_LABEL }
 
@@ -42,4 +42,9 @@ export function tokensText(n: number): string {
 export function costText(usd: number | null): string | null {
   if (usd === null || usd <= 0) return null
   return usd < 0.01 ? '< US$ 0,01' : `US$ ${usd.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+/** "Claude" for this Mac's own login, the given name for the others. */
+export function accountLabel(account: Account | undefined, cli: AgentCli): string {
+  return !account || account.builtin ? CLI_LABEL[cli] : account.name
 }

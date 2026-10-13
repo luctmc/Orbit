@@ -1,4 +1,4 @@
-import type { AccountLimits, Catalog, ClientMessage, CliStatus, Mission, MissionEvent, Pane, Routing, ServerMessage, Squad, UsageDay, Workspace } from '@orbit/protocol'
+import type { Account, AccountLimits, AccountStatus, Catalog, ClientMessage, CliStatus, Mission, MissionEvent, Pane, Routing, ServerMessage, Squad, UsageDay, Workspace } from '@orbit/protocol'
 
 export interface OrbitState {
   connection: 'connecting' | 'open' | 'closed'
@@ -16,6 +16,9 @@ export interface OrbitState {
   usageDays: UsageDay[]
   /** Each account's 5-hour and weekly limits, from its latest report. */
   limits: AccountLimits[]
+  /** Claude and Codex accounts agents can run as; the built-in ones come first. */
+  accounts: Account[]
+  accountStatuses: AccountStatus[]
   lastError: string | null
 }
 
@@ -38,7 +41,7 @@ export interface PaneView {
  * (for useSyncExternalStore); terminal bytes bypass React through `attachPane`.
  */
 export class OrbitClient {
-  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, catalog: null, clis: [], usageDays: [], limits: [], lastError: null }
+  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, catalog: null, clis: [], usageDays: [], limits: [], accounts: [], accountStatuses: [], lastError: null }
   private readonly listeners = new Set<() => void>()
   /** Views per pane; `ready` once the view applied its snapshot and can take live output. */
   private readonly views = new Map<number, Map<PaneView, { ready: boolean }>>()
@@ -179,6 +182,12 @@ export class OrbitClient {
         return
       case 'limits':
         this.update({ limits: message.limits })
+        return
+      case 'accounts':
+        this.update({ accounts: message.accounts })
+        return
+      case 'account.status':
+        this.update({ accountStatuses: message.statuses })
         return
       case 'error':
         this.update({ lastError: message.message })

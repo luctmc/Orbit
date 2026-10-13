@@ -18,6 +18,8 @@ export interface AgentFilesInput {
   hookCommand: string
   /** Claude status line: reports tokens, cost and account limits to the sidecar. */
   statusCommand?: string
+  /** Claude API accounts: command that prints the key. */
+  apiKeyHelper?: string
   rolePrompt: string | null
   task: string | null
 }
@@ -54,7 +56,8 @@ export function writeAgentFiles(input: AgentFilesInput): AgentLaunch {
     // spawn would stall every agent running in manual permission mode.
     const permissions = { allow: ['mcp__orbit'] }
     const statusLine = input.statusCommand ? { type: 'command', command: input.statusCommand, padding: 0 } : undefined
-    launch.settingsPath = write('settings.json', JSON.stringify({ permissions, hooks, ...(statusLine ? { statusLine } : {}) }, null, 2))
+    const apiKeyHelper = input.apiKeyHelper ? { apiKeyHelper: input.apiKeyHelper } : {}
+    launch.settingsPath = write('settings.json', JSON.stringify({ permissions, hooks, ...(statusLine ? { statusLine } : {}), ...apiKeyHelper }, null, 2))
   } else {
     launch.mcpUrl = `${input.endpoint}/mcp`
   }
