@@ -1,7 +1,5 @@
 import type { ClientMessage, Mission, MissionEvent, Pane, ServerMessage, Squad, Workspace } from '@orbit/protocol'
 
-const SCROLLBACK_LIMIT = 512 * 1024
-
 export interface OrbitState {
   connection: 'connecting' | 'open' | 'closed'
   workspaces: Workspace[]
@@ -12,17 +10,28 @@ export interface OrbitState {
   lastError: string | null
 }
 
-type DataListener = (data: string) => void
+export interface PaneSnapshot {
+  data: string
+  cols: number
+  rows: number
+}
+
+/** A mounted terminal view of a pane. */
+export interface PaneView {
+  snapshot(snapshot: PaneSnapshot): void
+  data(data: string): void
+}
 
 /**
  * Single WebSocket to the sidecar. Structured state goes through `subscribe`/`getState`
- * (for useSyncExternalStore); terminal bytes bypass React through `onPaneData`.
+ * (for useSyncExternalStore); terminal bytes bypass React through `attachPane`.
  */
 export class OrbitClient {
   private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], lastError: null }
   private readonly listeners = new Set<() => void>()
-  private readonly dataListeners = new Map<number, Set<DataListener>>()
-  private readonly buffers = new Map<number, string>()
+  /** Views per pane; `ready` once the view applied its snapshot and can take live output. */
+  private readonly views = new Map<number, Map<PaneView, { ready: boolean }>>()
+  private readonly attaching = new Set<number>()
   private ws: WebSocket | null = null
   private retryMs = 500
   private readonly resolveUrl: () => Promise<string>
@@ -49,14 +58,25 @@ export class OrbitClient {
     this.update({ lastError: null })
   }
 
-  /** Replays what the pane printed so far, then streams new output. */
-  onPaneData(paneId: number, listener: DataListener): () => void {
-    const buffered = this.buffers.get(paneId)
-    if (buffered) listener(buffered)
-    let set = this.dataListeners.get(paneId)
-    if (!set) this.dataListeners.set(paneId, (set = new Set()))
-    set.add(listener)
-    return () => set.delete(listener)
+  /**
+   * Mounts a view: the sidecar answers with the pane's screen serialized at the PTY's size, then
+   * live output. Raw history is never replayed, since redrawing a TUI at another width scrambles it.
+   */
+  attachPane(paneId: number, view: PaneView): () => void {
+    let views = this.views.get(paneId)
+    if (!views) this.views.set(paneId, (views = new Map()))
+    views.set(view, { ready: false })
+    this.requestSnapshot(paneId)
+    return () => {
+      views.delete(view)
+      if (views.size === 0) this.views.delete(paneId)
+    }
+  }
+
+  private requestSnapshot(paneId: number): void {
+    if (this.attaching.has(paneId) || this.ws?.readyState !== WebSocket.OPEN) return
+    this.attaching.add(paneId)
+    this.ws.send(JSON.stringify({ type: 'pane.attach', paneId } satisfies ClientMessage))
   }
 
   private async connect(): Promise<void> {
@@ -90,16 +110,25 @@ export class OrbitClient {
   private receive(message: ServerMessage): void {
     switch (message.type) {
       case 'snapshot':
-        this.buffers.clear()
         this.update({ ...message.snapshot })
+        // (Re)connected: every mounted view starts over from a fresh snapshot.
+        this.attaching.clear()
+        for (const [paneId, views] of this.views) {
+          for (const state of views.values()) state.ready = false
+          this.requestSnapshot(paneId)
+        }
         return
-      case 'pane.scrollback':
-        this.buffers.set(message.paneId, message.data)
-        this.emitData(message.paneId, message.data, true)
+      case 'pane.snapshot': {
+        this.attaching.delete(message.paneId)
+        for (const [view, state] of this.views.get(message.paneId) ?? []) {
+          if (state.ready) continue
+          state.ready = true
+          view.snapshot(message)
+        }
         return
+      }
       case 'pane.data':
-        this.buffers.set(message.paneId, ((this.buffers.get(message.paneId) ?? '') + message.data).slice(-SCROLLBACK_LIMIT))
-        this.emitData(message.paneId, message.data, false)
+        for (const [view, state] of this.views.get(message.paneId) ?? []) if (state.ready) view.data(message.data)
         return
       case 'workspace.updated':
         this.update({ workspaces: upsert(this.state.workspaces, message.workspace, (w) => w.id) })
@@ -111,7 +140,6 @@ export class OrbitClient {
         this.update({ panes: upsert(this.state.panes, message.pane, (p) => p.id) })
         return
       case 'pane.removed':
-        this.buffers.delete(message.paneId)
         this.update({ panes: this.state.panes.filter((p) => p.id !== message.paneId) })
         return
       case 'event.added':
@@ -127,10 +155,6 @@ export class OrbitClient {
         this.update({ lastError: message.message })
         return
     }
-  }
-
-  private emitData(paneId: number, data: string, replace: boolean): void {
-    for (const listener of this.dataListeners.get(paneId) ?? []) listener(replace ? `\x1bc${data}` : data)
   }
 
   private update(patch: Partial<OrbitState>): void {

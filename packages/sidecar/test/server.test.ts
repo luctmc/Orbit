@@ -45,6 +45,10 @@ test('creates a mission whose lead pane runs a real shell', async () => {
     await client.next('pane.data', (m) => m.paneId === pane.id && m.data.includes(`ORBIT_42 ${pane.id}`))
     await client.next('event.added', (m) => m.event.kind === 'pane.spawned' && m.event.paneId === pane.id)
 
+    // The command bar submits whole messages: pasted, then Enter.
+    client.send({ type: 'pane.submit', paneId: pane.id, text: 'echo via-barra-$((1+1))' })
+    await client.next('pane.data', (m) => m.paneId === pane.id && m.data.includes('via-barra-2'))
+
     client.send({ type: 'pane.close', paneId: pane.id })
     await client.next('pane.removed', (m) => m.paneId === pane.id)
 

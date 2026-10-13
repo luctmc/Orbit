@@ -1,23 +1,37 @@
 import { EventEmitter } from 'node:events'
 import pty, { type IPty } from 'node-pty'
 import headless from '@xterm/headless'
+import serialize from '@xterm/addon-serialize'
 import type { Pane, PaneStatus, SpawnPaneRequest } from '@orbit/protocol'
 import { buildCommand, paneEnv, type AgentLaunch, type PaneCommand } from './command.ts'
 
-const SCROLLBACK_LIMIT = 512 * 1024
 /** Output silence after which a running pane is considered idle. */
 const IDLE_AFTER_MS = 1500
 /** Delay between a bracketed paste and the Enter that submits it, so TUIs see them apart. */
 const SUBMIT_DELAY_MS = 120
+/** Scrollback kept by the screen mirror and handed to views. */
+const SCROLLBACK_LINES = 3000
+
+/**
+ * Mirror of a pane's terminal, always at the PTY's size. It is what views start from (serialized)
+ * and what agents read, and it survives the process so an exited pane still shows its last screen.
+ */
+interface Screen {
+  term: InstanceType<typeof headless.Terminal>
+  serializer: InstanceType<typeof serialize.SerializeAddon>
+}
 
 interface LivePane {
   pty: IPty
-  /** Mirror of the screen, so agents can read what another agent shows. */
-  screen: InstanceType<typeof headless.Terminal>
-  scrollback: string
   idleTimer: NodeJS.Timeout | null
   /** Status comes from the agent's hooks, not from output activity. */
   hookDriven: boolean
+}
+
+export interface PaneSnapshot {
+  data: string
+  cols: number
+  rows: number
 }
 
 export interface PaneManagerEvents {
@@ -39,6 +53,7 @@ export interface SpawnInput {
 /** Owns the PTY processes. Pane metadata is mirrored to the caller through events. */
 export class PaneManager extends EventEmitter<PaneManagerEvents> {
   private readonly live = new Map<number, LivePane>()
+  private readonly screens = new Map<number, Screen>()
   private readonly panes = new Map<number, Pane>()
   private readonly shell: string
   private readonly command: (launch: AgentLaunch, shell: string) => PaneCommand
@@ -68,20 +83,22 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       exitCode: null,
       createdAt: Date.now(),
     }
-    const screen = new headless.Terminal({ cols, rows, scrollback: 2000, allowProposedApi: true })
-    const live: LivePane = { pty: proc, screen, scrollback: '', idleTimer: null, hookDriven }
+    const term = new headless.Terminal({ cols, rows, scrollback: SCROLLBACK_LINES, allowProposedApi: true })
+    const serializer = new serialize.SerializeAddon()
+    term.loadAddon(serializer)
+    const screen: Screen = { term, serializer }
+    const live: LivePane = { pty: proc, idleTimer: null, hookDriven }
     this.live.set(id, live)
+    this.screens.set(id, screen)
     this.panes.set(id, pane)
 
     proc.onData((data) => {
-      live.scrollback = (live.scrollback + data).slice(-SCROLLBACK_LIMIT)
-      screen.write(data)
+      screen.term.write(data)
       this.emit('data', id, data)
       if (!live.hookDriven) this.markActive(id, live)
     })
     proc.onExit(({ exitCode }) => {
       if (live.idleTimer) clearTimeout(live.idleTimer)
-      screen.dispose()
       this.live.delete(id)
       Object.assign(pane, { status: 'exited', attention: null, pid: null, exitCode })
       this.emit('exit', { ...pane })
@@ -98,35 +115,61 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     this.live.get(id)?.pty.write(data)
   }
 
-  /** Types text into a TUI as one paste, then submits it. */
+  /**
+   * Types a whole message and submits it. Programs that asked for bracketed paste (TUIs like
+   * Claude Code) get it as one paste; others, like a plain shell, get the bare text. Enter goes
+   * separately, a moment later, so it is read as "submit" and not as part of the text.
+   */
   submit(id: number, text: string): boolean {
     const live = this.live.get(id)
     if (!live) return false
-    live.pty.write(`\x1b[200~${text.replaceAll('\x1b', '')}\x1b[201~`)
+    const clean = text.replaceAll('\x1b', '')
+    const paste = this.screens.get(id)?.term.modes.bracketedPasteMode
+    live.pty.write(paste ? `\x1b[200~${clean}\x1b[201~` : clean)
     setTimeout(() => this.live.get(id)?.pty.write('\r'), SUBMIT_DELAY_MS)
     return true
   }
 
+  /** PTY and mirror move together, so the mirror always matches what the program draws for. */
   resize(id: number, cols: number, rows: number): void {
     const live = this.live.get(id)
-    if (!live || cols <= 0 || rows <= 0) return
-    live.pty.resize(Math.floor(cols), Math.floor(rows))
-    live.screen.resize(Math.floor(cols), Math.floor(rows))
+    const screen = this.screens.get(id)
+    if (!live || !screen || cols < 2 || rows < 1) return
+    const c = Math.floor(cols)
+    const r = Math.floor(rows)
+    if (c === screen.term.cols && r === screen.term.rows) return
+    live.pty.resize(c, r)
+    screen.term.resize(c, r)
   }
 
   kill(id: number): void {
     this.live.get(id)?.pty.kill()
   }
 
-  scrollback(id: number): string {
-    return this.live.get(id)?.scrollback ?? ''
+  /** Drops everything kept for a closed pane. */
+  forget(id: number): void {
+    this.kill(id)
+    this.screens.get(id)?.term.dispose()
+    this.screens.delete(id)
+    this.panes.delete(id)
+  }
+
+  /**
+   * The pane's screen and scrollback once every byte received so far has been applied.
+   * Output that arrives after this call is not in the snapshot; callers stream it afterwards.
+   */
+  async snapshot(id: number): Promise<PaneSnapshot | null> {
+    const screen = this.screens.get(id)
+    if (!screen) return null
+    await new Promise<void>((resolve) => screen.term.write('', resolve))
+    return { data: screen.serializer.serialize({ scrollback: SCROLLBACK_LINES }), cols: screen.term.cols, rows: screen.term.rows }
   }
 
   /** The last `lines` rendered lines of the pane, as plain text. */
   screenText(id: number, lines: number): string {
-    const live = this.live.get(id)
-    if (!live) return ''
-    const buffer = live.screen.buffer.active
+    const screen = this.screens.get(id)
+    if (!screen) return ''
+    const buffer = screen.term.buffer.active
     const out: string[] = []
     for (let y = 0; y < buffer.length; y++) out.push(buffer.getLine(y)?.translateToString(true) ?? '')
     while (out.length && !out[out.length - 1]?.trim()) out.pop()

@@ -6,7 +6,7 @@ import type { AgentCli, ClientMessage, Mission, MissionEvent, MissionEventKind, 
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import type { AgentLaunch, PaneCommand } from './command.ts'
 import { statusFromHook, type HookPayload } from './hooks.ts'
-import { PaneManager } from './panes.ts'
+import { PaneManager, type PaneSnapshot } from './panes.ts'
 import { crewRole, leadRole, objectiveTask } from './prompts.ts'
 import { normalizeSquad } from './squads.ts'
 import { Store } from './store.ts'
@@ -61,13 +61,14 @@ export class OrbitCore {
     this.endpoint = endpoint
   }
 
-  /** What a newly connected client needs: the snapshot, then each live pane's scrollback. */
+  /** What a newly connected client needs; terminal contents come per view via `pane.attach`. */
   welcome(): ServerMessage[] {
-    const snapshot = this.store.snapshot()
-    const scrollbacks: ServerMessage[] = snapshot.panes
-      .filter((p) => this.panes.isAlive(p.id))
-      .map((p) => ({ type: 'pane.scrollback', paneId: p.id, data: this.panes.scrollback(p.id) }))
-    return [{ type: 'snapshot', snapshot }, ...scrollbacks]
+    return [{ type: 'snapshot', snapshot: this.store.snapshot() }]
+  }
+
+  /** A pane's screen for a view that just mounted (see the server's attach handling). */
+  paneSnapshot(paneId: number): Promise<PaneSnapshot | null> {
+    return this.panes.snapshot(paneId)
   }
 
   handle(message: ClientMessage): void {
@@ -121,8 +122,14 @@ export class OrbitCore {
       case 'pane.spawn':
         this.spawn(message.request)
         return
+      case 'pane.attach':
+        return // per-connection: handled by the server
       case 'pane.input':
         this.panes.write(message.paneId, message.data)
+        return
+      case 'pane.submit':
+        // Text and Enter in one write look like a paste to TUIs, which then keep the Enter as a newline.
+        if (!this.panes.submit(message.paneId, message.text)) throw new Error(`#${message.paneId} não está rodando`)
         return
       case 'pane.resize':
         this.panes.resize(message.paneId, message.cols, message.rows)
@@ -270,7 +277,7 @@ export class OrbitCore {
 
   private closePane(id: number): void {
     if (!this.store.pane(id)) return
-    this.panes.kill(id)
+    this.panes.forget(id)
     this.store.removePane(id)
     for (const [token, paneId] of this.paneTokens) if (paneId === id) this.paneTokens.delete(token)
     removeAgentFiles(this.paneDir(id))

@@ -27,7 +27,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   const sendCommand = (event: FormEvent) => {
     event.preventDefault()
     if (!selected || !command.trim()) return
-    client.send({ type: 'pane.input', paneId: selected.id, data: `${command}\r` })
+    client.send({ type: 'pane.submit', paneId: selected.id, text: command })
     setCommand('')
   }
 

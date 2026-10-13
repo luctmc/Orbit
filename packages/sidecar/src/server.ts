@@ -29,7 +29,8 @@ export interface RunningServer {
  * - agents, over HTTP `/mcp` and `/hooks`, each with its own pane token and no browser Origin.
  */
 export async function startServer(options: ServerOptions): Promise<RunningServer> {
-  const clients = new Set<WebSocket>()
+  /** Per connection: panes whose snapshot is being prepared, with the output held back meanwhile. */
+  const clients = new Map<WebSocket, Map<number, ServerMessage[]>>()
   const send = (ws: WebSocket, message: ServerMessage) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message))
   }
@@ -38,9 +39,30 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     shell: options.shell,
     agentCommand: options.agentCommand,
     broadcast: (message) => {
-      for (const ws of clients) send(ws, message)
+      for (const [ws, attaching] of clients) {
+        const held = message.type === 'pane.data' ? attaching.get(message.paneId) : undefined
+        if (held) held.push(message)
+        else send(ws, message)
+      }
     },
   })
+
+  /**
+   * Output that reached the mirror before the snapshot is inside it; output after it is held and
+   * sent right behind the snapshot. The view ignores `pane.data` until its snapshot arrives.
+   */
+  const attach = async (ws: WebSocket, paneId: number) => {
+    const attaching = clients.get(ws)
+    if (!attaching || attaching.has(paneId)) return
+    attaching.set(paneId, [])
+    try {
+      const snapshot = await core.paneSnapshot(paneId)
+      if (snapshot) send(ws, { type: 'pane.snapshot', paneId, ...snapshot })
+      for (const message of attaching.get(paneId) ?? []) send(ws, message)
+    } finally {
+      attaching.delete(paneId)
+    }
+  }
 
   let port = options.port
   const http: Server = createServer((req, res) => {
@@ -63,11 +85,13 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   })
 
   wss.on('connection', (ws: WebSocket) => {
-    clients.add(ws)
+    clients.set(ws, new Map())
     for (const message of core.welcome()) send(ws, message)
     ws.on('message', (raw) => {
       try {
-        core.handle(JSON.parse(String(raw)) as ClientMessage)
+        const message = JSON.parse(String(raw)) as ClientMessage
+        if (message.type === 'pane.attach') void attach(ws, message.paneId)
+        else core.handle(message)
       } catch (error) {
         send(ws, { type: 'error', message: error instanceof Error ? error.message : String(error) })
       }
@@ -85,7 +109,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     core,
     async close() {
       core.shutdown()
-      for (const ws of clients) ws.terminate()
+      for (const ws of clients.keys()) ws.terminate()
       await new Promise<void>((resolve) => wss.close(() => http.close(() => resolve())))
     },
   }

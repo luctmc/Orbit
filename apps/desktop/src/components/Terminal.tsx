@@ -28,6 +28,10 @@ const THEME = {
   brightWhite: '#ffffff',
 }
 
+const SETTLE_MS = 120
+const MIN_COLS = 20
+const MIN_ROWS = 5
+
 /** One xterm bound to one pane's PTY. Keystrokes go straight to the sidecar. */
 export function Terminal({ paneId, interactive, onFocus }: { paneId: number; interactive: boolean; onFocus?: () => void }) {
   const client = useOrbitClient()
@@ -52,22 +56,46 @@ export function Terminal({ paneId, interactive, onFocus }: { paneId: number; int
     term.loadAddon(fit)
     term.open(element)
 
-    const resize = () => {
-      if (element.clientWidth === 0 || element.clientHeight === 0) return
-      fit.fit()
-      client.send({ type: 'pane.resize', paneId, cols: term.cols, rows: term.rows })
+    // The xterm and the PTY must always share one size: every resize of the view is also sent to
+    // the PTY, and the view only starts following its box after it holds the PTY's snapshot.
+    // Layout changes come in bursts (a pane opening, the window dragging), so wait for them to
+    // settle, and never shrink to a size no program can draw in.
+    let snapshotApplied = false
+    let settle: ReturnType<typeof setTimeout> | undefined
+    const followBox = () => {
+      clearTimeout(settle)
+      settle = setTimeout(() => {
+        if (!snapshotApplied) return
+        const size = fit.proposeDimensions()
+        if (!size || size.cols < MIN_COLS || size.rows < MIN_ROWS) return
+        if (size.cols === term.cols && size.rows === term.rows) return
+        term.resize(size.cols, size.rows)
+        client.send({ type: 'pane.resize', paneId, cols: size.cols, rows: size.rows })
+      }, SETTLE_MS)
     }
-    const observer = new ResizeObserver(() => requestAnimationFrame(resize))
+    const observer = new ResizeObserver(followBox)
     observer.observe(element)
 
-    const offData = client.onPaneData(paneId, (data) => term.write(data))
+    const detach = client.attachPane(paneId, {
+      snapshot: ({ data, cols, rows }) => {
+        snapshotApplied = false
+        term.reset()
+        term.resize(cols, rows)
+        term.write(data, () => {
+          snapshotApplied = true
+          followBox()
+        })
+      },
+      data: (data) => term.write(data),
+    })
     const input = term.onData((data) => client.send({ type: 'pane.input', paneId, data }))
     const textarea = element.querySelector('textarea')
     textarea?.addEventListener('focus', () => onFocusRef.current?.())
 
     return () => {
+      clearTimeout(settle)
       observer.disconnect()
-      offData()
+      detach()
       input.dispose()
       term.dispose()
     }

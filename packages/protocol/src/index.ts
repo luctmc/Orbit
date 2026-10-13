@@ -114,7 +114,12 @@ export type ClientMessage =
   | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; squadId?: string | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'> }
   | { type: 'mission.archive'; missionId: string }
   | { type: 'pane.spawn'; request: SpawnPaneRequest }
+  /** A terminal view mounted: send me this pane's current screen, then its live output. */
+  | { type: 'pane.attach'; paneId: number }
+  /** Raw keystrokes from the terminal view. */
   | { type: 'pane.input'; paneId: number; data: string }
+  /** A whole message typed elsewhere (the command bar): pasted, then submitted with Enter. */
+  | { type: 'pane.submit'; paneId: number; text: string }
   | { type: 'pane.resize'; paneId: number; cols: number; rows: number }
   /** Kills the process if alive and removes the pane from the mission. */
   | { type: 'pane.close'; paneId: number }
@@ -124,7 +129,11 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { type: 'snapshot'; snapshot: Snapshot }
-  | { type: 'pane.scrollback'; paneId: number; data: string }
+  /**
+   * The pane's screen and scrollback, serialized at the PTY's real size. Replaying raw output at
+   * another width scrambles TUIs, so views start from this and then apply `pane.data`.
+   */
+  | { type: 'pane.snapshot'; paneId: number; data: string; cols: number; rows: number }
   | { type: 'pane.data'; paneId: number; data: string }
   | { type: 'workspace.updated'; workspace: Workspace }
   | { type: 'mission.updated'; mission: Mission }
