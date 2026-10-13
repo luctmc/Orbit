@@ -8,9 +8,10 @@ import { FlowTimeline } from './components/FlowTimeline.tsx'
 import { AddAgentDialog, NewMissionDialog, OpenWorkspaceDialog } from './components/dialogs.tsx'
 import { SquadsDialog } from './components/SquadsDialog.tsx'
 import { HomeView } from './components/HomeView.tsx'
+import { RoutingDialog } from './components/RoutingDialog.tsx'
 import { OrbitMark, PlusIcon } from './components/icons.tsx'
 
-type DialogKind = 'workspace' | 'mission' | 'agent' | 'squads' | null
+type DialogKind = 'workspace' | 'mission' | 'agent' | 'squads' | 'routing' | null
 
 const BOOT_AT = Date.now()
 
@@ -97,6 +98,7 @@ export function App() {
         // The Base has its own "Nova missão" in the header.
         onNewMission={workspace && view === 'mission' ? () => setDialog('mission') : null}
         onSquads={() => setDialog('squads')}
+        onSettings={() => setDialog('routing')}
       />
 
       {state.lastError && (
@@ -154,9 +156,10 @@ export function App() {
       )}
 
       {dialog === 'workspace' && <OpenWorkspaceDialog onClose={() => setDialog(null)} />}
-      {dialog === 'mission' && workspace && <NewMissionDialog workspaceId={workspace.id} workspaceName={workspace.name} onClose={() => setDialog(null)} onManageSquads={() => setDialog('squads')} />}
+      {dialog === 'mission' && workspace && <NewMissionDialog workspaceId={workspace.id} workspaceName={workspace.name} onClose={() => setDialog(null)} onManageSquads={() => setDialog('squads')} onManageRouting={() => setDialog('routing')} />}
       {dialog === 'agent' && mission && <AddAgentDialog missionId={mission.id} onClose={() => setDialog(null)} />}
       {dialog === 'squads' && <SquadsDialog onClose={() => setDialog(null)} />}
+      {dialog === 'routing' && <RoutingDialog onClose={() => setDialog(null)} />}
     </div>
   )
 }

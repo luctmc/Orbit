@@ -1,16 +1,19 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { Mission, MissionEvent, MissionMode, Pane, Snapshot, Squad, Workspace } from '@orbit/protocol'
+import type { Mission, MissionEvent, MissionMode, Pane, Routing, Snapshot, Squad, Workspace } from '@orbit/protocol'
+import { DEFAULT_ROUTING } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
 
 const EVENTS_PER_MISSION = 200
 
-interface PersistedState extends Omit<Snapshot, 'squads'> {
+interface PersistedState extends Omit<Snapshot, 'squads' | 'routing'> {
   version: 1
   nextPaneId: number
   /** User squads; builtins live in code. */
   customSquads: Squad[]
+  /** The user's task table; null = Orbit's default. */
+  routing: Routing | null
 }
 
 /** Durable state in `<dataDir>/state.json`. Writes are debounced and atomic (tmp + rename). */
@@ -25,19 +28,32 @@ export class Store {
     this.state = this.load()
     // Older state files predate some fields.
     this.state.customSquads ??= []
+    this.state.routing ??= null
     for (const mission of this.state.missions) mission.squadId ??= null
     // Processes do not survive a sidecar restart.
     for (const pane of this.state.panes) {
       pane.attention = null
       pane.deliveredAt ??= null
       pane.squadRole ??= null
+      pane.taskType ??= null
+      pane.effort ??= null
       if (pane.status !== 'exited') Object.assign(pane, { status: 'exited', pid: null })
     }
   }
 
   snapshot(): Snapshot {
     const { workspaces, missions, panes, events } = this.state
-    return structuredClone({ workspaces, missions, panes, events, squads: this.squads() })
+    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing() })
+  }
+
+  routing(): Routing {
+    return structuredClone(this.state.routing ?? DEFAULT_ROUTING)
+  }
+
+  /** null restores the default table. */
+  saveRouting(routing: Routing | null): void {
+    this.state.routing = routing
+    this.save()
   }
 
   squads(): Squad[] {
@@ -157,6 +173,6 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
-    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [] }
+    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null }
   }
 }

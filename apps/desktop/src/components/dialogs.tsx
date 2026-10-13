@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
-import { MODEL_ID, type AgentCli, type MissionMode, type Squad } from '@orbit/protocol'
+import { EFFORTS, MODEL_ID, type AgentCli, type Effort, type MissionMode, type Squad } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
-import { CLI_LABEL, MODEL_SUGGESTIONS, MODE_LABEL } from '../orbit/labels.ts'
+import { CLI_LABEL, EFFORT_LABEL, MODEL_SUGGESTIONS, MODE_LABEL } from '../orbit/labels.ts'
 import { Dialog } from './Dialog.tsx'
 
 const MODE_HINT: Record<MissionMode, string> = {
@@ -13,6 +13,13 @@ const MODE_HINT: Record<MissionMode, string> = {
 export interface AgentChoice {
   cli: AgentCli
   model: string
+  effort: Effort | null
+}
+
+const DEFAULT_AGENT: AgentChoice = { cli: 'claude', model: '', effort: null }
+
+function describeSeat(cli: AgentCli, model: string | null, effort: Effort | null): string {
+  return [CLI_LABEL[cli], model, effort && `esforço ${EFFORT_LABEL[effort]}`].filter(Boolean).join(' · ')
 }
 
 function AgentFields({ value, onChange, label = 'Agente' }: { value: AgentChoice; onChange: (next: AgentChoice) => void; label?: string }) {
@@ -23,7 +30,7 @@ function AgentFields({ value, onChange, label = 'Agente' }: { value: AgentChoice
         <legend>{label}</legend>
         <div className="segmented">
           {(Object.keys(CLI_LABEL) as AgentCli[]).map((cli) => (
-            <button key={cli} type="button" aria-pressed={value.cli === cli} onClick={() => onChange({ cli, model: cli === value.cli ? value.model : '' })}>
+            <button key={cli} type="button" aria-pressed={value.cli === cli} onClick={() => onChange({ cli, model: cli === value.cli ? value.model : '', effort: cli === 'shell' ? null : value.effort })}>
               {CLI_LABEL[cli]}
             </button>
           ))}
@@ -37,6 +44,18 @@ function AgentFields({ value, onChange, label = 'Agente' }: { value: AgentChoice
             {MODEL_SUGGESTIONS[value.cli].map((m) => <option key={m} value={m} />)}
           </datalist>
         </div>
+      )}
+      {value.cli !== 'shell' && (
+        <fieldset className="field">
+          <legend>Esforço</legend>
+          <div className="segmented">
+            {[null, ...EFFORTS].map((effort) => (
+              <button key={effort ?? 'padrao'} type="button" aria-pressed={value.effort === effort} onClick={() => onChange({ ...value, effort })}>
+                {effort ? EFFORT_LABEL[effort] : 'Padrão'}
+              </button>
+            ))}
+          </div>
+        </fieldset>
       )}
     </>
   )
@@ -68,19 +87,24 @@ export function OpenWorkspaceDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManageSquads }: { workspaceId: string; workspaceName: string; onClose: () => void; onManageSquads: () => void }) {
+export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManageSquads, onManageRouting }: { workspaceId: string; workspaceName: string; onClose: () => void; onManageSquads: () => void; onManageRouting: () => void }) {
   const client = useOrbitClient()
-  const { squads } = useOrbit()
+  const { squads, routing } = useOrbit()
   const [title, setTitle] = useState('')
   const [objective, setObjective] = useState('')
   const [mode, setMode] = useState<MissionMode>('livre')
   const [squadId, setSquadId] = useState<string | null>(null)
-  const [lead, setLead] = useState<AgentChoice>({ cli: 'claude', model: '' })
+  const [lead, setLead] = useState<AgentChoice>(DEFAULT_AGENT)
   const [error, setError] = useState<string | null>(null)
 
+  // Each mode suggests its own lead: the squad's, or the task table's for agentic missions.
+  const pickMode = (next: MissionMode) => {
+    setMode(next)
+    if (next === 'agentica' && routing) setLead({ cli: routing.lead.cli, model: routing.lead.model ?? '', effort: routing.lead.effort })
+  }
   const pickSquad = (squad: Squad) => {
     setSquadId(squad.id)
-    setLead({ cli: squad.lead.cli, model: squad.lead.model ?? '' })
+    setLead({ cli: squad.lead.cli, model: squad.lead.model ?? '', effort: null })
   }
 
   return (
@@ -88,7 +112,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
       if (!title.trim()) return setError('Dê um título para a missão.')
       if (mode === 'squad' && !squadId) return setError('Escolha o squad da missão.')
       if (invalidModel(lead)) return setError('Modelo inválido: use só letras, números, ponto, hífen ou dois-pontos.')
-      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, lead: { cli: lead.cli, model: modelOrNull(lead), title: '' } })
+      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, title: '' } })
       onClose()
     }}>
       <div className="field">
@@ -103,7 +127,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
         <legend>Modo</legend>
         <div className="mode-list">
           {(Object.keys(MODE_LABEL) as MissionMode[]).map((m) => (
-            <button key={m} type="button" className="mode-option" aria-pressed={mode === m} onClick={() => setMode(m)}>
+            <button key={m} type="button" className="mode-option" aria-pressed={mode === m} onClick={() => pickMode(m)}>
               <span className={`badge badge--${m}`}>{MODE_LABEL[m]}</span>
               <span>{MODE_HINT[m]}</span>
             </button>
@@ -128,7 +152,12 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
         </fieldset>
       )}
       <AgentFields value={lead} onChange={setLead} label={mode === 'livre' ? 'Agente' : 'Líder'} />
-      {mode === 'agentica' && <p className="note">O líder recebe o objetivo e abre os ajudantes sozinho pelo MCP do Orbit. Os retornos chegam no terminal dele.</p>}
+      {mode === 'agentica' && (
+        <p className="note">
+          O líder recebe o objetivo e abre os ajudantes sozinho, cada um com o agente da tabela{' '}
+          <button type="button" className="link-btn" onClick={onManageRouting}>quem faz cada tarefa</button>. Os retornos chegam no terminal dele.
+        </p>
+      )}
       {mode === 'squad' && <p className="note">O líder recebe o objetivo e o roteiro do squad e abre cada papel quando o roteiro mandar.</p>}
       {error && <p className="form-error" role="alert">{error}</p>}
     </Dialog>
@@ -137,21 +166,27 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
 
 export function AddAgentDialog({ missionId, onClose }: { missionId: string; onClose: () => void }) {
   const client = useOrbitClient()
-  const { missions, squads } = useOrbit()
+  const { missions, squads, routing } = useOrbit()
   const squad = squads.find((s) => s.id === missions.find((m) => m.id === missionId)?.squadId)
   const [roleId, setRoleId] = useState<string | null>(null)
+  const [kindId, setKindId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [task, setTask] = useState('')
-  const [agent, setAgent] = useState<AgentChoice>({ cli: 'claude', model: '' })
+  const [agent, setAgent] = useState<AgentChoice>(DEFAULT_AGENT)
   const [error, setError] = useState<string | null>(null)
   const role = squad?.roles.find((r) => r.id === roleId)
+  // Without a squad, the task table can staff the helper.
+  const kind = squad ? undefined : routing?.taskTypes.find((t) => t.id === kindId)
+  const preset = role ?? kind
 
   return (
     <Dialog eyebrow="Tripulação" title="Adicionar agente" submitLabel="Abrir agente" onClose={onClose} onSubmit={() => {
-      if (!role && invalidModel(agent)) return setError('Modelo inválido: use só letras, números, ponto, hífen ou dois-pontos.')
+      if (!preset && invalidModel(agent)) return setError('Modelo inválido: use só letras, números, ponto, hífen ou dois-pontos.')
       const request = role
         ? { missionId, role: 'crew' as const, cli: role.cli, model: role.model, title, task, squadRoleId: role.id }
-        : { missionId, role: 'crew' as const, cli: agent.cli, model: modelOrNull(agent), title, task: agent.cli === 'shell' ? null : task }
+        : kind
+          ? { missionId, role: 'crew' as const, cli: kind.cli, model: kind.model, effort: kind.effort, title, task, taskTypeId: kind.id }
+          : { missionId, role: 'crew' as const, cli: agent.cli, model: modelOrNull(agent), effort: agent.cli === 'shell' ? null : agent.effort, title, task: agent.cli === 'shell' ? null : task }
       client.send({ type: 'pane.spawn', request })
       onClose()
     }}>
@@ -164,15 +199,27 @@ export function AddAgentDialog({ missionId, onClose }: { missionId: string; onCl
               <button key={r.id} type="button" aria-pressed={roleId === r.id} onClick={() => setRoleId(r.id)}>{r.name}</button>
             ))}
           </div>
-          {role && <p className="note">{CLI_LABEL[role.cli]}{role.model ? ` · ${role.model}` : ''}: {role.brief}</p>}
+          {role && <p className="note">{describeSeat(role.cli, role.model, null)}: {role.brief}</p>}
+        </fieldset>
+      )}
+      {!squad && routing && (
+        <fieldset className="field">
+          <legend>Tipo de tarefa</legend>
+          <div className="segmented segmented--wrap">
+            <button type="button" aria-pressed={kindId === null} onClick={() => setKindId(null)}>Avulso</button>
+            {routing.taskTypes.map((t) => (
+              <button key={t.id} type="button" aria-pressed={kindId === t.id} onClick={() => setKindId(t.id)}>{t.name}</button>
+            ))}
+          </div>
+          {kind && <p className="note">{describeSeat(kind.cli, kind.model, kind.effort)}{kind.description ? `: ${kind.description}` : ''}</p>}
         </fieldset>
       )}
       <div className="field">
-        <label htmlFor="a-title">Função <span className="muted">(opcional{role ? `; padrão: ${role.name}` : ''})</span></label>
+        <label htmlFor="a-title">Função <span className="muted">(opcional{preset ? `; padrão: ${preset.name}` : ''})</span></label>
         <input id="a-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Mapear leituras do token" autoFocus />
       </div>
-      {!role && <AgentFields value={agent} onChange={setAgent} />}
-      {(role || agent.cli !== 'shell') && (
+      {!preset && <AgentFields value={agent} onChange={setAgent} />}
+      {(preset || agent.cli !== 'shell') && (
         <div className="field">
           <label htmlFor="a-task">Tarefa <span className="muted">(opcional; vira o primeiro pedido do agente)</span></label>
           <textarea id="a-task" rows={4} value={task} onChange={(e) => setTask(e.target.value)} placeholder="Mapeie onde o token de sessão é lido e devolva a lista de arquivos" />

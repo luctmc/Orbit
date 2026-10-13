@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
-import { MODEL_ID, type Pane } from '@orbit/protocol'
+import { EFFORTS, MODEL_ID, type Effort, type Pane } from '@orbit/protocol'
 import type { OrbitCore } from './core.ts'
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean }
@@ -24,6 +24,7 @@ const agentView = (p: Pane) => ({
   id: p.id,
   role: p.role === 'lead' ? 'líder' : 'ajudante',
   squadRole: p.squadRole,
+  taskType: p.taskType,
   title: p.title,
   agent: p.cli,
   model: p.model,
@@ -65,9 +66,13 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
   if (caller.role === 'lead') {
     const squad = core.missionSquad(caller.missionId)
     const roleIds = squad?.roles.map((r) => r.id) ?? []
+    // Squad missions route by role; the others by the task table ("who does each task").
+    const taskTypes = squad ? [] : core.routing().taskTypes
     const roleField: Record<string, z.ZodType> = roleIds.length
       ? { role: z.enum(roleIds as [string, ...string[]]).optional().describe(`Papel do squad "${squad?.name}" (${squad?.roles.map((r) => `${r.id} = ${r.name}`).join(', ')}). Com papel, o agente, o modelo e as instruções vêm do squad.`) }
-      : {}
+      : taskTypes.length
+        ? { kind: z.enum(taskTypes.map((t) => t.id) as [string, ...string[]]).optional().describe(`Tipo de tarefa (${taskTypes.map((t) => `${t.id} = ${t.name}`).join(', ')}). Com tipo, o agente, o modelo e o esforço vêm da tabela "quem faz cada tarefa".`) }
+        : {}
 
     server.registerTool('agent_spawn', {
       description: 'Abre um ajudante num terminal visível ao usuário, na mesma pasta, já com a tarefa. A tarefa deve ser autocontida: contexto, arquivos, o que entregar e como verificar. O ajudante devolve o resultado com handoff_submit e ele chega a você como "[Orbit] Retorno de #N".',
@@ -75,12 +80,15 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
         title: z.string().max(120).optional().describe('Função curta do ajudante, ex.: "Mapear leituras do token" (padrão: nome do papel)'),
         task: z.string().min(1).max(20000).describe('A tarefa completa para o ajudante'),
         ...roleField,
-        agent: z.enum(['claude', 'codex']).optional().describe('Qual CLI usar quando não há papel (padrão: claude)'),
-        model: z.string().regex(MODEL_ID).optional().describe('Modelo quando não há papel, ex.: claude-sonnet-5-5'),
+        agent: z.enum(['claude', 'codex']).optional().describe('Qual CLI usar sem papel nem tipo (padrão: claude)'),
+        model: z.string().regex(MODEL_ID).optional().describe('Modelo sem papel nem tipo, ex.: claude-sonnet-5-5'),
+        effort: z.enum(EFFORTS as [Effort, ...Effort[]]).optional().describe('Esforço sem papel nem tipo: low, medium ou high'),
       },
-    }, guarded(({ title, task, role, agent, model }: { title?: string; task: string; role?: string; agent?: 'claude' | 'codex'; model?: string }) => {
-      const pane = core.spawnHelper(caller, { title: title ?? '', task, cli: agent ?? 'claude', model: model ?? null, squadRoleId: role ?? null })
-      return `${pane.squadRole ?? 'Ajudante'} #${pane.id} aberto (${pane.title}). Ele vai mandar o retorno quando terminar.`
+    }, guarded(({ title, task, role, kind, agent, model, effort }: { title?: string; task: string; role?: string; kind?: string; agent?: 'claude' | 'codex'; model?: string; effort?: Effort }) => {
+      const pane = core.spawnHelper(caller, { title: title ?? '', task, cli: agent ?? 'claude', model: model ?? null, effort: effort ?? null, squadRoleId: role ?? null, taskTypeId: kind ?? null })
+      const what = pane.squadRole ?? pane.taskType ?? 'Ajudante'
+      const how = [pane.model, pane.effort && `esforço ${pane.effort}`].filter(Boolean).join(', ')
+      return `${what} #${pane.id} aberto (${pane.title}${how ? `; ${how}` : ''}). Ele vai mandar o retorno quando terminar.`
     }))
 
     server.registerTool('agent_close', {

@@ -46,7 +46,10 @@ npm test
   registra no fluxo e digita o retorno no terminal do líder.
 - **Hooks do Claude Code** (`POST /hooks`): status real (`rodando`, `ocioso`, `espera você` com o
   motivo). Codex e terminais usam a atividade do terminal.
-- Missão **agêntica**: o líder recebe o objetivo e as instruções de papel e monta o time sozinho.
+- Missão **agêntica**: o líder recebe o objetivo e as instruções de papel e monta o time sozinho,
+  classificando cada atividade na tabela **Quem faz cada tarefa** (Ajustes): cada tipo de tarefa
+  define agente, modelo, esforço (`--effort` no Claude, `model_reasoning_effort` no Codex) e
+  skills sugeridas. O líder passa `kind` no `agent_spawn` e o Orbit aplica a linha.
 - Missão de **squad**: um time com papéis (agente, modelo e instruções de cada um) e um roteiro
   que o líder segue. O líder abre cada papel com `agent_spawn` + `role`; o Orbit aplica o CLI, o
   modelo e as instruções do papel. Vêm três squads prontos (Caça-bugs, Funcionalidade,

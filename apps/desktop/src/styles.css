@@ -164,6 +164,29 @@ h1, h2, p { margin: 0; }
 .tone-bg--off { background: #3d3d3d; }
 .tone-bg--neutral { background: var(--text); }
 
+/* Ajustes › Quem faz cada tarefa */
+.routing { gap: 16px; max-height: calc(100vh - 160px); }
+.routing__intro { font-size: 13px; max-width: 760px; line-height: 1.55; }
+.routing__lead { margin: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
+.routing__lead legend { padding: 0 4px; font-size: 12.5px; color: var(--text-3); }
+.routing__table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.routing__table { width: 100%; min-width: 900px; border-collapse: collapse; font-size: 13px; }
+.routing__table th { padding: 10px 12px; text-align: left; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 500; background: var(--surface-2); }
+.routing__table td { padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: middle; }
+.routing__table input { width: 100%; padding: 7px 9px; border-radius: 7px; border: 1px solid var(--line-2); background: var(--bg); }
+.routing__type { min-width: 240px; }
+.routing__type input + input { margin-top: 6px; }
+.routing__name { font-weight: 600; }
+.routing__desc { font-size: 12.5px; color: var(--text-3); }
+.routing__model { min-width: 170px; }
+.routing__lead .routing__model { flex: 1 1 200px; padding: 7px 9px; border-radius: 7px; border: 1px solid var(--line-2); background: var(--bg); }
+.routing__skills { min-width: 150px; font-family: var(--mono); font-size: 12px; }
+.routing__footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.effort { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); white-space: nowrap; font-size: 12.5px; }
+.effort__bars { display: inline-flex; gap: 3px; }
+.effort__bars span { width: 4px; height: 12px; border-radius: 1px; background: var(--line-strong); }
+.effort__bars span.on { background: var(--accent); }
+
 /* Base (home) */
 .home { flex: 1; min-height: 0; overflow-y: auto; }
 .home__inner { max-width: 1240px; margin: 0 auto; padding: 36px 24px 48px; display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; }

@@ -30,7 +30,7 @@ test('shellQuote survives single quotes', () => {
 test('claude agents get MCP, hooks, role and task from private files', () => {
   const paneDir = join(mkdtempSync(join(tmpdir(), 'orbit-files-')), 'panes', '7')
   const launch = writeAgentFiles({
-    paneDir, cli: 'claude', model: null, endpoint: 'http://127.0.0.1:4317', token: 'tok',
+    paneDir, cli: 'claude', model: null, effort: 'high', endpoint: 'http://127.0.0.1:4317', token: 'tok',
     hookCommand: `'/usr/bin/node' '/x/report.mjs'`, rolePrompt: 'papel', task: `faça "isso" e $(nada)`,
   })
   const mcp = JSON.parse(readFileSync(launch.mcpConfigPath!, 'utf8'))
@@ -44,16 +44,18 @@ test('claude agents get MCP, hooks, role and task from private files', () => {
   const { args } = buildCommand(launch, '/bin/zsh')
   const line = args[2]!
   assert.ok(!line.includes('$(nada)'), 'task text must never reach the command line')
+  assert.match(line, /--effort high/)
   assert.match(line, /--append-system-prompt "\$\(cat '.+role\.md'\)"/)
   assert.match(line, /-- "\$\(cat '.+task\.md'\)"/)
 })
 
 test('codex agents reach the MCP through a token env var', () => {
   const paneDir = join(mkdtempSync(join(tmpdir(), 'orbit-files-')), 'panes', '8')
-  const launch = writeAgentFiles({ paneDir, cli: 'codex', model: 'gpt-6.1', endpoint: 'http://127.0.0.1:4317', token: 'segredo-do-pane', hookCommand: 'x', rolePrompt: null, task: 'tarefa' })
+  const launch = writeAgentFiles({ paneDir, cli: 'codex', model: 'gpt-6.1', effort: 'low', endpoint: 'http://127.0.0.1:4317', token: 'segredo-do-pane', hookCommand: 'x', rolePrompt: null, task: 'tarefa' })
   const line = buildCommand(launch, '/bin/zsh').args[2]!
   assert.match(line, /-c 'mcp_servers\.orbit\.url="http:\/\/127\.0\.0\.1:4317\/mcp"'/)
   assert.match(line, /bearer_token_env_var="ORBIT_PANE_TOKEN"/)
+  assert.match(line, /-c 'model_reasoning_effort="low"'/)
   assert.ok(!line.includes('segredo-do-pane'), 'the token travels by env, never on the command line')
 })
 

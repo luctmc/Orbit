@@ -159,7 +159,7 @@ function MissionCard({ summary, squadName, onOpen }: { summary: MissionSummary; 
           {crew.map((p) => (
             <li key={p.id}>
               <span className={`dot dot--${STATUS[p.status].tone}`} />
-              <span>{p.role === 'lead' ? 'Líder' : p.squadRole ?? 'Ajudante'} #{p.id}</span>
+              <span>{p.role === 'lead' ? 'Líder' : p.squadRole ?? p.taskType ?? 'Ajudante'} #{p.id}</span>
               <span className="muted">{p.title} · {STATUS[p.status].label}</span>
             </li>
           ))}

@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { AgentCli } from '@orbit/protocol'
+import type { AgentCli, Effort } from '@orbit/protocol'
 import { shellQuote, type AgentLaunch } from './command.ts'
 
 /** Claude Code events that move a pane's status. */
@@ -10,6 +10,7 @@ export interface AgentFilesInput {
   paneDir: string
   cli: AgentCli
   model: string | null
+  effort: Effort | null
   endpoint: string
   token: string
   hookCommand: string
@@ -30,7 +31,7 @@ export function writeAgentFiles(input: AgentFilesInput): AgentLaunch {
     return path
   }
 
-  const launch: AgentLaunch = { cli, model: input.model }
+  const launch: AgentLaunch = { cli, model: input.model, effort: input.effort }
   if (cli === 'shell') return launch
 
   if (input.rolePrompt) launch.rolePromptPath = write('role.md', input.rolePrompt)

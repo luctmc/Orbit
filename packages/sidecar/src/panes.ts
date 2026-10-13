@@ -44,6 +44,7 @@ export interface SpawnInput {
   id: number
   request: SpawnPaneRequest
   squadRole: string | null
+  taskType: string | null
   cwd: string
   launch: AgentLaunch
   env: Record<string, string>
@@ -64,7 +65,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     this.command = command
   }
 
-  spawn({ id, request, squadRole, cwd, launch, env, hookDriven }: SpawnInput, cols = 100, rows = 30): Pane {
+  spawn({ id, request, squadRole, taskType, cwd, launch, env, hookDriven }: SpawnInput, cols = 100, rows = 30): Pane {
     const { file, args } = this.command(launch, this.shell)
     const proc = pty.spawn(file, args, { name: 'xterm-256color', cols, rows, cwd, env: paneEnv(process.env, env) })
     const pane: Pane = {
@@ -72,8 +73,10 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       missionId: request.missionId,
       role: request.role,
       squadRole,
+      taskType,
       cli: request.cli,
       model: request.model,
+      effort: launch.effort ?? null,
       title: request.title,
       cwd,
       status: 'starting',

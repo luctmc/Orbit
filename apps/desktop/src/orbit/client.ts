@@ -1,4 +1,4 @@
-import type { ClientMessage, Mission, MissionEvent, Pane, ServerMessage, Squad, Workspace } from '@orbit/protocol'
+import type { ClientMessage, Mission, MissionEvent, Pane, Routing, ServerMessage, Squad, Workspace } from '@orbit/protocol'
 
 export interface OrbitState {
   connection: 'connecting' | 'open' | 'closed'
@@ -7,6 +7,8 @@ export interface OrbitState {
   panes: Pane[]
   events: MissionEvent[]
   squads: Squad[]
+  /** null until the first snapshot arrives. */
+  routing: Routing | null
   lastError: string | null
 }
 
@@ -27,7 +29,7 @@ export interface PaneView {
  * (for useSyncExternalStore); terminal bytes bypass React through `attachPane`.
  */
 export class OrbitClient {
-  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], lastError: null }
+  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, lastError: null }
   private readonly listeners = new Set<() => void>()
   /** Views per pane; `ready` once the view applied its snapshot and can take live output. */
   private readonly views = new Map<number, Map<PaneView, { ready: boolean }>>()
@@ -150,6 +152,9 @@ export class OrbitClient {
         return
       case 'squad.removed':
         this.update({ squads: this.state.squads.filter((s) => s.id !== message.squadId) })
+        return
+      case 'routing.updated':
+        this.update({ routing: message.routing })
         return
       case 'error':
         this.update({ lastError: message.message })

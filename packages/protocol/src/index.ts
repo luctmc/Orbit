@@ -36,8 +36,11 @@ export interface Pane {
   role: PaneRole
   /** Squad role this helper plays (e.g. "Revisor"), when opened from a squad. */
   squadRole: string | null
+  /** Task type it was routed by (e.g. "Correção de bug"), in agentic missions. */
+  taskType: string | null
   cli: AgentCli
   model: string | null
+  effort: Effort | null
   title: string
   cwd: string
   status: PaneStatus
@@ -77,6 +80,30 @@ export interface Squad {
 
 export type SquadInput = Omit<Squad, 'builtin' | 'updatedAt'>
 
+/** How hard the model thinks. Claude: `--effort`; Codex: `model_reasoning_effort`. */
+export type Effort = 'low' | 'medium' | 'high'
+export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high']
+
+/** One row of "who does each task": the agent an agentic lead gets for that kind of work. */
+export interface TaskType {
+  /** Slug the lead passes as `kind`, e.g. `bug`. */
+  id: string
+  name: string
+  /** When this row applies; shown to the lead so it can classify the work. */
+  description: string
+  cli: AgentCliForRole
+  model: string | null
+  effort: Effort | null
+  /** Skills the helper is told to use, by name. */
+  skills: string[]
+}
+
+/** Agentic missions: the lead's default and the task table it routes helpers through. */
+export interface Routing {
+  lead: { cli: AgentCliForRole; model: string | null; effort: Effort | null }
+  taskTypes: TaskType[]
+}
+
 export type MissionEventKind = 'mission.created' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff'
 
 export interface MissionEvent {
@@ -95,6 +122,7 @@ export interface Snapshot {
   panes: Pane[]
   events: MissionEvent[]
   squads: Squad[]
+  routing: Routing
 }
 
 export interface SpawnPaneRequest {
@@ -107,6 +135,9 @@ export interface SpawnPaneRequest {
   task?: string | null
   /** Squad role to play; its CLI, model and brief apply. */
   squadRoleId?: string | null
+  /** Task type from the routing table; its CLI, model, effort and skills apply. */
+  taskTypeId?: string | null
+  effort?: Effort | null
 }
 
 export type ClientMessage =
@@ -126,6 +157,9 @@ export type ClientMessage =
   /** Creates or replaces a custom squad (builtins cannot be changed). */
   | { type: 'squad.save'; squad: SquadInput }
   | { type: 'squad.delete'; squadId: string }
+  | { type: 'routing.save'; routing: Routing }
+  /** Back to the table Orbit ships with. */
+  | { type: 'routing.reset' }
 
 export type ServerMessage =
   | { type: 'snapshot'; snapshot: Snapshot }
@@ -142,6 +176,7 @@ export type ServerMessage =
   | { type: 'event.added'; event: MissionEvent }
   | { type: 'squad.updated'; squad: Squad }
   | { type: 'squad.removed'; squadId: string }
+  | { type: 'routing.updated'; routing: Routing }
   | { type: 'error'; message: string }
 
 /** Model ids reach a shell command line, so only plain identifiers are accepted. */
@@ -150,3 +185,4 @@ export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/
 
 export const SQUAD_LIMITS = { name: 60, description: 280, playbook: 8000, brief: 4000, roles: 8 } as const
+export const ROUTING_LIMITS = { taskTypes: 16, name: 40, description: 200, skills: 6, skill: 40 } as const

@@ -46,7 +46,7 @@ export function MissionRail({ missions, panes, activeMissionId, selectedPaneId, 
               <li key={p.id}>
                 <button className="crew__row" aria-current={p.id === selectedPaneId} onClick={() => onSelectPane(p.id)}>
                   <span className={`dot dot--${STATUS[p.status].tone}`} />
-                  <span className={p.role === 'lead' ? 'crew__name crew__name--lead' : 'crew__name'}>{p.role === 'lead' ? 'Líder' : p.squadRole ?? 'Ajudante'} · #{p.id}</span>
+                  <span className={p.role === 'lead' ? 'crew__name crew__name--lead' : 'crew__name'}>{p.role === 'lead' ? 'Líder' : p.squadRole ?? p.taskType ?? 'Ajudante'} · #{p.id}</span>
                   <span className={`crew__status tone--${STATUS[p.status].tone}`}>{STATUS[p.status].label}</span>
                 </button>
               </li>
