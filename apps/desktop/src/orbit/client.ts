@@ -24,11 +24,12 @@ export class OrbitClient {
   private readonly buffers = new Map<number, string>()
   private ws: WebSocket | null = null
   private retryMs = 500
-  private readonly url: string
+  private readonly resolveUrl: () => Promise<string>
 
-  constructor(url: string) {
-    this.url = url
-    this.connect()
+  /** `resolveUrl` runs before every (re)connection: the sidecar's port can change when it restarts. */
+  constructor(resolveUrl: () => Promise<string>) {
+    this.resolveUrl = resolveUrl
+    void this.connect()
   }
 
   getState = (): OrbitState => this.state
@@ -57,10 +58,18 @@ export class OrbitClient {
     return () => set.delete(listener)
   }
 
-  private connect(): void {
-    const ws = new WebSocket(this.url)
-    this.ws = ws
+  private async connect(): Promise<void> {
     this.update({ connection: 'connecting' })
+    let url: string
+    try {
+      url = await this.resolveUrl()
+    } catch (error) {
+      this.update({ connection: 'closed', lastError: error instanceof Error ? error.message : String(error) })
+      this.retryLater()
+      return
+    }
+    const ws = new WebSocket(url)
+    this.ws = ws
     ws.onopen = () => {
       this.retryMs = 500
       this.update({ connection: 'open', lastError: null })
@@ -68,9 +77,13 @@ export class OrbitClient {
     ws.onmessage = (event) => this.receive(JSON.parse(String(event.data)) as ServerMessage)
     ws.onclose = () => {
       this.update({ connection: 'closed' })
-      setTimeout(() => this.connect(), this.retryMs)
-      this.retryMs = Math.min(this.retryMs * 2, 8000)
+      this.retryLater()
     }
+  }
+
+  private retryLater(): void {
+    setTimeout(() => void this.connect(), this.retryMs)
+    this.retryMs = Math.min(this.retryMs * 2, 8000)
   }
 
   private receive(message: ServerMessage): void {

@@ -12,7 +12,7 @@ import { Store } from './store.ts'
 const CLIS: readonly AgentCli[] = ['claude', 'codex', 'shell']
 const MODES: readonly MissionMode[] = ['livre', 'squad', 'agentica']
 const CLI_LABEL: Record<AgentCli, string> = { claude: 'Claude', codex: 'Codex', shell: 'Terminal' }
-const HOOK_SCRIPT = fileURLToPath(new URL('../hooks/report.mjs', import.meta.url))
+const HOOK_SCRIPT = process.env.ORBIT_HOOK_SCRIPT ?? fileURLToPath(new URL('../hooks/report.mjs', import.meta.url))
 
 export type Broadcast = (message: ServerMessage) => void
 

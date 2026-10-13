@@ -10,12 +10,14 @@ const CONNECTION_LABEL: Record<OrbitState['connection'], string> = {
 
 export function TitleBar({ connection, liveAgents }: { connection: OrbitState['connection']; liveAgents: number }) {
   return (
-    <header className="titlebar">
-      <div className="brand">
+    // data-tauri-drag-region only applies to the element itself, so every non-interactive piece carries it.
+    <header className="titlebar" data-tauri-drag-region>
+      <div className="brand" data-tauri-drag-region>
         <OrbitMark />
-        <span className="brand__name">Orbit</span>
-        <span className="brand__version">0.1.0</span>
+        <span className="brand__name" data-tauri-drag-region>Orbit</span>
+        <span className="brand__version" data-tauri-drag-region>0.1.0</span>
       </div>
+      <div className="titlebar__drag" data-tauri-drag-region />
       <div className="titlebar__status">
         <span className="muted">{liveAgents} {liveAgents === 1 ? 'agente vivo' : 'agentes vivos'}</span>
         <span className="status-pill" data-state={connection}>

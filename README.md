@@ -9,21 +9,27 @@ workspaces e missões.
 |---|---|
 | `packages/protocol` | Tipos do contrato UI ↔ sidecar (JSON sobre um WebSocket) |
 | `packages/sidecar` | Núcleo em Node: workspaces, missões, agentes em PTY (`node-pty`), estado em `~/.orbit/state.json` |
-| `apps/desktop` | Interface React + xterm.js (tela de missão). O shell Tauri entra aqui em `src-tauri/` |
+| `apps/desktop` | Interface React + xterm.js (tela de missão) |
+| `apps/desktop/src-tauri` | Shell Tauri 2 (Rust): janela nativa, inicia e supervisiona o sidecar e entrega `{porta, token}` à interface por IPC |
 | `docs/reverse-engineering` | Mapa de arquitetura e de UI do Overclock usado como referência (clean-room) |
 
 ## Rodando
 
-Requer Node ≥ 24.11.
+Requer Node ≥ 24.11 e, para o app nativo, Rust (`rustup`).
 
 ```bash
 npm install
-npm run dev
+npm run app          # app nativo (Tauri) com hot reload da interface
+npm run app:build    # gera Orbit.app em apps/desktop/src-tauri/target/release/bundle/macos/
+npm run dev          # só sidecar + interface no navegador (http://localhost:5273)
 ```
 
-Abre o sidecar em `ws://127.0.0.1:4317/ws` e a interface em http://localhost:5273. O `dev` gera um
-token novo a cada execução; o sidecar só aceita conexões com esse token e vindas da origem da UI.
-Para usar outra pasta de dados: `ORBIT_HOME=/caminho npm run dev`.
+O token do sidecar é novo a cada execução: no app o shell Rust o gera e repassa à interface por
+IPC; no `npm run dev` o script o gera e o Vite o injeta. O sidecar só aceita conexões com esse
+token e vindas da origem da interface. Para usar outra pasta de dados: `ORBIT_HOME=/caminho`.
+
+No app, o sidecar roda com o `node` do seu login shell (ou `ORBIT_NODE`). Se o app cair, o
+sidecar percebe o stdin fechado e encerra os agentes junto; se o sidecar cair, o shell o reinicia.
 
 ```bash
 npm run typecheck
@@ -51,4 +57,4 @@ prompt; texto livre nunca vai direto para a linha de comando. O token do agente 
 ambiente dele (`ORBIT_PANE_TOKEN`) e o auto-update do Claude fica desligado nos agentes, para
 vários processos não atualizarem a mesma instalação ao mesmo tempo.
 
-Próximos passos: shell Tauri (requer Rust), squads com roteiro.
+Próximos passos: squads com roteiro, Node embutido no `.app`, assinatura e notarização.

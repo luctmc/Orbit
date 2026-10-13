@@ -5,9 +5,10 @@ import '@fontsource-variable/geist-mono'
 import './styles.css'
 import { App } from './App.tsx'
 import { OrbitClient } from './orbit/client.ts'
-import { OrbitProvider, sidecarUrl } from './orbit/context.tsx'
+import { isTauri, OrbitProvider, sidecarUrl } from './orbit/context.tsx'
 
-const client = new OrbitClient(sidecarUrl())
+if (isTauri) document.documentElement.classList.add('is-tauri')
+const client = new OrbitClient(sidecarUrl)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
