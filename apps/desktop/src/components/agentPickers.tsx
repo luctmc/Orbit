@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
-import { effortsFor, type AgentCli, type Effort } from '@orbit/protocol'
+import { effortsFor, type AgentCli, type AgentCliForRole, type Effort } from '@orbit/protocol'
 import { useOrbit } from '../orbit/context.tsx'
-import { CLI_LABEL, EFFORT_LABEL, modelOptions } from '../orbit/labels.ts'
+import { accountLabel, CLI_LABEL, EFFORT_LABEL, modelOptions } from '../orbit/labels.ts'
 
 /** Model field with the CLI's real models as suggestions; any model id can still be typed. */
 export function ModelInput({ id, cli, value, onChange, label, disabled, className }: {
@@ -68,5 +68,32 @@ export function EffortCycle({ cli, model, value, onChange, label }: { cli: Agent
       <span className="effort__bars" aria-hidden="true">{allowed.map((e, i) => <span key={e} className={i < level ? 'on' : ''} />)}</span>
       <span>{value ? EFFORT_LABEL[value] : defaultLabel(modelDefault)}</span>
     </button>
+  )
+}
+
+/** Which account the agent runs as; "automatic" lets the sidecar pick the one with the most room. */
+export function AccountSelect({ id, cli, value, onChange }: { id: string; cli: AgentCliForRole; value: string | null; onChange: (accountId: string | null) => void }) {
+  const { accounts, accountStatuses, limits } = useOrbit()
+  const mine = accounts.filter((a) => a.cli === cli)
+  useEffect(() => {
+    if (value && !mine.some((a) => a.id === value)) onChange(null)
+  }, [value, mine, onChange])
+  if (mine.length < 2) return null
+  const describe = (accountId: string) => {
+    const status = accountStatuses.find((s) => s.accountId === accountId)
+    const l = limits.find((x) => x.accountId === accountId)
+    const now = Date.now()
+    const used = l ? Math.max(0, ...[l.fiveHour, l.weekly].filter((w) => w && w.resetsAt > now).map((w) => Math.round(w!.usedPercent))) : null
+    if (status?.loggedIn === false) return ' — não logada'
+    return used === null ? '' : ` — ${used}% usado`
+  }
+  return (
+    <div className="field">
+      <label htmlFor={id}>Conta</label>
+      <select id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}>
+        <option value="">Automática (a com mais folga)</option>
+        {mine.map((a) => <option key={a.id} value={a.id}>{accountLabel(a, a.cli)}{a.builtin ? ' (deste Mac)' : a.kind === 'api' ? ' (chave de API)' : ''}{describe(a.id)}</option>)}
+      </select>
+    </div>
   )
 }

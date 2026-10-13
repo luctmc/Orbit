@@ -1,11 +1,12 @@
 import type { Pane } from '@orbit/protocol'
-import { useOrbitClient } from '../orbit/context.tsx'
+import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, costText, EFFORT_LABEL, pathText, STATUS, tokensText } from '../orbit/labels.ts'
 import { CloseIcon } from './icons.tsx'
 import { Terminal } from './Terminal.tsx'
 
 export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: boolean; onSelect: () => void }) {
   const client = useOrbitClient()
+  const account = useOrbit().accounts.find((a) => a.id === pane.accountId)
   const status = STATUS[pane.status]
   const alive = pane.status !== 'exited'
 
@@ -17,7 +18,7 @@ export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: b
         <span className="pane__id">#{pane.id}</span>
         <button type="button" className="pane__title" onClick={onSelect}>{pane.title}</button>
         {pane.deliveredAt !== null && <span className="chip chip--done">entregue</span>}
-        <span className="chip">{[CLI_LABEL[pane.cli], pane.model, pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}</span>
+        <span className="chip">{[CLI_LABEL[pane.cli], account && !account.builtin && account.name, pane.model, pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}</span>
         <button type="button" className="icon-btn" aria-label={alive ? `Encerrar agente ${pane.id}` : `Fechar agente ${pane.id}`} onClick={() => client.send({ type: 'pane.close', paneId: pane.id })}>
           <CloseIcon size={14} />
         </button>

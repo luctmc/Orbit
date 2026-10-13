@@ -50,6 +50,7 @@ export interface SpawnInput {
   launch: AgentLaunch
   env: Record<string, string>
   hookDriven: boolean
+  accountId: string | null
 }
 
 /** Owns the PTY processes. Pane metadata is mirrored to the caller through events. */
@@ -66,7 +67,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     this.command = command
   }
 
-  spawn({ id, request, squadRole, taskType, cwd, launch, env, hookDriven }: SpawnInput, cols = 100, rows = 30): Pane {
+  spawn({ id, request, squadRole, taskType, cwd, launch, env, hookDriven, accountId }: SpawnInput, cols = 100, rows = 30): Pane {
     const { file, args } = this.command(launch, this.shell)
     const proc = pty.spawn(file, args, { name: 'xterm-256color', cols, rows, cwd, env: paneEnv(process.env, env) })
     const pane: Pane = {
@@ -78,6 +79,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       cli: request.cli,
       model: request.model,
       effort: launch.effort ?? null,
+      accountId,
       title: request.title,
       cwd,
       status: 'starting',

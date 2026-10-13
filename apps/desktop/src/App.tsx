@@ -88,7 +88,7 @@ export function App() {
 
   return (
     <div className="app">
-      <TitleBar connection={state.connection} liveAgents={liveAgents} limits={state.limits} />
+      <TitleBar connection={state.connection} liveAgents={liveAgents} limits={state.limits} accounts={state.accounts} />
       <WorkspaceTabs
         workspaces={workspaces}
         activeId={view === 'mission' ? workspace?.id ?? null : null}

@@ -273,6 +273,7 @@ h1, h2, p { margin: 0; }
 .field label, .field legend { font-size: 12.5px; color: var(--text-3); padding: 0; margin-bottom: 6px; }
 .field input, .field textarea { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); }
 .field textarea { resize: vertical; }
+.field select { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); }
 .mode-list { display: flex; flex-direction: column; gap: 6px; }
 .mode-option { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--bg); text-align: left; color: var(--text-3); font-size: 13px; }
 .mode-option .badge { width: 84px; text-align: center; }
@@ -371,3 +372,20 @@ h1, h2, p { margin: 0; }
 .catalog-model__name code { font: 11.5px var(--mono); color: var(--muted); }
 .catalog-model__efforts { display: flex; flex-wrap: wrap; gap: 4px; }
 .catalog-model__efforts .chip { font-size: 11.5px; padding: 1px 7px; }
+
+/* Settings › Contas */
+.accounts__group { display: flex; flex-direction: column; gap: 10px; }
+.account { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); display: flex; flex-direction: column; gap: 10px; }
+.account--form { border-color: var(--accent-line); gap: 12px; }
+.account h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.account__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.account__facts { display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 12.5px; }
+.account__state--ok { color: var(--text-2); }
+.account__state--warn { color: var(--wait); }
+.account__state--muted { color: var(--muted); }
+.account__login { display: flex; flex-direction: column; gap: 8px; }
+.account__terminal { height: 240px; background: var(--term); border: 1px solid var(--line); border-radius: 8px; padding: 6px 4px 4px 8px; }
+.account__login-actions, .account-form__actions { display: flex; gap: 8px; justify-content: flex-end; }
+.account-form__row { display: flex; gap: 16px; flex-wrap: wrap; }
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-3); cursor: pointer; }
+.check input { accent-color: var(--accent); }

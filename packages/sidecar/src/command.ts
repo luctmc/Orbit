@@ -22,6 +22,8 @@ export interface AgentLaunch {
   rolePromptPath?: string
   /** First prompt. */
   taskPath?: string
+  /** Runs the CLI's login instead of an agent (the account comes from the environment). */
+  login?: boolean
 }
 
 export function shellQuote(value: string): string {
@@ -37,6 +39,7 @@ const fromFile = (path: string) => `"$(cat ${shellQuote(path)})"`
  */
 export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
   if (launch.cli === 'shell') return { file: shell, args: ['-l'] }
+  if (launch.login) return { file: shell, args: ['-l', '-c', launch.cli === 'claude' ? 'claude auth login' : 'codex login'] }
   const { model, effort } = launch
   if (model !== null && !MODEL_ID.test(model)) throw new Error(`Modelo inválido: ${model}`)
   if (effort && !EFFORTS.includes(effort)) throw new Error(`Esforço inválido: ${effort}`)

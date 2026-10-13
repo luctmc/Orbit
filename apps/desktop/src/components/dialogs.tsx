@@ -2,7 +2,7 @@ import { useCallback, useId, useRef, useState } from 'react'
 import { MODEL_ID, type AgentCli, type Effort, type MissionMode, type Squad } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, EFFORT_LABEL, MODE_LABEL } from '../orbit/labels.ts'
-import { EffortChoice, ModelInput } from './agentPickers.tsx'
+import { AccountSelect, EffortChoice, ModelInput } from './agentPickers.tsx'
 import { Dialog } from './Dialog.tsx'
 
 const MODE_HINT: Record<MissionMode, string> = {
@@ -15,9 +15,11 @@ export interface AgentChoice {
   cli: AgentCli
   model: string
   effort: Effort | null
+  /** null = automatic. */
+  accountId: string | null
 }
 
-const DEFAULT_AGENT: AgentChoice = { cli: 'claude', model: '', effort: null }
+const DEFAULT_AGENT: AgentChoice = { cli: 'claude', model: '', effort: null, accountId: null }
 
 function describeSeat(cli: AgentCli, model: string | null, effort: Effort | null): string {
   return [CLI_LABEL[cli], model, effort && `esforço ${EFFORT_LABEL[effort]}`].filter(Boolean).join(' · ')
@@ -29,18 +31,20 @@ function AgentFields({ value, onChange, label = 'Agente' }: { value: AgentChoice
   latest.current = value
   // Stable, so the effort picker can reset an effort the new model does not accept.
   const setEffort = useCallback((effort: Effort | null) => onChange({ ...latest.current, effort }), [onChange])
+  const setAccount = useCallback((accountId: string | null) => onChange({ ...latest.current, accountId }), [onChange])
   return (
     <>
       <fieldset className="field">
         <legend>{label}</legend>
         <div className="segmented">
           {(Object.keys(CLI_LABEL) as AgentCli[]).map((cli) => (
-            <button key={cli} type="button" aria-pressed={value.cli === cli} onClick={() => onChange({ cli, model: cli === value.cli ? value.model : '', effort: cli === 'shell' ? null : value.effort })}>
+            <button key={cli} type="button" aria-pressed={value.cli === cli} onClick={() => onChange({ cli, model: cli === value.cli ? value.model : '', effort: cli === 'shell' ? null : value.effort, accountId: cli === value.cli ? value.accountId : null })}>
               {CLI_LABEL[cli]}
             </button>
           ))}
         </div>
       </fieldset>
+      {value.cli !== 'shell' && <AccountSelect id={`${id}-account`} cli={value.cli} value={value.accountId} onChange={setAccount} />}
       {value.cli !== 'shell' && (
         <div className="field">
           <label htmlFor={`${id}-model`}>Modelo <span className="muted">(vazio = padrão do {CLI_LABEL[value.cli]})</span></label>
@@ -79,19 +83,19 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   // Each mode suggests its own lead: the squad's, or the task table's for agentic missions.
   const pickMode = (next: MissionMode) => {
     setMode(next)
-    if (next === 'agentica' && routing) setLead({ cli: routing.lead.cli, model: routing.lead.model ?? '', effort: routing.lead.effort })
+    if (next === 'agentica' && routing) setLead({ cli: routing.lead.cli, model: routing.lead.model ?? '', effort: routing.lead.effort, accountId: null })
   }
   const pickSquad = (squad: Squad) => {
     setSquadId(squad.id)
-    setLead({ cli: squad.lead.cli, model: squad.lead.model ?? '', effort: null })
+    setLead({ cli: squad.lead.cli, model: squad.lead.model ?? '', effort: null, accountId: null })
   }
 
   return (
     <Dialog eyebrow={`Nova missão · ${workspaceName}`} title="O que vamos fazer?" submitLabel="Lançar missão" onClose={onClose} onSubmit={() => {
       if (!title.trim()) return setError('Dê um título para a missão.')
       if (mode === 'squad' && !squadId) return setError('Escolha o squad da missão.')
-      if (invalidModel(lead)) return setError('Modelo inválido: use só letras, números, ponto, hífen ou dois-pontos.')
-      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, title: '' } })
+      if (invalidModel(lead)) return setError('Modelo inválido: use só letras, números, ponto, hífen, barra ou dois-pontos.')
+      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
       onClose()
     }}>
       <div className="field">
@@ -160,12 +164,12 @@ export function AddAgentDialog({ missionId, onClose }: { missionId: string; onCl
 
   return (
     <Dialog eyebrow="Tripulação" title="Adicionar agente" submitLabel="Abrir agente" onClose={onClose} onSubmit={() => {
-      if (!preset && invalidModel(agent)) return setError('Modelo inválido: use só letras, números, ponto, hífen ou dois-pontos.')
+      if (!preset && invalidModel(agent)) return setError('Modelo inválido: use só letras, números, ponto, hífen, barra ou dois-pontos.')
       const request = role
         ? { missionId, role: 'crew' as const, cli: role.cli, model: role.model, title, task, squadRoleId: role.id }
         : kind
           ? { missionId, role: 'crew' as const, cli: kind.cli, model: kind.model, effort: kind.effort, title, task, taskTypeId: kind.id }
-          : { missionId, role: 'crew' as const, cli: agent.cli, model: modelOrNull(agent), effort: agent.cli === 'shell' ? null : agent.effort, title, task: agent.cli === 'shell' ? null : task }
+          : { missionId, role: 'crew' as const, cli: agent.cli, model: modelOrNull(agent), effort: agent.cli === 'shell' ? null : agent.effort, accountId: agent.accountId, title, task: agent.cli === 'shell' ? null : task }
       client.send({ type: 'pane.spawn', request })
       onClose()
     }}>

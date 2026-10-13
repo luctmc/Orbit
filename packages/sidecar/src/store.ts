@@ -1,13 +1,14 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { EMPTY_USAGE, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type MissionMode, type Pane, type Routing, type Snapshot, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
+import { EMPTY_USAGE, type Account, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type MissionMode, type Pane, type Routing, type Snapshot, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
+import { BUILTIN_ACCOUNTS, migrateLimits } from './accounts.ts'
 import { DEFAULT_ROUTING } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
 
 const EVENTS_PER_MISSION = 200
 
-interface PersistedState extends Omit<Snapshot, 'squads' | 'routing'> {
+interface PersistedState extends Omit<Snapshot, 'squads' | 'routing' | 'accounts'> {
   // usageDays and limits are persisted as they are sent.
   version: 1
   nextPaneId: number
@@ -15,6 +16,10 @@ interface PersistedState extends Omit<Snapshot, 'squads' | 'routing'> {
   customSquads: Squad[]
   /** The user's task table; null = Orbit's default. */
   routing: Routing | null
+  /** Accounts the person added; the built-in ones live in code. */
+  customAccounts: Account[]
+  /** Whether Orbit may pick each built-in account by itself (default: yes). */
+  builtinAuto: Record<string, boolean>
 }
 
 /** Durable state in `<dataDir>/state.json`. Writes are debounced and atomic (tmp + rename). */
@@ -31,7 +36,9 @@ export class Store {
     this.state.customSquads ??= []
     this.state.routing ??= null
     this.state.usageDays ??= []
-    this.state.limits ??= []
+    this.state.limits = migrateLimits(this.state.limits ?? [])
+    this.state.customAccounts ??= []
+    this.state.builtinAuto ??= {}
     for (const workspace of this.state.workspaces) workspace.folders ??= [workspace.path]
     for (const mission of this.state.missions) {
       mission.squadId ??= null
@@ -44,6 +51,7 @@ export class Store {
       pane.squadRole ??= null
       pane.taskType ??= null
       pane.effort ??= null
+      pane.accountId ??= null
       pane.usage ??= null
       pane.contextPercent = null
       if (pane.status !== 'exited') Object.assign(pane, { status: 'exited', pid: null })
@@ -52,7 +60,7 @@ export class Store {
 
   snapshot(): Snapshot {
     const { workspaces, missions, panes, events, usageDays, limits } = this.state
-    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing(), usageDays, limits })
+    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing(), usageDays, limits, accounts: this.accounts() })
   }
 
   /**
@@ -78,9 +86,44 @@ export class Store {
   }
 
   setLimits(limits: AccountLimits): AccountLimits[] {
-    this.state.limits = [...this.state.limits.filter((l) => l.cli !== limits.cli), limits]
+    this.state.limits = [...this.state.limits.filter((l) => l.accountId !== limits.accountId), limits]
     this.save()
+    return this.limits()
+  }
+
+  limits(): AccountLimits[] {
     return structuredClone(this.state.limits)
+  }
+
+  accounts(): Account[] {
+    return [...this.builtinAccounts(), ...this.state.customAccounts.map((a) => structuredClone(a))]
+  }
+
+  account(id: string): Account | undefined {
+    return this.accounts().find((a) => a.id === id)
+  }
+
+  private builtinAccounts(): Account[] {
+    return BUILTIN_ACCOUNTS.map((a) => ({ ...a, auto: this.state.builtinAuto[a.id] ?? true }))
+  }
+
+  saveAccount(account: Account): void {
+    const index = this.state.customAccounts.findIndex((a) => a.id === account.id)
+    if (index === -1) this.state.customAccounts.push(account)
+    else this.state.customAccounts[index] = account
+    this.save()
+  }
+
+  /** Built-in accounts only change whether Orbit may pick them by itself. */
+  setBuiltinAuto(id: string, auto: boolean): void {
+    this.state.builtinAuto = { ...this.state.builtinAuto, [id]: auto }
+    this.save()
+  }
+
+  deleteAccount(id: string): void {
+    this.state.customAccounts = this.state.customAccounts.filter((a) => a.id !== id)
+    this.state.limits = this.state.limits.filter((l) => l.accountId !== id)
+    this.save()
   }
 
   routing(): Routing {
@@ -227,7 +270,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
-    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [] }
+    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {} }
   }
 }
 

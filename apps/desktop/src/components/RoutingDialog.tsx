@@ -3,6 +3,7 @@ import { MODEL_ID, ROUTING_LIMITS, type AgentCliForRole, type Routing, type Task
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL } from '../orbit/labels.ts'
 import { EffortCycle, ModelInput } from './agentPickers.tsx'
+import { AccountsPanel } from './AccountsPanel.tsx'
 import { ClisPanel } from './ClisPanel.tsx'
 import { CloseIcon, PlusIcon } from './icons.tsx'
 
@@ -30,8 +31,11 @@ function CliToggle({ value, onChange, label }: { value: AgentCliForRole; onChang
 }
 
 /** Settings › "Quem faz cada tarefa": the table an agentic lead uses to staff its helpers. */
-export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: () => void; initialTab?: 'routing' | 'clis' }) {
-  const [tab, setTab] = useState<'routing' | 'clis'>(initialTab)
+type SettingsTab = 'routing' | 'contas' | 'clis'
+const TAB_TITLE: Record<SettingsTab, string> = { routing: 'Quem faz cada tarefa', contas: 'Contas', clis: 'Agentes e CLIs' }
+
+export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: () => void; initialTab?: SettingsTab }) {
+  const [tab, setTab] = useState<SettingsTab>(initialTab)
   const client = useOrbitClient()
   const { routing } = useOrbit()
   const ref = useRef<HTMLDialogElement>(null)
@@ -74,10 +78,11 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
       <header className="dialog__head">
         <div>
           <div className="eyebrow">Ajustes</div>
-          <h2 id={`${uid}-title`}>{tab === 'routing' ? 'Quem faz cada tarefa' : 'Agentes e CLIs'}</h2>
+          <h2 id={`${uid}-title`}>{TAB_TITLE[tab]}</h2>
         </div>
         <div className="segmented settings-tabs" role="group" aria-label="Seção dos ajustes">
           <button type="button" aria-pressed={tab === 'routing'} onClick={() => setTab('routing')}>Quem faz cada tarefa</button>
+          <button type="button" aria-pressed={tab === 'contas'} onClick={() => setTab('contas')}>Contas</button>
           <button type="button" aria-pressed={tab === 'clis'} onClick={() => setTab('clis')}>Agentes e CLIs</button>
         </div>
         <button type="button" className="icon-btn" aria-label="Fechar" onClick={onClose}><CloseIcon /></button>
@@ -85,6 +90,8 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
 
       {tab === 'clis' ? (
         <ClisPanel />
+      ) : tab === 'contas' ? (
+        <AccountsPanel />
       ) : !draft ? (
         <div className="dialog__body"><p className="muted">Carregando a tabela…</p></div>
       ) : (

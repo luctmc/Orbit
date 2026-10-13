@@ -61,10 +61,20 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Contas** (Ajustes › Contas): além do login do Claude e do Codex deste Mac, dá para
+  adicionar outras assinaturas (cada uma numa pasta própria, via `CLAUDE_CONFIG_DIR` ou
+  `CODEX_HOME`, com login por um terminal dentro do Orbit) e chaves de API: Anthropic, OpenRouter
+  ou outro endereço compatível para o Claude (com modelo próprio, que vale também para os aliases)
+  e OpenAI para o Codex. Configurações, instruções, skills e agentes da pasta de sempre são
+  compartilhados por links; os logins não. Ao abrir um agente sem escolher conta, o Orbit usa a
+  assinatura com mais folga nos limites e só passa para uma chave de API (se ela estiver liberada
+  para isso) quando todas estiverem acima de 95%. A chave fica em
+  `~/.orbit/accounts/<id>/key` (0600): o Claude a lê por `apiKeyHelper`, o Codex recebe por
+  `codex login --with-api-key` lendo do arquivo, e ela nunca volta para a interface.
 - **Uso de tokens e limites**: cada agente mostra os tokens da sessão e quanto do contexto está
   ocupado; a missão soma os agentes e a Base mostra os tokens por dia (Claude e Codex) nos últimos
   12 meses. A barra de título mostra o uso das janelas de 5 h e semanal de cada conta, com quando
-  renovam. O Claude manda os dados pela status line do Orbit (`POST /status`, com o token do
+  renovam, por conta. O Claude manda os dados pela status line do Orbit (`POST /status`, com o token do
   agente); do Codex, o sidecar lê o arquivo de sessão em `~/.codex/sessions` aberto na pasta do
   agente. O custo que o Claude informa é o equivalente em preço de API (não é cobrado em
   assinatura). Os limites só aparecem depois da primeira chamada de cada CLI.
