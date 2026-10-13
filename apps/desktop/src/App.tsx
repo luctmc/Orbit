@@ -7,6 +7,7 @@ import { MissionView, type Layout } from './components/MissionView.tsx'
 import { FlowTimeline } from './components/FlowTimeline.tsx'
 import { AddAgentDialog, NewMissionDialog, OpenWorkspaceDialog } from './components/dialogs.tsx'
 import { SquadsDialog } from './components/SquadsDialog.tsx'
+import { HomeView } from './components/HomeView.tsx'
 import { OrbitMark, PlusIcon } from './components/icons.tsx'
 
 type DialogKind = 'workspace' | 'mission' | 'agent' | 'squads' | null
@@ -38,6 +39,8 @@ export function App() {
   const [paneId, setPaneId] = useState<number | null>(null)
   const [layout, setLayout] = useState<Layout>(() => remembered('layout', 'grade'))
   const [dialog, setDialog] = useState<DialogKind>(null)
+  // The app opens on the Base; picking a mission or workspace switches to the mission screen.
+  const [view, setView] = useState<'home' | 'mission'>('home')
 
   const workspaces = [...state.workspaces].sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? workspaces[0] ?? null
@@ -60,6 +63,7 @@ export function App() {
     setWorkspaceId(newest.workspaceId)
     setMissionId(newest.id)
     setPaneId(null)
+    setView('mission')
   }, [newest])
 
   // Likewise for a workspace just opened.
@@ -70,17 +74,28 @@ export function App() {
     followedWorkspace.current = `${newestWorkspace.id}:${newestWorkspace.lastOpenedAt}`
     setWorkspaceId(newestWorkspace.id)
     setMissionId(null)
+    setView('mission')
   }, [newestWorkspace])
+
+  const openMission = (target: Mission) => {
+    setWorkspaceId(target.workspaceId)
+    setMissionId(target.id)
+    setPaneId(null)
+    setView('mission')
+  }
 
   return (
     <div className="app">
       <TitleBar connection={state.connection} liveAgents={liveAgents} />
       <WorkspaceTabs
         workspaces={workspaces}
-        activeId={workspace?.id ?? null}
-        onSelect={(id) => { setWorkspaceId(id); setMissionId(null) }}
+        activeId={view === 'mission' ? workspace?.id ?? null : null}
+        homeActive={view === 'home'}
+        onHome={() => setView('home')}
+        onSelect={(id) => { setWorkspaceId(id); setMissionId(null); setView('mission') }}
         onOpen={() => setDialog('workspace')}
-        onNewMission={workspace ? () => setDialog('mission') : null}
+        // The Base has its own "Nova missão" in the header.
+        onNewMission={workspace && view === 'mission' ? () => setDialog('mission') : null}
         onSquads={() => setDialog('squads')}
       />
 
@@ -100,6 +115,13 @@ export function App() {
             <PlusIcon size={14} />Abrir pasta
           </button>
         </div>
+      ) : view === 'home' ? (
+        <HomeView
+          onOpenMission={openMission}
+          onOpenWorkspace={(w) => { setWorkspaceId(w.id); setMissionId(null); setView('mission') }}
+          onNewMission={() => setDialog('mission')}
+          onAddFolder={() => setDialog('workspace')}
+        />
       ) : (
         <div className="body">
           <MissionRail
@@ -132,7 +154,7 @@ export function App() {
       )}
 
       {dialog === 'workspace' && <OpenWorkspaceDialog onClose={() => setDialog(null)} />}
-      {dialog === 'mission' && workspace && <NewMissionDialog workspaceId={workspace.id} onClose={() => setDialog(null)} onManageSquads={() => setDialog('squads')} />}
+      {dialog === 'mission' && workspace && <NewMissionDialog workspaceId={workspace.id} workspaceName={workspace.name} onClose={() => setDialog(null)} onManageSquads={() => setDialog('squads')} />}
       {dialog === 'agent' && mission && <AddAgentDialog missionId={mission.id} onClose={() => setDialog(null)} />}
       {dialog === 'squads' && <SquadsDialog onClose={() => setDialog(null)} />}
     </div>

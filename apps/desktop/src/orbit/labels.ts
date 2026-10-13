@@ -18,6 +18,14 @@ export const MODEL_SUGGESTIONS: Record<AgentCli, string[]> = {
   shell: [],
 }
 
+/**
+ * Paths are shown right-aligned (`direction: rtl`) so the end stays visible when they are cut.
+ * Left-to-right marks around it keep the bidi algorithm from moving the leading "/" to the end.
+ */
+export function pathText(path: string): string {
+  return `‎${path}‎`
+}
+
 export function timeOf(at: number): string {
   return new Date(at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }

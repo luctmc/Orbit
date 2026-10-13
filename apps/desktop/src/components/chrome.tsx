@@ -29,9 +29,11 @@ export function TitleBar({ connection, liveAgents }: { connection: OrbitState['c
   )
 }
 
-export function WorkspaceTabs({ workspaces, activeId, onSelect, onOpen, onNewMission, onSquads }: {
+export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSelect, onOpen, onNewMission, onSquads }: {
   workspaces: Workspace[]
   activeId: string | null
+  homeActive: boolean
+  onHome: () => void
   onSelect: (id: string) => void
   onOpen: () => void
   onNewMission: (() => void) | null
@@ -39,7 +41,7 @@ export function WorkspaceTabs({ workspaces, activeId, onSelect, onOpen, onNewMis
 }) {
   return (
     <nav className="tabs" aria-label="Workspaces">
-      <span className="tabs__home" aria-hidden="true"><HomeIcon size={18} /></span>
+      <button className="tabs__home" aria-label="Base" aria-current={homeActive} title="Base" onClick={onHome}><HomeIcon size={18} /></button>
       <div className="tabs__list">
         {workspaces.map((w) => (
           <button key={w.id} aria-current={w.id === activeId} className="tab" title={w.path} onClick={() => onSelect(w.id)}>
