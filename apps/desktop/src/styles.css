@@ -51,6 +51,17 @@ h1, h2, p { margin: 0; }
 .brand__name { font-weight: 600; color: var(--text-2); letter-spacing: 0.01em; }
 .brand__version { font: 12px var(--mono); color: var(--muted); }
 .titlebar__status { display: flex; align-items: center; gap: 14px; font-size: 12px; }
+.limit { display: inline-flex; align-items: center; gap: 8px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.limit__cli { font-weight: 500; color: var(--text); }
+.limit__window { display: inline-flex; align-items: center; gap: 5px; }
+.limit__label { color: var(--muted); }
+.limit__bar { width: 28px; height: 4px; border-radius: 2px; background: var(--line-2); overflow: hidden; }
+.limit__bar span { display: block; height: 100%; background: var(--accent); }
+.limit__window[data-level='wait'] .limit__bar span { background: var(--wait); }
+.limit__window[data-level='wait'] .limit__value { color: var(--wait); }
+.limit__window[data-level='danger'] .limit__bar span { background: var(--danger); }
+.limit__window[data-level='danger'] .limit__value { color: var(--danger); }
+@media (max-width: 900px) { .limit__label, .limit__bar { display: none; } }
 .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--text-2); }
 
 .tabs { height: 46px; flex: none; padding: 0 12px 0 0; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); background: var(--surface); }
@@ -139,6 +150,10 @@ h1, h2, p { margin: 0; }
 .terminal-host { width: 100%; height: 100%; }
 .terminal-host .xterm-viewport { background: var(--term) !important; }
 .pane__foot { height: 28px; flex: none; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); font: 11.5px var(--mono); color: var(--muted); }
+.pane__usage { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pane__context { display: inline-flex; align-items: center; gap: 5px; }
+.pane__context[data-level='wait'] { color: var(--wait); }
+.pane__context[data-level='wait'] .limit__bar span { background: var(--wait); }
 .pane__cwd { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
 
 .command { flex: none; padding: 10px 16px; display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); background: var(--surface); }

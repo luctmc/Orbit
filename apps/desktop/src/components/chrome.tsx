@@ -1,5 +1,7 @@
-import type { Workspace } from '@orbit/protocol'
+import type { AccountLimits, RateWindow, Workspace } from '@orbit/protocol'
 import type { OrbitState } from '../orbit/client.ts'
+import { CLI_LABEL } from '../orbit/labels.ts'
+import { untilTime } from '../orbit/time.ts'
 import { HomeIcon, OrbitMark, PlusIcon } from './icons.tsx'
 
 const CONNECTION_LABEL: Record<OrbitState['connection'], string> = {
@@ -8,7 +10,7 @@ const CONNECTION_LABEL: Record<OrbitState['connection'], string> = {
   closed: 'Motor fora do ar',
 }
 
-export function TitleBar({ connection, liveAgents }: { connection: OrbitState['connection']; liveAgents: number }) {
+export function TitleBar({ connection, liveAgents, limits }: { connection: OrbitState['connection']; liveAgents: number; limits: AccountLimits[] }) {
   return (
     // data-tauri-drag-region only applies to the element itself, so every non-interactive piece carries it.
     <header className="titlebar" data-tauri-drag-region>
@@ -19,6 +21,7 @@ export function TitleBar({ connection, liveAgents }: { connection: OrbitState['c
       </div>
       <div className="titlebar__drag" data-tauri-drag-region />
       <div className="titlebar__status">
+        {limits.map((l) => <LimitMeter key={l.cli} limits={l} />)}
         <span className="muted">{liveAgents} {liveAgents === 1 ? 'agente vivo' : 'agentes vivos'}</span>
         <span className="status-pill" data-state={connection}>
           <span className={`dot ${connection === 'open' ? 'dot--live' : connection === 'closed' ? 'dot--wait' : 'dot--idle'}`} />
@@ -26,6 +29,40 @@ export function TitleBar({ connection, liveAgents }: { connection: OrbitState['c
         </span>
       </div>
     </header>
+  )
+}
+
+/** A window that already reset counts as unused until the next report. */
+function windowUse(w: RateWindow | null, now: number): { percent: number; reset: string } | null {
+  if (!w) return null
+  const fresh = w.resetsAt > now
+  return { percent: fresh ? Math.round(w.usedPercent) : 0, reset: fresh ? `renova ${untilTime(w.resetsAt, now)}` : 'renovado' }
+}
+
+const level = (percent: number) => (percent >= 90 ? 'danger' : percent >= 70 ? 'wait' : 'ok')
+
+/** The account's 5-hour and weekly use, as the CLI last reported it. */
+function LimitMeter({ limits }: { limits: AccountLimits }) {
+  const now = Date.now()
+  const windows: Array<[string, { percent: number; reset: string }]> = []
+  for (const [label, raw] of [['5 h', limits.fiveHour], ['semana', limits.weekly]] as const) {
+    const use = windowUse(raw, now)
+    if (use) windows.push([label, use])
+  }
+  if (windows.length === 0) return null
+  const name = `${CLI_LABEL[limits.cli]}${limits.plan ? ` (${limits.plan})` : ''}`
+  const detail = windows.map(([label, w]) => `${label}: ${w.percent}% usado, ${w.reset}`).join('\n')
+  return (
+    <span className="limit" role="group" aria-label={`Limites do ${name}. ${detail}`} title={`Limites do ${name}\n${detail}`}>
+      <span className="limit__cli">{CLI_LABEL[limits.cli]}</span>
+      {windows.map(([label, w]) => (
+        <span key={label} className="limit__window" data-level={level(w.percent)}>
+          <span className="limit__label">{label}</span>
+          <span className="limit__bar" aria-hidden="true"><span style={{ width: `${Math.min(100, w.percent)}%` }} /></span>
+          <span className="limit__value">{w.percent}%</span>
+        </span>
+      ))}
+    </span>
   )
 }
 

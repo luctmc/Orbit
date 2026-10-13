@@ -16,6 +16,8 @@ export interface AgentFilesInput {
   endpoint: string
   token: string
   hookCommand: string
+  /** Claude status line: reports tokens, cost and account limits to the sidecar. */
+  statusCommand?: string
   rolePrompt: string | null
   task: string | null
 }
@@ -51,7 +53,8 @@ export function writeAgentFiles(input: AgentFilesInput): AgentLaunch {
     // Orbit's own tools only coordinate agents inside the mission; asking for each handoff or
     // spawn would stall every agent running in manual permission mode.
     const permissions = { allow: ['mcp__orbit'] }
-    launch.settingsPath = write('settings.json', JSON.stringify({ permissions, hooks }, null, 2))
+    const statusLine = input.statusCommand ? { type: 'command', command: input.statusCommand, padding: 0 } : undefined
+    launch.settingsPath = write('settings.json', JSON.stringify({ permissions, hooks, ...(statusLine ? { statusLine } : {}) }, null, 2))
   } else {
     launch.mcpUrl = `${input.endpoint}/mcp`
   }

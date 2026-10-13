@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import pty, { type IPty } from 'node-pty'
 import headless from '@xterm/headless'
 import serialize from '@xterm/addon-serialize'
-import type { Pane, PaneStatus, SpawnPaneRequest } from '@orbit/protocol'
+import type { Pane, PaneStatus, SpawnPaneRequest, TokenUsage } from '@orbit/protocol'
 import { buildCommand, paneEnv, type AgentLaunch, type PaneCommand } from './command.ts'
 
 /** Output silence after which a running pane is considered idle. */
@@ -83,6 +83,8 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       status: 'starting',
       attention: null,
       deliveredAt: null,
+      usage: null,
+      contextPercent: null,
       pid: proc.pid,
       exitCode: null,
       createdAt: Date.now(),
@@ -193,6 +195,15 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     const previous = pane.status
     Object.assign(pane, { status, attention })
     this.emit('status', { ...pane }, previous)
+  }
+
+  /** Session totals the CLI reported. */
+  setUsage(id: number, usage: TokenUsage | null, contextPercent: number | null): void {
+    const pane = this.panes.get(id)
+    if (!pane) return
+    if (usage) pane.usage = usage
+    if (contextPercent !== null) pane.contextPercent = contextPercent
+    this.emit('status', { ...pane }, pane.status)
   }
 
   markDelivered(id: number): void {

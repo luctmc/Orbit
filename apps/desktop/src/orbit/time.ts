@@ -20,7 +20,19 @@ export function startOfDay(at: number): number {
   return d.getTime()
 }
 
+/** YYYY-MM-DD in local time, the same key the sidecar files usage under. */
 export function dayKey(at: number): string {
   const d = new Date(at)
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** "em 40 min", "em 3 h 10 min", "em 2 d" — how long until a limit resets. */
+export function untilTime(at: number, now = Date.now()): string {
+  const diff = Math.max(0, at - now)
+  if (diff < HOUR) return `em ${Math.max(1, Math.round(diff / MINUTE))} min`
+  if (diff < DAY) {
+    const minutes = Math.round((diff % HOUR) / MINUTE)
+    return `em ${Math.floor(diff / HOUR)} h${minutes ? ` ${minutes} min` : ''}`
+  }
+  return `em ${Math.round(diff / DAY)} d`
 }

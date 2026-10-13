@@ -1,9 +1,10 @@
 import { statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { EFFORT_LABEL, EFFORTS, WORKSPACE_LIMITS, effortsFor, type AgentCli, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { normalizeRouting } from './routing.ts'
+import { codexHome, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import type { AgentLaunch, PaneCommand } from './command.ts'
@@ -17,6 +18,10 @@ const CLIS: readonly AgentCli[] = ['claude', 'codex', 'shell']
 const MODES: readonly MissionMode[] = ['livre', 'squad', 'agentica']
 const CLI_LABEL: Record<AgentCli, string> = { claude: 'Claude', codex: 'Codex', shell: 'Terminal' }
 const HOOK_SCRIPT = process.env.ORBIT_HOOK_SCRIPT ?? fileURLToPath(new URL('../hooks/report.mjs', import.meta.url))
+/** Lives next to the hook script, in dev and in the app bundle. */
+const STATUS_SCRIPT = join(dirname(HOOK_SCRIPT), 'statusline.mjs')
+/** How often live Codex agents' session files are read for usage. */
+const CODEX_POLL_MS = 5000
 
 export type Broadcast = (message: ServerMessage) => void
 
@@ -43,6 +48,9 @@ export class OrbitCore {
   /** Models and effort levels per CLI; null until first loaded. */
   private catalog: Catalog | null = null
   private readonly clis = new Map<AgentCliForRole, CliStatus>([['claude', blankStatus('claude')], ['codex', blankStatus('codex')]])
+  /** Codex agent → its session file, once found. */
+  private readonly codexRollouts = new Map<number, string>()
+  private codexTimer: NodeJS.Timeout | null = null
 
   constructor({ dataDir, shell, broadcast, agentCommand, run }: CoreOptions) {
     this.broadcast = broadcast
@@ -61,6 +69,15 @@ export class OrbitCore {
     })
     this.panes.on('exit', (pane) => {
       if (!this.store.pane(pane.id)) return // closed by the user
+      // Last word from a Codex session before it is gone.
+      const rollout = this.codexRollouts.get(pane.id)
+      if (rollout) {
+        try {
+          this.applyReport(pane.id, fromCodexRollout(readTail(rollout)))
+        } catch {
+          // nothing more to count
+        }
+      }
       this.syncPane(pane)
       this.event(pane.missionId, 'pane.exited', `#${pane.id} encerrou`, `Processo terminou com código ${pane.exitCode ?? '?'}.`, pane.id)
     })
@@ -292,12 +309,59 @@ export class OrbitCore {
     return { deliveredTo: lead.id }
   }
 
+  /** Claude's status line, forwarded by the agent: usage, context and account limits. */
+  statusReport(paneId: number, payload: unknown): void {
+    this.applyReport(paneId, fromClaudeStatus(payload))
+  }
+
+  /** Counts what an agent used since its last report, and records the account's limits. */
+  private applyReport(paneId: number, report: UsageReport): void {
+    const pane = this.store.pane(paneId)
+    if (!pane) return
+    if (report.limits) this.broadcast({ type: 'limits', limits: this.store.setLimits(report.limits) })
+    if (!report.usage && report.contextPercent === null) return
+    if (report.usage && pane.cli !== 'shell') {
+      const added = this.store.addUsage(pane.missionId, pane.cli, usageDelta(pane.usage, report.usage))
+      if (added) {
+        this.broadcast({ type: 'mission.updated', mission: added.mission })
+        this.broadcast({ type: 'usage.day', day: added.day })
+      }
+    }
+    this.panes.setUsage(paneId, report.usage, report.contextPercent)
+  }
+
+  /** Codex has no hooks: read each live Codex agent's session file for its totals. */
+  private pollCodex(): void {
+    const live = this.store.snapshot().panes.filter((p) => p.cli === 'codex' && this.panes.isAlive(p.id))
+    const home = codexHome()
+    for (const pane of live) {
+      try {
+        let file = this.codexRollouts.get(pane.id)
+        if (!file) {
+          file = findCodexRollout(home, pane.cwd, pane.createdAt, new Set(this.codexRollouts.values())) ?? undefined
+          if (!file) continue
+          this.codexRollouts.set(pane.id, file)
+        }
+        this.applyReport(pane.id, fromCodexRollout(readTail(file)))
+      } catch {
+        // the file may be mid-write; try again on the next tick
+      }
+    }
+  }
+
+  private watchCodex(): void {
+    if (this.codexTimer) return
+    this.codexTimer = setInterval(() => this.pollCodex(), CODEX_POLL_MS)
+    this.codexTimer.unref()
+  }
+
   hookReport(paneId: number, payload: HookPayload): void {
     const next = statusFromHook(payload)
     if (next) this.panes.report(paneId, next.status, next.attention)
   }
 
   shutdown(): void {
+    if (this.codexTimer) clearInterval(this.codexTimer)
     this.panes.killAll()
     this.store.flush()
   }
@@ -347,6 +411,7 @@ export class OrbitCore {
       endpoint: this.endpoint,
       token,
       hookCommand: hookCommand(process.execPath, HOOK_SCRIPT),
+      statusCommand: hookCommand(process.execPath, STATUS_SCRIPT),
       addDirs: workspace.folders.slice(1),
       rolePrompt: workspaceNote(workspace.folders) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, lead, squadRole, taskType)),
       task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
@@ -367,6 +432,7 @@ export class OrbitCore {
           ORBIT_MISSION_ID: mission.id,
           ORBIT_PANE_TOKEN: token,
           ORBIT_HOOK_URL: `${this.endpoint}/hooks`,
+          ORBIT_STATUS_URL: `${this.endpoint}/status`,
           // Several agents updating the same CLI install at once can leave it broken.
           DISABLE_AUTOUPDATER: '1',
         },
@@ -376,6 +442,7 @@ export class OrbitCore {
       throw error
     }
     this.paneTokens.set(token, id)
+    if (request.cli === 'codex') this.watchCodex()
     this.syncPane(pane)
     const seat = request.role === 'lead' ? 'líder' : squadRole?.name.toLowerCase() ?? taskType?.name.toLowerCase() ?? 'ajudante'
     const who = [CLI_LABEL[request.cli], request.model, request.effort && `esforço ${EFFORT_LABEL[request.effort]}`, seat].filter(Boolean).join(' · ')
@@ -386,6 +453,7 @@ export class OrbitCore {
   private closePane(id: number): void {
     if (!this.store.pane(id)) return
     this.panes.forget(id)
+    this.codexRollouts.delete(id)
     this.store.removePane(id)
     for (const [token, paneId] of this.paneTokens) if (paneId === id) this.paneTokens.delete(token)
     removeAgentFiles(this.paneDir(id))

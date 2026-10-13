@@ -1,13 +1,14 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { Mission, MissionEvent, MissionMode, Pane, Routing, Snapshot, Squad, Workspace } from '@orbit/protocol'
+import { EMPTY_USAGE, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type MissionMode, type Pane, type Routing, type Snapshot, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
 import { DEFAULT_ROUTING } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
 
 const EVENTS_PER_MISSION = 200
 
 interface PersistedState extends Omit<Snapshot, 'squads' | 'routing'> {
+  // usageDays and limits are persisted as they are sent.
   version: 1
   nextPaneId: number
   /** User squads; builtins live in code. */
@@ -29,8 +30,13 @@ export class Store {
     // Older state files predate some fields.
     this.state.customSquads ??= []
     this.state.routing ??= null
+    this.state.usageDays ??= []
+    this.state.limits ??= []
     for (const workspace of this.state.workspaces) workspace.folders ??= [workspace.path]
-    for (const mission of this.state.missions) mission.squadId ??= null
+    for (const mission of this.state.missions) {
+      mission.squadId ??= null
+      mission.usage ??= { ...EMPTY_USAGE }
+    }
     // Processes do not survive a sidecar restart.
     for (const pane of this.state.panes) {
       pane.attention = null
@@ -38,13 +44,43 @@ export class Store {
       pane.squadRole ??= null
       pane.taskType ??= null
       pane.effort ??= null
+      pane.usage ??= null
+      pane.contextPercent = null
       if (pane.status !== 'exited') Object.assign(pane, { status: 'exited', pid: null })
     }
   }
 
   snapshot(): Snapshot {
-    const { workspaces, missions, panes, events } = this.state
-    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing() })
+    const { workspaces, missions, panes, events, usageDays, limits } = this.state
+    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing(), usageDays, limits })
+  }
+
+  /**
+   * Adds what an agent used since its last report to its mission and to today's total.
+   * Returns the updated mission and day, or nothing when there was nothing new.
+   */
+  addUsage(missionId: string, cli: AgentCliForRole, delta: TokenUsage, at = Date.now()): { mission: Mission; day: UsageDay } | undefined {
+    if (delta.total <= 0 && !delta.costUsd) return undefined
+    const mission = this.mission(missionId)
+    if (!mission) return undefined
+    mission.usage = addUsage(mission.usage, delta)
+    const key = dayKey(at)
+    let day = this.state.usageDays.find((d) => d.day === key)
+    if (!day) {
+      day = { day: key, claude: 0, codex: 0 }
+      this.state.usageDays.push(day)
+      // A year and a bit is all the activity map shows.
+      this.state.usageDays = this.state.usageDays.slice(-400)
+    }
+    day[cli] += delta.total
+    this.save()
+    return { mission: structuredClone(mission), day: { ...day } }
+  }
+
+  setLimits(limits: AccountLimits): AccountLimits[] {
+    this.state.limits = [...this.state.limits.filter((l) => l.cli !== limits.cli), limits]
+    this.save()
+    return structuredClone(this.state.limits)
   }
 
   routing(): Routing {
@@ -118,7 +154,7 @@ export class Store {
 
   createMission(input: { workspaceId: string; title: string; objective: string; mode: MissionMode; squadId: string | null }): Mission {
     const now = Date.now()
-    const mission: Mission = { id: randomUUID(), status: 'active', createdAt: now, updatedAt: now, ...input }
+    const mission: Mission = { id: randomUUID(), status: 'active', createdAt: now, updatedAt: now, usage: { ...EMPTY_USAGE }, ...input }
     this.state.missions.push(mission)
     this.save()
     return { ...mission }
@@ -191,7 +227,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
-    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null }
+    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [] }
   }
 }
 
@@ -199,4 +235,21 @@ export class Store {
 function defaultName(folders: string[]): string {
   const first = basename(folders[0] ?? '') || folders[0] || 'workspace'
   return folders.length > 1 ? `${first} + ${folders.length - 1}` : first
+}
+
+function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+  return {
+    input: a.input + b.input,
+    output: a.output + b.output,
+    cacheRead: a.cacheRead + b.cacheRead,
+    cacheWrite: a.cacheWrite + b.cacheWrite,
+    total: a.total + b.total,
+    costUsd: a.costUsd === null && b.costUsd === null ? null : Math.round(((a.costUsd ?? 0) + (b.costUsd ?? 0)) * 1e6) / 1e6,
+  }
+}
+
+/** Local calendar day, YYYY-MM-DD. */
+export function dayKey(at: number): string {
+  const d = new Date(at)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }

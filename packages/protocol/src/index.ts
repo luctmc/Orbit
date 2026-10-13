@@ -21,6 +21,8 @@ export interface Mission {
   mode: MissionMode
   /** The squad a `squad` mission follows. */
   squadId: string | null
+  /** Tokens and cost of every agent the mission has had (closed ones included). */
+  usage: TokenUsage
   status: MissionStatus
   createdAt: number
   updatedAt: number
@@ -51,9 +53,50 @@ export interface Pane {
   attention: string | null
   /** Last time this helper submitted a handoff to the lead. */
   deliveredAt: number | null
+  /** Session totals reported by the CLI (status line for Claude, session file for Codex). */
+  usage: TokenUsage | null
+  /** How full the model's context window is, 0–100, when the CLI says. */
+  contextPercent: number | null
   pid: number | null
   exitCode: number | null
   createdAt: number
+}
+
+/** Tokens an agent (or a mission, or a day) used. `total` counts every kind. */
+export interface TokenUsage {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  total: number
+  /** Only Claude reports cost; null when unknown. */
+  costUsd: number | null
+}
+
+export const EMPTY_USAGE: TokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, costUsd: null }
+
+/** A usage limit window of the person's account (e.g. 5 hours, 7 days). */
+export interface RateWindow {
+  usedPercent: number
+  /** Epoch ms. */
+  resetsAt: number
+  windowMinutes: number
+}
+
+/** The account limits a CLI last reported. */
+export interface AccountLimits {
+  cli: AgentCliForRole
+  fiveHour: RateWindow | null
+  weekly: RateWindow | null
+  plan: string | null
+  updatedAt: number
+}
+
+/** Tokens used on one local day (YYYY-MM-DD), per CLI. */
+export interface UsageDay {
+  day: string
+  claude: number
+  codex: number
 }
 
 /** One seat in a squad: who fills it and what they are told to do. */
@@ -174,6 +217,8 @@ export interface Snapshot {
   events: MissionEvent[]
   squads: Squad[]
   routing: Routing
+  usageDays: UsageDay[]
+  limits: AccountLimits[]
 }
 
 export interface SpawnPaneRequest {
@@ -238,6 +283,8 @@ export type ServerMessage =
   | { type: 'squad.removed'; squadId: string }
   | { type: 'routing.updated'; routing: Routing }
   | { type: 'catalog'; catalog: Catalog }
+  | { type: 'usage.day'; day: UsageDay }
+  | { type: 'limits'; limits: AccountLimits[] }
   | { type: 'cli.status'; clis: CliStatus[] }
   | { type: 'error'; message: string }
 
