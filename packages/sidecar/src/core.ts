@@ -2,7 +2,8 @@ import { statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { AgentCli, ClientMessage, Mission, MissionEvent, MissionEventKind, MissionMode, Pane, ServerMessage, SpawnPaneRequest, Squad } from '@orbit/protocol'
+import { EFFORTS, type AgentCli, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { normalizeRouting } from './routing.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import type { AgentLaunch, PaneCommand } from './command.ts'
 import { statusFromHook, type HookPayload } from './hooks.ts'
@@ -14,6 +15,7 @@ import { Store } from './store.ts'
 const CLIS: readonly AgentCli[] = ['claude', 'codex', 'shell']
 const MODES: readonly MissionMode[] = ['livre', 'squad', 'agentica']
 const CLI_LABEL: Record<AgentCli, string> = { claude: 'Claude', codex: 'Codex', shell: 'Terminal' }
+const EFFORT_LABEL: Record<Effort, string> = { low: 'baixo', medium: 'médio', high: 'alto' }
 const HOOK_SCRIPT = process.env.ORBIT_HOOK_SCRIPT ?? fileURLToPath(new URL('../hooks/report.mjs', import.meta.url))
 
 export type Broadcast = (message: ServerMessage) => void
@@ -111,6 +113,15 @@ export class OrbitCore {
         if (this.store.deleteSquad(message.squadId)) this.broadcast({ type: 'squad.removed', squadId: message.squadId })
         return
       }
+      case 'routing.save': {
+        this.store.saveRouting(normalizeRouting(message.routing))
+        this.broadcast({ type: 'routing.updated', routing: this.store.routing() })
+        return
+      }
+      case 'routing.reset':
+        this.store.saveRouting(null)
+        this.broadcast({ type: 'routing.updated', routing: this.store.routing() })
+        return
       case 'mission.archive': {
         for (const pane of this.store.snapshot().panes.filter((p) => p.missionId === message.missionId)) {
           this.closePane(pane.id)
@@ -160,13 +171,17 @@ export class OrbitCore {
     return this.store.snapshot().events.filter((e) => e.missionId === missionId && (!kind || e.kind === kind))
   }
 
+  routing() {
+    return this.store.routing()
+  }
+
   /** The squad a mission follows, if any. */
   missionSquad(missionId: string): Squad | undefined {
     const squadId = this.store.mission(missionId)?.squadId
     return squadId ? this.store.squad(squadId) : undefined
   }
 
-  spawnHelper(caller: Pane, input: { title: string; task: string; cli: AgentCli; model: string | null; squadRoleId?: string | null }): Pane {
+  spawnHelper(caller: Pane, input: { title: string; task: string; cli: AgentCli; model: string | null; effort?: Effort | null; squadRoleId?: string | null; taskTypeId?: string | null }): Pane {
     return this.spawn({ missionId: caller.missionId, role: 'crew', ...input })
   }
 
@@ -221,28 +236,39 @@ export class OrbitCore {
     const workspace = this.store.workspace(mission.workspaceId)
     if (!workspace) throw new Error('Workspace da missão sumiu')
 
-    // A squad role decides the CLI and model of the helper that plays it.
+    // A squad role, or a row of the task table, decides who fills the seat: CLI, model, effort.
     const squad = this.missionSquad(mission.id)
-    let squadRole = undefined as Squad['roles'][number] | undefined
+    const routing = this.store.routing()
+    let squadRole: Squad['roles'][number] | undefined
+    let taskType: TaskType | undefined
     if (input.squadRoleId) {
       squadRole = squad?.roles.find((r) => r.id === input.squadRoleId)
       if (!squadRole) throw new Error(`Papel "${input.squadRoleId}" não existe no squad desta missão`)
+    } else if (input.taskTypeId) {
+      taskType = routing.taskTypes.find((t) => t.id === input.taskTypeId)
+      if (!taskType) throw new Error(`Tipo de tarefa "${input.taskTypeId}" não existe na tabela`)
     }
-    const request: SpawnPaneRequest = squadRole ? { ...input, role: 'crew', cli: squadRole.cli, model: squadRole.model } : input
+    const request: SpawnPaneRequest = squadRole
+      ? { ...input, role: 'crew', cli: squadRole.cli, model: squadRole.model, effort: null }
+      : taskType
+        ? { ...input, role: 'crew', cli: taskType.cli, model: taskType.model, effort: taskType.effort }
+        : input
     if (!CLIS.includes(request.cli)) throw new Error(`Agente inválido: ${request.cli}`)
+    if (request.effort && !EFFORTS.includes(request.effort)) throw new Error(`Esforço inválido: ${request.effort}`)
 
     const id = this.store.allocatePaneId()
-    const title = request.title.trim().slice(0, 120) || squadRole?.name || `${CLI_LABEL[request.cli]} #${id}`
+    const title = request.title.trim().slice(0, 120) || squadRole?.name || taskType?.name || `${CLI_LABEL[request.cli]} #${id}`
     const token = randomBytes(24).toString('base64url')
     const lead = this.missionPanes(mission.id).find((p) => p.role === 'lead')
     const launch = writeAgentFiles({
       paneDir: this.paneDir(id),
       cli: request.cli,
       model: request.model,
+      effort: request.cli === 'shell' ? null : request.effort ?? null,
       endpoint: this.endpoint,
       token,
       hookCommand: hookCommand(process.execPath, HOOK_SCRIPT),
-      rolePrompt: request.role === 'lead' ? leadRole(mission, { id }, squad) : crewRole(mission, { id }, lead, squadRole),
+      rolePrompt: request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, lead, squadRole, taskType),
       task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
     })
 
@@ -252,6 +278,7 @@ export class OrbitCore {
         id,
         request: { ...request, title },
         squadRole: squadRole?.name ?? null,
+        taskType: taskType?.name ?? null,
         cwd: workspace.path,
         launch,
         hookDriven: request.cli === 'claude',
@@ -270,7 +297,8 @@ export class OrbitCore {
     }
     this.paneTokens.set(token, id)
     this.syncPane(pane)
-    const who = [CLI_LABEL[request.cli], request.model, request.role === 'lead' ? 'líder' : squadRole?.name.toLowerCase() ?? 'ajudante'].filter(Boolean).join(' · ')
+    const seat = request.role === 'lead' ? 'líder' : squadRole?.name.toLowerCase() ?? taskType?.name.toLowerCase() ?? 'ajudante'
+    const who = [CLI_LABEL[request.cli], request.model, request.effort && `esforço ${EFFORT_LABEL[request.effort]}`, seat].filter(Boolean).join(' · ')
     this.event(mission.id, 'pane.spawned', `Agente #${id} aberto`, `${title} — ${who}`, id)
     return pane
   }

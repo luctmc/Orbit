@@ -1,4 +1,4 @@
-import { MODEL_ID, type AgentCli } from '@orbit/protocol'
+import { EFFORTS, MODEL_ID, type AgentCli, type Effort } from '@orbit/protocol'
 
 export interface PaneCommand {
   file: string
@@ -9,6 +9,7 @@ export interface PaneCommand {
 export interface AgentLaunch {
   cli: AgentCli
   model: string | null
+  effort?: Effort | null
   /** Claude: MCP config file. */
   mcpConfigPath?: string
   /** Claude: settings file carrying the status hooks. */
@@ -34,13 +35,15 @@ const fromFile = (path: string) => `"$(cat ${shellQuote(path)})"`
  */
 export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
   if (launch.cli === 'shell') return { file: shell, args: ['-l'] }
-  const { model } = launch
+  const { model, effort } = launch
   if (model !== null && !MODEL_ID.test(model)) throw new Error(`Modelo inválido: ${model}`)
+  if (effort && !EFFORTS.includes(effort)) throw new Error(`Esforço inválido: ${effort}`)
 
   const parts: string[] = []
   if (launch.cli === 'claude') {
     parts.push('claude')
     if (model) parts.push('--model', model)
+    if (effort) parts.push('--effort', effort)
     if (launch.mcpConfigPath) parts.push('--mcp-config', shellQuote(launch.mcpConfigPath))
     if (launch.settingsPath) parts.push('--settings', shellQuote(launch.settingsPath))
     if (launch.rolePromptPath) parts.push('--append-system-prompt', fromFile(launch.rolePromptPath))
@@ -48,6 +51,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
   } else {
     parts.push('codex')
     if (model) parts.push('-m', model)
+    if (effort) parts.push('-c', shellQuote(`model_reasoning_effort="${effort}"`))
     if (launch.mcpUrl) {
       parts.push('-c', shellQuote(`mcp_servers.orbit.url="${launch.mcpUrl}"`))
       parts.push('-c', shellQuote('mcp_servers.orbit.bearer_token_env_var="ORBIT_PANE_TOKEN"'))

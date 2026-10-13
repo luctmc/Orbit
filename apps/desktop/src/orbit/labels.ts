@@ -1,7 +1,8 @@
-import type { AgentCli, MissionMode, PaneStatus } from '@orbit/protocol'
+import type { AgentCli, Effort, MissionMode, PaneStatus } from '@orbit/protocol'
 
 export const MODE_LABEL: Record<MissionMode, string> = { livre: 'Livre', squad: 'Squad', agentica: 'Agêntica' }
 export const CLI_LABEL: Record<AgentCli, string> = { claude: 'Claude', codex: 'Codex', shell: 'Terminal' }
+export const EFFORT_LABEL: Record<Effort, string> = { low: 'baixo', medium: 'médio', high: 'alto' }
 
 export const STATUS: Record<PaneStatus, { label: string; tone: 'live' | 'idle' | 'wait' | 'off' }> = {
   starting: { label: 'iniciando', tone: 'live' },

@@ -1,8 +1,19 @@
-import type { Mission, Pane, Squad, SquadRole } from '@orbit/protocol'
+import type { Effort, Mission, Pane, Routing, Squad, SquadRole, TaskType } from '@orbit/protocol'
 
 /** Role instructions Orbit gives its agents. They only describe how to use Orbit's tools. */
 
-export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad): string {
+const EFFORT_TEXT: Record<Effort, string> = { low: 'esforço baixo', medium: 'esforço médio', high: 'esforço alto' }
+
+function routingTable(routing: Routing): string {
+  return routing.taskTypes
+    .map((t) => {
+      const who = [t.cli === 'claude' ? 'Claude' : 'Codex', t.model, t.effort && EFFORT_TEXT[t.effort]].filter(Boolean).join(', ')
+      return `- kind "${t.id}" (${t.name}): ${t.description || 'sem descrição'} → ${who}`
+    })
+    .join('\n')
+}
+
+export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad, routing?: Routing): string {
   const base = [
     `Você é o líder (#${pane.id}) da missão "${mission.title}" no Orbit.`,
     'O Orbit expõe um servidor MCP chamado "orbit". Com ele você abre ajudantes em terminais que o usuário vê (agent_spawn), conversa com eles (agent_send), lê a tela deles (agent_read), fecha os que terminaram (agent_close) e acompanha a tripulação (agent_list, mission_status).',
@@ -25,16 +36,19 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
     ...base,
     'Esta é uma missão agêntica: o usuário descreveu o objetivo e você conduz.',
     '1. Leia o objetivo e o código o suficiente para quebrar o trabalho em atividades independentes.',
-    '2. Para cada atividade, chame agent_spawn com uma tarefa autocontida: contexto, arquivos relevantes, o que entregar e como verificar. Atividades que mexem nos mesmos arquivos vão para o mesmo ajudante.',
+    '2. Para cada atividade, chame agent_spawn com uma tarefa autocontida (contexto, arquivos relevantes, o que entregar e como verificar) e com kind = o tipo de tarefa da tabela abaixo que melhor descreve a atividade. O Orbit escolhe o agente, o modelo e o esforço pela tabela. Atividades que mexem nos mesmos arquivos vão para o mesmo ajudante.',
+    ...(routing?.taskTypes.length ? [`Quem faz cada tarefa:\n${routingTable(routing)}`] : []),
     '3. Não refaça o trabalho que delegou. Acompanhe, responda dúvidas dos ajudantes com agent_send, integre os retornos e feche com agent_close os ajudantes que já entregaram.',
     '4. Verifique o resultado final (testes, build) e diga ao usuário, em poucas linhas, o que foi feito e o que falta.',
   ].join('\n\n')
 }
 
-export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, lead: Pane | undefined, squadRole?: SquadRole): string {
+export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, lead: Pane | undefined, squadRole?: SquadRole, taskType?: TaskType): string {
   return [
     `Você é ${squadRole ? `o ${squadRole.name}` : 'um ajudante'} (#${pane.id}) na missão "${mission.title}" do Orbit${lead ? `, sob o líder #${lead.id}` : ''}.`,
     ...(squadRole ? [`Seu papel: ${squadRole.brief}`] : []),
+    ...(taskType ? [`Tipo de tarefa: ${taskType.name}${taskType.description ? ` (${taskType.description})` : ''}.`] : []),
+    ...(taskType?.skills.length ? [`Use estas skills quando estiverem disponíveis: ${taskType.skills.join(', ')}.`] : []),
     'Faça só a tarefa que recebeu. Se faltar informação essencial, pergunte ao usuário no próprio terminal.',
     'Ao terminar, ou se ficar bloqueado, chame a ferramenta handoff_submit do servidor MCP "orbit" com um resumo curto: o que mudou, onde, como verificar e o que ficou pendente. Não espere confirmação depois de entregar.',
   ].join('\n\n')
