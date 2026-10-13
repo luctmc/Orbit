@@ -36,6 +36,7 @@ export interface PaneSnapshot {
 
 export interface PaneManagerEvents {
   data: [paneId: number, data: string]
+  resized: [paneId: number, cols: number, rows: number]
   status: [pane: Pane, previous: PaneStatus]
   exit: [pane: Pane]
 }
@@ -143,6 +144,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     if (c === screen.term.cols && r === screen.term.rows) return
     live.pty.resize(c, r)
     screen.term.resize(c, r)
+    this.emit('resized', id, c, r)
   }
 
   kill(id: number): void {

@@ -169,6 +169,8 @@ export type ServerMessage =
    */
   | { type: 'pane.snapshot'; paneId: number; data: string; cols: number; rows: number }
   | { type: 'pane.data'; paneId: number; data: string }
+  /** The PTY changed size (from any view). Views adopt it so they never draw at another width. */
+  | { type: 'pane.resized'; paneId: number; cols: number; rows: number }
   | { type: 'workspace.updated'; workspace: Workspace }
   | { type: 'mission.updated'; mission: Mission }
   | { type: 'pane.updated'; pane: Pane }

@@ -22,6 +22,8 @@ export interface PaneSnapshot {
 export interface PaneView {
   snapshot(snapshot: PaneSnapshot): void
   data(data: string): void
+  /** The PTY's size changed; the view must match it. */
+  resized(cols: number, rows: number): void
 }
 
 /**
@@ -131,6 +133,9 @@ export class OrbitClient {
       }
       case 'pane.data':
         for (const [view, state] of this.views.get(message.paneId) ?? []) if (state.ready) view.data(message.data)
+        return
+      case 'pane.resized':
+        for (const [view, state] of this.views.get(message.paneId) ?? []) if (state.ready) view.resized(message.cols, message.rows)
         return
       case 'workspace.updated':
         this.update({ workspaces: upsert(this.state.workspaces, message.workspace, (w) => w.id) })

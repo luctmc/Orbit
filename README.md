@@ -45,7 +45,12 @@ npm test
   `agent_list`, `mission_status`, `handoff_list`. Ajudantes entregam com `handoff_submit`, que
   registra no fluxo e digita o retorno no terminal do líder.
 - **Hooks do Claude Code** (`POST /hooks`): status real (`rodando`, `ocioso`, `espera você` com o
-  motivo). Codex e terminais usam a atividade do terminal.
+  motivo; o Claude avisa alguns segundos depois de abrir o pedido de permissão). Codex e terminais
+  usam a atividade do terminal, então um pedido de confirmação do Codex aparece como `rodando`.
+- As ferramentas do MCP do Orbit são pré-aprovadas nos agentes (`permissions.allow: mcp__orbit`
+  no Claude, `default_tools_approval_mode = "approve"` no Codex): só coordenam a missão, e pedir
+  permissão a cada retorno travaria agentes em modo manual (ou recusaria tudo no Codex com
+  política `never`).
 - Missão **agêntica**: o líder recebe o objetivo e as instruções de papel e monta o time sozinho,
   classificando cada atividade na tabela **Quem faz cada tarefa** (Ajustes): cada tipo de tarefa
   define agente, modelo, esforço (`--effort` no Claude, `model_reasoning_effort` no Codex) e

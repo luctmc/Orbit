@@ -45,6 +45,7 @@ export class OrbitCore {
     removeAgentFiles(join(dataDir, 'panes'))
     this.panes = new PaneManager(shell, agentCommand)
     this.panes.on('data', (paneId, data) => this.broadcast({ type: 'pane.data', paneId, data }))
+    this.panes.on('resized', (paneId, cols, rows) => this.broadcast({ type: 'pane.resized', paneId, cols, rows }))
     this.panes.on('status', (pane, previous) => {
       this.syncPane(pane)
       if (pane.status === 'waiting' && previous !== 'waiting') {
