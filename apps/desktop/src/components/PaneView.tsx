@@ -1,6 +1,6 @@
 import type { Pane } from '@orbit/protocol'
 import { useOrbitClient } from '../orbit/context.tsx'
-import { CLI_LABEL, STATUS } from '../orbit/labels.ts'
+import { CLI_LABEL, pathText, STATUS } from '../orbit/labels.ts'
 import { CloseIcon } from './icons.tsx'
 import { Terminal } from './Terminal.tsx'
 
@@ -34,7 +34,7 @@ export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: b
       <footer className="pane__foot">
         <span className={`tone--${status.tone}`}>{status.label}</span>
         <span aria-hidden="true">·</span>
-        <span className="pane__cwd" title={pane.cwd}>{pane.cwd}</span>
+        <span className="pane__cwd" title={pane.cwd}>{pathText(pane.cwd)}</span>
         {pane.exitCode !== null && <><span aria-hidden="true">·</span><span>código {pane.exitCode}</span></>}
       </footer>
     </section>

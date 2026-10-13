@@ -68,7 +68,7 @@ export function OpenWorkspaceDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-export function NewMissionDialog({ workspaceId, onClose, onManageSquads }: { workspaceId: string; onClose: () => void; onManageSquads: () => void }) {
+export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManageSquads }: { workspaceId: string; workspaceName: string; onClose: () => void; onManageSquads: () => void }) {
   const client = useOrbitClient()
   const { squads } = useOrbit()
   const [title, setTitle] = useState('')
@@ -84,7 +84,7 @@ export function NewMissionDialog({ workspaceId, onClose, onManageSquads }: { wor
   }
 
   return (
-    <Dialog eyebrow="Nova missão" title="O que vamos fazer?" submitLabel="Lançar missão" onClose={onClose} onSubmit={() => {
+    <Dialog eyebrow={`Nova missão · ${workspaceName}`} title="O que vamos fazer?" submitLabel="Lançar missão" onClose={onClose} onSubmit={() => {
       if (!title.trim()) return setError('Dê um título para a missão.')
       if (mode === 'squad' && !squadId) return setError('Escolha o squad da missão.')
       if (invalidModel(lead)) return setError('Modelo inválido: use só letras, números, ponto, hífen ou dois-pontos.')
