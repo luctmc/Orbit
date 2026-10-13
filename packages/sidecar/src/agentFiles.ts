@@ -46,7 +46,10 @@ export function writeAgentFiles(input: AgentFilesInput): AgentLaunch {
       event,
       [event === 'PreToolUse' || event === 'PostToolUse' ? { matcher: '*', hooks: [hook] } : { hooks: [hook] }],
     ]))
-    launch.settingsPath = write('settings.json', JSON.stringify({ hooks }, null, 2))
+    // Orbit's own tools only coordinate agents inside the mission; asking for each handoff or
+    // spawn would stall every agent running in manual permission mode.
+    const permissions = { allow: ['mcp__orbit'] }
+    launch.settingsPath = write('settings.json', JSON.stringify({ permissions, hooks }, null, 2))
   } else {
     launch.mcpUrl = `${input.endpoint}/mcp`
   }

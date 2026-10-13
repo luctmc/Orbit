@@ -36,6 +36,8 @@ test('a view rebuilt from the snapshot matches the PTY screen; a raw replay at a
     const { pane } = await ui.next('pane.updated')
 
     ui.send({ type: 'pane.resize', paneId: pane.id, cols: 106, rows: 20 })
+    // Every view hears about it, so none keeps drawing at the old width.
+    await ui.next('pane.resized', (m) => m.paneId === pane.id && m.cols === 106 && m.rows === 20)
     ui.send({ type: 'pane.input', paneId: pane.id, data: `${FRAME}\r` })
     await ui.next('pane.data', (m) => m.paneId === pane.id && m.data.includes('resumo final'))
     await new Promise((r) => setTimeout(r, 150))

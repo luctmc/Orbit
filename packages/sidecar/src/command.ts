@@ -55,6 +55,9 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
     if (launch.mcpUrl) {
       parts.push('-c', shellQuote(`mcp_servers.orbit.url="${launch.mcpUrl}"`))
       parts.push('-c', shellQuote('mcp_servers.orbit.bearer_token_env_var="ORBIT_PANE_TOKEN"'))
+      // Orbit's coordination tools are pre-approved, as for Claude; under a "never" approval
+      // policy Codex would otherwise refuse every handoff.
+      parts.push('-c', shellQuote('mcp_servers.orbit.default_tools_approval_mode="approve"'))
     }
     const prompt = [launch.rolePromptPath, launch.taskPath].filter((p): p is string => Boolean(p))
     if (prompt.length) parts.push('--', `"$(cat ${prompt.map(shellQuote).join(' ')})"`)

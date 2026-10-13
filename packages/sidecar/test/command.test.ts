@@ -39,6 +39,7 @@ test('claude agents get MCP, hooks, role and task from private files', () => {
   assert.equal(statSync(launch.mcpConfigPath!).mode & 0o777, 0o600)
   const settings = JSON.parse(readFileSync(launch.settingsPath!, 'utf8'))
   assert.deepEqual(Object.keys(settings.hooks).sort(), ['Notification', 'PostToolUse', 'PreToolUse', 'SessionStart', 'Stop', 'UserPromptSubmit'])
+  assert.deepEqual(settings.permissions.allow, ['mcp__orbit'], "Orbit's own tools never stop the agent for permission")
   assert.equal(readFileSync(launch.taskPath!, 'utf8'), `faça "isso" e $(nada)`)
 
   const { args } = buildCommand(launch, '/bin/zsh')
@@ -56,6 +57,7 @@ test('codex agents reach the MCP through a token env var', () => {
   assert.match(line, /-c 'mcp_servers\.orbit\.url="http:\/\/127\.0\.0\.1:4317\/mcp"'/)
   assert.match(line, /bearer_token_env_var="ORBIT_PANE_TOKEN"/)
   assert.match(line, /-c 'model_reasoning_effort="low"'/)
+  assert.match(line, /-c 'mcp_servers\.orbit\.default_tools_approval_mode="approve"'/)
   assert.ok(!line.includes('segredo-do-pane'), 'the token travels by env, never on the command line')
 })
 

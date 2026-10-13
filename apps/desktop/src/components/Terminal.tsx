@@ -28,6 +28,8 @@ const THEME = {
   brightWhite: '#ffffff',
 }
 
+const FONT_FAMILY_NAME = "'Geist Mono Variable'"
+const FONT_SIZE = 13
 const SETTLE_MS = 120
 const MIN_COLS = 20
 const MIN_ROWS = 5
@@ -44,8 +46,8 @@ export function Terminal({ paneId, interactive, onFocus }: { paneId: number; int
     if (!element) return
     const term = new XTerm({
       theme: THEME,
-      fontFamily: "'Geist Mono Variable', ui-monospace, Menlo, monospace",
-      fontSize: 13,
+      fontFamily: `${FONT_FAMILY_NAME}, ui-monospace, Menlo, monospace`,
+      fontSize: FONT_SIZE,
       lineHeight: 1.25,
       cursorBlink: interactive,
       disableStdin: !interactive,
@@ -54,18 +56,20 @@ export function Terminal({ paneId, interactive, onFocus }: { paneId: number; int
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
-    term.open(element)
 
-    // The xterm and the PTY must always share one size: every resize of the view is also sent to
-    // the PTY, and the view only starts following its box after it holds the PTY's snapshot.
-    // Layout changes come in bursts (a pane opening, the window dragging), so wait for them to
-    // settle, and never shrink to a size no program can draw in.
+    // The xterm and the PTY must always share one size, or the program's cursor moves land in the
+    // wrong cells. So: every resize of the view is also sent to the PTY; the view only starts
+    // following its box after it holds the PTY's snapshot; and whenever the PTY changes size
+    // (from this view or another), the view adopts it. Layout changes come in bursts (a pane
+    // opening, the window dragging), so wait for them to settle, and never shrink to a size no
+    // program can draw in.
+    let disposed = false
     let snapshotApplied = false
     let settle: ReturnType<typeof setTimeout> | undefined
     const followBox = () => {
       clearTimeout(settle)
       settle = setTimeout(() => {
-        if (!snapshotApplied) return
+        if (!snapshotApplied || disposed) return
         const size = fit.proposeDimensions()
         if (!size || size.cols < MIN_COLS || size.rows < MIN_ROWS) return
         if (size.cols === term.cols && size.rows === term.rows) return
@@ -74,29 +78,44 @@ export function Terminal({ paneId, interactive, onFocus }: { paneId: number; int
       }, SETTLE_MS)
     }
     const observer = new ResizeObserver(followBox)
-    observer.observe(element)
+    // A late web font changes the cell width without changing the box; measure again then.
+    const onFonts = () => followBox()
+    document.fonts.addEventListener('loadingdone', onFonts)
 
-    const detach = client.attachPane(paneId, {
-      snapshot: ({ data, cols, rows }) => {
-        snapshotApplied = false
-        term.reset()
-        term.resize(cols, rows)
-        term.write(data, () => {
-          snapshotApplied = true
-          followBox()
-        })
-      },
-      data: (data) => term.write(data),
+    let detach = () => {}
+    let input: { dispose(): void } | undefined
+    // Cells are measured when the terminal opens: with the fallback font they come out narrower
+    // and the view would ask the PTY for too many columns. Open once the font is ready.
+    void document.fonts.load(`${FONT_SIZE}px ${FONT_FAMILY_NAME}`).catch(() => undefined).then(() => {
+      if (disposed) return
+      term.open(element)
+      observer.observe(element)
+      detach = client.attachPane(paneId, {
+        snapshot: ({ data, cols, rows }) => {
+          snapshotApplied = false
+          term.reset()
+          term.resize(cols, rows)
+          term.write(data, () => {
+            snapshotApplied = true
+            followBox()
+          })
+        },
+        data: (data) => term.write(data),
+        resized: (cols, rows) => {
+          if (cols !== term.cols || rows !== term.rows) term.resize(cols, rows)
+        },
+      })
+      input = term.onData((data) => client.send({ type: 'pane.input', paneId, data }))
+      element.querySelector('textarea')?.addEventListener('focus', () => onFocusRef.current?.())
     })
-    const input = term.onData((data) => client.send({ type: 'pane.input', paneId, data }))
-    const textarea = element.querySelector('textarea')
-    textarea?.addEventListener('focus', () => onFocusRef.current?.())
 
     return () => {
+      disposed = true
       clearTimeout(settle)
       observer.disconnect()
+      document.fonts.removeEventListener('loadingdone', onFonts)
       detach()
-      input.dispose()
+      input?.dispose()
       term.dispose()
     }
   }, [client, paneId, interactive])
