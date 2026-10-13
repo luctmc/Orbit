@@ -46,7 +46,7 @@ pub struct Sidecar {
 impl Sidecar {
     pub fn start(app: &AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
         let launch = Launch {
-            node: resolve_node().ok_or("Node.js não encontrado (instale o Node 24.11+ ou defina ORBIT_NODE)")?,
+            node: resolve_node(app).ok_or("Node.js não encontrado (instale o Node 24.11+ ou defina ORBIT_NODE)")?,
             entry: sidecar_entry(app)?,
             hook_script: hook_script(app)?,
             data_dir: std::env::var_os("ORBIT_HOME").map(PathBuf::from),
@@ -217,10 +217,19 @@ fn hook_script(app: &AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
     Ok(app.path().resource_dir()?.join("sidecar/hooks/report.mjs"))
 }
 
-/// GUI apps on macOS do not inherit the shell's PATH, so ask a login shell where `node` is.
-fn resolve_node() -> Option<PathBuf> {
+/// `ORBIT_NODE` wins; a release uses the Node shipped inside the app; otherwise (dev) the user's,
+/// found through a login shell because GUI apps on macOS do not inherit the shell's PATH.
+fn resolve_node(app: &AppHandle) -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("ORBIT_NODE") {
         return Some(PathBuf::from(path));
+    }
+    if !cfg!(debug_assertions) {
+        if let Ok(dir) = app.path().resource_dir() {
+            let bundled = dir.join("node/node");
+            if bundled.exists() {
+                return Some(bundled);
+            }
+        }
     }
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
     if let Ok(output) = Command::new(&shell).args(["-lc", "command -v node"]).stdin(Stdio::null()).output() {

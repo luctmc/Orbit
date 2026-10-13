@@ -7,7 +7,7 @@
     "dev": "vite",
     "dev:ui": "vite --port 5273 --strictPort",
     "build": "vite build",
-    "build:all": "vite build && node ../../scripts/build-sidecar.mjs",
+    "build:all": "vite build && node ../../scripts/build-sidecar.mjs && node ../../scripts/fetch-node.mjs",
     "tauri": "tauri",
     "typecheck": "tsc -p ."
   },
