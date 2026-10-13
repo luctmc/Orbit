@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react'
 import type { Mission, Pane } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { costText, MODE_LABEL, tokensText } from '../orbit/labels.ts'
-import { ArchiveIcon, PlusIcon, SendIcon } from './icons.tsx'
+import { BrowserPanel } from './BrowserPanel.tsx'
+import { ArchiveIcon, GlobeIcon, PlusIcon, SendIcon } from './icons.tsx'
 import { PaneView } from './PaneView.tsx'
 
 export type Layout = 'grade' | 'foco'
@@ -17,7 +18,10 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   onAddAgent: () => void
 }) {
   const client = useOrbitClient()
-  const squad = useOrbit().squads.find((s) => s.id === mission.squadId)
+  const { squads, browsers } = useOrbit()
+  const squad = squads.find((s) => s.id === mission.squadId)
+  const page = browsers.find((b) => b.missionId === mission.id)
+  const [browserOpen, setBrowserOpen] = useState(false)
   const [command, setCommand] = useState('')
   const archived = mission.status === 'archived'
   const selected = panes.find((p) => p.id === selectedPaneId) ?? panes[0] ?? null
@@ -50,6 +54,10 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
             <button type="button" aria-pressed={layout === 'grade'} onClick={() => onLayout('grade')}>Grade</button>
             <button type="button" aria-pressed={layout === 'foco'} onClick={() => onLayout('foco')}>Foco</button>
           </div>
+          <button className="btn btn--ghost btn--sm browser-toggle" aria-pressed={browserOpen} onClick={() => setBrowserOpen((open) => !open)}
+            title={page ? `Página aberta: ${page.title || page.url}` : 'Navegador da missão'}>
+            <GlobeIcon size={14} />Navegador{page && !browserOpen && <span className="dot dot--live" aria-label="(página aberta)" />}
+          </button>
           {!archived && (
             <>
               <button className="btn btn--ghost btn--sm" onClick={onAddAgent}><PlusIcon size={14} />Agente</button>
@@ -61,16 +69,19 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
         </div>
       </div>
 
-      {panes.length === 0 ? (
-        <div className="empty">
-          <p>{archived ? 'Missão arquivada, sem agentes.' : 'Nenhum agente nesta missão.'}</p>
-          {!archived && <button className="btn btn--primary" onClick={onAddAgent}><PlusIcon size={14} />Abrir um agente</button>}
-        </div>
-      ) : (
-        <div className={`pane-grid pane-grid--${layout}`}>
-          {visible.map((p) => <PaneView key={p.id} pane={p} selected={p.id === selected?.id} onSelect={() => onSelectPane(p.id)} />)}
-        </div>
-      )}
+      <div className="mission__body">
+        {panes.length === 0 ? (
+          <div className="empty">
+            <p>{archived ? 'Missão arquivada, sem agentes.' : 'Nenhum agente nesta missão.'}</p>
+            {!archived && <button className="btn btn--primary" onClick={onAddAgent}><PlusIcon size={14} />Abrir um agente</button>}
+          </div>
+        ) : (
+          <div className={`pane-grid pane-grid--${layout}`}>
+            {visible.map((p) => <PaneView key={p.id} pane={p} selected={p.id === selected?.id} onSelect={() => onSelectPane(p.id)} />)}
+          </div>
+        )}
+        {browserOpen && <BrowserPanel missionId={mission.id} archived={archived} onClose={() => setBrowserOpen(false)} />}
+      </div>
 
       {selected && selected.status !== 'exited' && (
         <form className="command" onSubmit={sendCommand}>

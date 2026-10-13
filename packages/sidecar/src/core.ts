@@ -2,7 +2,8 @@ import { statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, EFFORT_LABEL, EFFORTS, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, EFFORT_LABEL, EFFORTS, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, validKey } from './accounts.ts'
 import { normalizeRouting } from './routing.ts'
 import { codexHome, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
@@ -34,6 +35,8 @@ export interface CoreOptions {
   agentCommand?: (launch: AgentLaunch, shell: string) => PaneCommand
   /** Runs probes and updates of the agent CLIs; tests replace it. Default: the login shell. */
   run?: Run
+  /** Browser the missions' pages open in; default: the first installed Chromium browser. */
+  browser?: BrowserEngine | null
 }
 
 /** Orbit's domain logic: UI messages, MCP tool calls and hook reports all land here. */
@@ -57,13 +60,19 @@ export class OrbitCore {
   private readonly accountStatus = new Map<string, AccountStatus>()
   /** Terminals running a CLI login → the account they log in. Not part of any mission. */
   private readonly loginPanes = new Map<number, string>()
+  /** One headless page per mission, shared by its agents and the person. */
+  readonly browser: BrowserHost
 
-  constructor({ dataDir, shell, broadcast, agentCommand, run }: CoreOptions) {
+  constructor({ dataDir, shell, broadcast, agentCommand, run, browser }: CoreOptions) {
     this.broadcast = broadcast
     this.run = run ?? loginShellRunner(shell)
     this.dataDir = dataDir
     this.store = new Store(dataDir)
     this.accountFiles = new AccountFiles(dataDir)
+    this.browser = new BrowserHost(join(dataDir, 'browser'), browser === undefined ? findBrowser() : browser)
+    this.browser.on('state', (state) => this.broadcast({ type: 'browser.state', browser: state }))
+    this.browser.on('closed', (missionId) => this.broadcast({ type: 'browser.closed', missionId }))
+    this.browser.on('frame', (missionId, data, width, height) => this.broadcast({ type: 'browser.frame', missionId, data, width, height }))
     removeAgentFiles(join(dataDir, 'panes'))
     this.panes = new PaneManager(shell, agentCommand)
     this.panes.on('data', (paneId, data) => this.broadcast({ type: 'pane.data', paneId, data }))
@@ -108,6 +117,8 @@ export class OrbitCore {
       { type: 'snapshot', snapshot: this.store.snapshot() },
       { type: 'cli.status', clis: [...this.clis.values()] },
       { type: 'account.status', statuses: this.statuses() },
+      { type: 'browser.engine', name: this.browser.engine?.name ?? null },
+      ...this.browser.states().map((browser): ServerMessage => ({ type: 'browser.state', browser })),
     ]
     if (this.catalog) messages.push({ type: 'catalog', catalog: this.catalog })
     return messages
@@ -351,6 +362,21 @@ export class OrbitCore {
       case 'account.login':
         this.startLogin(message.accountId)
         return
+      case 'browser.navigate':
+        this.activeMission(message.missionId)
+        void this.browser.navigate(message.missionId, message.url, 'você').catch((error) => this.fail(error))
+        return
+      case 'browser.history':
+        void this.browser.history(message.missionId, message.action, 'você').catch((error) => this.fail(error))
+        return
+      case 'browser.input':
+        void this.browserInput(message.missionId, message.input).catch((error) => this.fail(error))
+        return
+      case 'browser.watch':
+        return // per-connection: handled by the server
+      case 'browser.close':
+        void this.browser.close(message.missionId)
+        return
       case 'routing.reset':
         this.store.saveRouting(null)
         this.broadcast({ type: 'routing.updated', routing: this.store.routing() })
@@ -359,6 +385,7 @@ export class OrbitCore {
         for (const pane of this.store.snapshot().panes.filter((p) => p.missionId === message.missionId)) {
           this.closePane(pane.id)
         }
+        void this.browser.close(message.missionId)
         const mission = this.store.updateMission(message.missionId, { status: 'archived' })
         if (mission) this.broadcast({ type: 'mission.updated', mission })
         return
@@ -504,6 +531,69 @@ export class OrbitCore {
     this.codexTimer.unref()
   }
 
+  // ---- the mission's browser ----
+
+  /** Agents open pages in their mission's browser; the person sees the same page. */
+  async browserOpen(caller: Pane, url: string) {
+    this.activeMission(caller.missionId)
+    const state = await this.browser.navigate(caller.missionId, url, `#${caller.id}`)
+    this.event(caller.missionId, 'browser', `#${caller.id} abriu uma página`, state.url, caller.id)
+    return state
+  }
+
+  browserScreenshot(caller: Pane): Promise<string> {
+    return this.browser.screenshot(caller.missionId)
+  }
+
+  browserText(caller: Pane, maxChars: number) {
+    return this.browser.text(caller.missionId, maxChars)
+  }
+
+  browserClick(caller: Pane, target: { x: number; y: number } | { selector: string }) {
+    return this.browser.click(caller.missionId, target, `#${caller.id}`)
+  }
+
+  async browserType(caller: Pane, text: string, submit: boolean): Promise<void> {
+    await this.browser.type(caller.missionId, text, `#${caller.id}`)
+    if (submit) await this.browser.key(caller.missionId, 'Enter', `#${caller.id}`)
+  }
+
+  browserKey(caller: Pane, key: string): Promise<void> {
+    return this.browser.key(caller.missionId, key, `#${caller.id}`)
+  }
+
+  browserScroll(caller: Pane, dy: number): Promise<void> {
+    return this.browser.scroll(caller.missionId, 640, 400, dy)
+  }
+
+  browserConsole(caller: Pane, lines: number): string[] {
+    return this.browser.consoleLines(caller.missionId, lines)
+  }
+
+  /** Clicks, scrolls and keys from the person's view of the page. */
+  private async browserInput(missionId: string, input: BrowserInput): Promise<void> {
+    switch (input.kind) {
+      case 'click':
+        await this.browser.click(missionId, { x: input.x, y: input.y }, 'você')
+        return
+      case 'scroll':
+        await this.browser.scroll(missionId, input.x, input.y, input.dy)
+        return
+      case 'type':
+        await this.browser.type(missionId, input.text, 'você')
+        return
+      case 'key':
+        await this.browser.key(missionId, input.key, 'você')
+        return
+    }
+  }
+
+  private activeMission(missionId: string): Mission {
+    const mission = this.store.mission(missionId)
+    if (!mission || mission.status !== 'active') throw new Error('Missão inexistente ou arquivada')
+    return mission
+  }
+
   hookReport(paneId: number, payload: HookPayload): void {
     const next = statusFromHook(payload)
     if (next) this.panes.report(paneId, next.status, next.attention)
@@ -511,6 +601,7 @@ export class OrbitCore {
 
   shutdown(): void {
     if (this.codexTimer) clearInterval(this.codexTimer)
+    this.browser.shutdown()
     this.panes.killAll()
     this.store.flush()
   }

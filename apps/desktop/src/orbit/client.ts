@@ -1,4 +1,4 @@
-import type { Account, AccountLimits, AccountStatus, Catalog, ClientMessage, CliStatus, Mission, MissionEvent, Pane, Routing, ServerMessage, Squad, UsageDay, Workspace } from '@orbit/protocol'
+import type { Account, AccountLimits, AccountStatus, Catalog, MissionBrowser, ClientMessage, CliStatus, Mission, MissionEvent, Pane, Routing, ServerMessage, Squad, UsageDay, Workspace } from '@orbit/protocol'
 
 export interface OrbitState {
   connection: 'connecting' | 'open' | 'closed'
@@ -19,8 +19,15 @@ export interface OrbitState {
   /** Claude and Codex accounts agents can run as; the built-in ones come first. */
   accounts: Account[]
   accountStatuses: AccountStatus[]
+  /** Chromium browser driving the missions' pages; undefined until the sidecar says, null = none. */
+  browserEngine: string | null | undefined
+  /** Missions whose browser has a page open. */
+  browsers: MissionBrowser[]
   lastError: string | null
 }
+
+/** Draws the page's frames; they bypass React like terminal output. */
+export type BrowserFrameView = (frame: { data: string; width: number; height: number }) => void
 
 export interface PaneSnapshot {
   data: string
@@ -41,11 +48,12 @@ export interface PaneView {
  * (for useSyncExternalStore); terminal bytes bypass React through `attachPane`.
  */
 export class OrbitClient {
-  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, catalog: null, clis: [], usageDays: [], limits: [], accounts: [], accountStatuses: [], lastError: null }
+  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, catalog: null, clis: [], usageDays: [], limits: [], accounts: [], accountStatuses: [], browserEngine: undefined, browsers: [], lastError: null }
   private readonly listeners = new Set<() => void>()
   /** Views per pane; `ready` once the view applied its snapshot and can take live output. */
   private readonly views = new Map<number, Map<PaneView, { ready: boolean }>>()
   private readonly attaching = new Set<number>()
+  private readonly frameViews = new Map<string, Set<BrowserFrameView>>()
   private ws: WebSocket | null = null
   private retryMs = 500
   private readonly resolveUrl: () => Promise<string>
@@ -87,6 +95,25 @@ export class OrbitClient {
     }
   }
 
+  /** Receives the mission page's frames while mounted (the sidecar only streams while watched). */
+  watchBrowser(missionId: string, view: BrowserFrameView): () => void {
+    let views = this.frameViews.get(missionId)
+    if (!views) this.frameViews.set(missionId, (views = new Set()))
+    views.add(view)
+    if (views.size === 1) this.sendQuietly({ type: 'browser.watch', missionId, on: true })
+    return () => {
+      views.delete(view)
+      if (views.size === 0) {
+        this.frameViews.delete(missionId)
+        this.sendQuietly({ type: 'browser.watch', missionId, on: false })
+      }
+    }
+  }
+
+  private sendQuietly(message: ClientMessage): void {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(message))
+  }
+
   private requestSnapshot(paneId: number): void {
     if (this.attaching.has(paneId) || this.ws?.readyState !== WebSocket.OPEN) return
     this.attaching.add(paneId)
@@ -124,13 +151,16 @@ export class OrbitClient {
   private receive(message: ServerMessage): void {
     switch (message.type) {
       case 'snapshot':
-        this.update({ ...message.snapshot })
+        // Open pages follow as browser.state messages.
+        this.update({ ...message.snapshot, browsers: [] })
         // (Re)connected: every mounted view starts over from a fresh snapshot.
         this.attaching.clear()
         for (const [paneId, views] of this.views) {
           for (const state of views.values()) state.ready = false
           this.requestSnapshot(paneId)
         }
+        // Pages being watched start streaming again on the new connection.
+        for (const missionId of this.frameViews.keys()) this.sendQuietly({ type: 'browser.watch', missionId, on: true })
         return
       case 'pane.snapshot': {
         this.attaching.delete(message.paneId)
@@ -188,6 +218,18 @@ export class OrbitClient {
         return
       case 'account.status':
         this.update({ accountStatuses: message.statuses })
+        return
+      case 'browser.engine':
+        this.update({ browserEngine: message.name })
+        return
+      case 'browser.state':
+        this.update({ browsers: upsert(this.state.browsers, message.browser, (b) => b.missionId) })
+        return
+      case 'browser.closed':
+        this.update({ browsers: this.state.browsers.filter((b) => b.missionId !== message.missionId) })
+        return
+      case 'browser.frame':
+        for (const view of this.frameViews.get(message.missionId) ?? []) view(message)
         return
       case 'error':
         this.update({ lastError: message.message })

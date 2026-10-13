@@ -258,7 +258,30 @@ export const ACCOUNT_LIMITS = { accounts: 12, name: 40, key: 512, url: 300 } as 
 /** Above this, a window counts as used up when Orbit picks an account. */
 export const ACCOUNT_FULL_PERCENT = 95
 
-export type MissionEventKind = 'mission.created' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff'
+/** The mission's browser: one page agents and the person look at together. */
+export interface MissionBrowser {
+  missionId: string
+  url: string
+  title: string
+  loading: boolean
+  /** Who moved it last: "você" or "#3". */
+  lastActor: string | null
+  error: string | null
+}
+
+/** Size of the page agents see (CSS pixels); the person's view is scaled from it. */
+export const BROWSER_VIEWPORT = { width: 1280, height: 800 } as const
+
+export type BrowserInput =
+  | { kind: 'click'; x: number; y: number }
+  | { kind: 'scroll'; x: number; y: number; dy: number }
+  | { kind: 'type'; text: string }
+  | { kind: 'key'; key: string }
+
+/** Keys the person (and agents) can press in the page besides typing text. */
+export const BROWSER_KEYS = ['Enter', 'Tab', 'Backspace', 'Delete', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'] as const
+
+export type MissionEventKind = 'mission.created' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser'
 
 export interface MissionEvent {
   id: string
@@ -332,6 +355,13 @@ export type ClientMessage =
   | { type: 'account.check' }
   /** Opens a terminal running the CLI's login for this account. */
   | { type: 'account.login'; accountId: string }
+  /** Opens (or moves) the mission's browser. */
+  | { type: 'browser.navigate'; missionId: string; url: string }
+  | { type: 'browser.history'; missionId: string; action: 'back' | 'forward' | 'reload' }
+  | { type: 'browser.input'; missionId: string; input: BrowserInput }
+  /** Start or stop receiving the page's frames on this connection. */
+  | { type: 'browser.watch'; missionId: string; on: boolean }
+  | { type: 'browser.close'; missionId: string }
 
 export type ServerMessage =
   | { type: 'snapshot'; snapshot: Snapshot }
@@ -357,6 +387,12 @@ export type ServerMessage =
   | { type: 'cli.status'; clis: CliStatus[] }
   | { type: 'accounts'; accounts: Account[] }
   | { type: 'account.status'; statuses: AccountStatus[] }
+  /** Which installed Chromium browser Orbit drives; null = none found. */
+  | { type: 'browser.engine'; name: string | null }
+  | { type: 'browser.state'; browser: MissionBrowser }
+  | { type: 'browser.closed'; missionId: string }
+  /** A JPEG of the page, for connections watching it. */
+  | { type: 'browser.frame'; missionId: string; data: string; width: number; height: number }
   | { type: 'error'; message: string }
 
 /** Model ids reach a shell command line, so only plain identifiers are accepted (`/` for providers' ids). */
