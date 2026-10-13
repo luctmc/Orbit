@@ -24,6 +24,7 @@ export const SendIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M5 12h14M
 export const GlobeIcon = (p: IconProps) => <svg {...stroke(p)}><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z" /></svg>
 export const BackIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M15 6l-6 6 6 6" /></svg>
 export const ReloadIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" /></svg>
+export const MicIcon = (p: IconProps) => <svg {...stroke(p)}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
 export const ArchiveIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M4 7h16v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM3 4h18v3H3zM10 11h4" /></svg>
 
 export function MissionGlyph({ size = 26 }: { size?: number }) {

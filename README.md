@@ -61,6 +61,11 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Ditado**: o microfone na barra de comando transcreve o que você fala para o agente selecionado
+  (Web Speech do WebKit, no idioma do sistema; o texto aparece enquanto você fala e só vai quando
+  você tecla Enter; Esc para). Na primeira vez o macOS pede permissão para o microfone e para o
+  reconhecimento de fala (os textos estão no `Info.plist` do app). O Ditado do próprio macOS
+  (Fn Fn) também funciona em qualquer campo.
 - **Navegador da missão**: cada missão tem uma página, aberta num Chromium sem janela (o Chrome,
   Brave, Edge ou Chromium instalado; `ORBIT_BROWSER` escolhe outro). Os agentes usam as
   ferramentas `browser_open`, `browser_screenshot`, `browser_text`, `browser_click`,
@@ -112,4 +117,4 @@ prompt; texto livre nunca vai direto para a linha de comando. O token do agente 
 ambiente dele (`ORBIT_PANE_TOKEN`) e o auto-update do Claude fica desligado nos agentes, para
 vários processos não atualizarem a mesma instalação ao mesmo tempo.
 
-Próximos passos: assinatura e notarização do `.app`; build para Macs Intel.
+Próximos passos: assinatura e notarização do `.app` (com a entitlement de microfone do hardened runtime); build para Macs Intel.

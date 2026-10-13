@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import type { Mission, Pane } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
+import { dictationAvailable, joinText, useDictation } from '../orbit/dictation.ts'
 import { costText, MODE_LABEL, tokensText } from '../orbit/labels.ts'
 import { BrowserPanel } from './BrowserPanel.tsx'
-import { ArchiveIcon, GlobeIcon, PlusIcon, SendIcon } from './icons.tsx'
+import { ArchiveIcon, GlobeIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
 import { PaneView } from './PaneView.tsx'
 
 export type Layout = 'grade' | 'foco'
@@ -23,6 +24,23 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   const page = browsers.find((b) => b.missionId === mission.id)
   const [browserOpen, setBrowserOpen] = useState(false)
   const [command, setCommand] = useState('')
+  const commandInput = useRef<HTMLInputElement>(null)
+  /** What was typed before dictating, plus each phrase already recognized. */
+  const dictated = useRef('')
+  const dictation = useDictation((text, final) => {
+    if (final) {
+      dictated.current = joinText(dictated.current, text)
+      setCommand(dictated.current)
+    } else {
+      setCommand(joinText(dictated.current, text))
+    }
+  })
+  const toggleDictation = () => {
+    if (dictation.listening) return dictation.stop()
+    dictated.current = command
+    dictation.start()
+    commandInput.current?.focus()
+  }
   const archived = mission.status === 'archived'
   const selected = panes.find((p) => p.id === selectedPaneId) ?? panes[0] ?? null
   const visible = layout === 'foco' && selected ? [selected] : panes
@@ -31,6 +49,8 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   const sendCommand = (event: FormEvent) => {
     event.preventDefault()
     if (!selected || !command.trim()) return
+    if (dictation.listening) dictation.stop()
+    dictated.current = ''
     client.send({ type: 'pane.submit', paneId: selected.id, text: command })
     setCommand('')
   }
@@ -86,9 +106,37 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
       {selected && selected.status !== 'exited' && (
         <form className="command" onSubmit={sendCommand}>
           <label htmlFor="command" className="command__label">Falar com #{selected.id}</label>
-          <input id="command" value={command} onChange={(e) => setCommand(e.target.value)} placeholder="Escreva para o agente selecionado e tecle Enter" autoComplete="off" />
+          <input
+            id="command"
+            ref={commandInput}
+            value={command}
+            onChange={(e) => {
+              setCommand(e.target.value)
+              dictated.current = e.target.value
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && dictation.listening) {
+                e.preventDefault()
+                dictation.stop()
+              }
+            }}
+            placeholder={dictation.listening ? 'Ouvindo… fale; Esc ou o microfone para parar' : 'Escreva para o agente selecionado e tecle Enter'}
+            autoComplete="off"
+          />
+          {dictationAvailable && (
+            <button type="button" className={`icon-btn icon-btn--boxed mic${dictation.listening ? ' mic--on' : ''}`} aria-pressed={dictation.listening}
+              aria-label={dictation.listening ? 'Parar o ditado' : 'Ditar'} title={dictation.listening ? 'Parar o ditado (Esc)' : 'Ditar para o agente'} onClick={toggleDictation}>
+              <MicIcon />
+            </button>
+          )}
           <button type="submit" className="icon-btn icon-btn--boxed" aria-label="Enviar"><SendIcon /></button>
         </form>
+      )}
+      {dictation.error && (
+        <div className="command__note" role="alert">
+          <span>{dictation.error}</span>
+          <button type="button" className="link-btn" onClick={dictation.dismissError}>Ok</button>
+        </div>
       )}
     </main>
   )
