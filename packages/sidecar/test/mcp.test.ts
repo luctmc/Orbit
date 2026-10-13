@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { startServer } from '../src/server.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, offline } from './helpers.ts'
 
 async function mcpClient(port: number, token: string) {
   const client = new Client({ name: 'test', version: '0' })
@@ -20,7 +20,7 @@ const textOf = (result: unknown) => ((result as { content: Array<{ text: string 
 
 test('lead and helper coordinate through MCP, handoffs and hooks', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-data-'))
-  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh' })
+  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline })
   const ui = connect(server.port)
   const clients: Client[] = []
   try {

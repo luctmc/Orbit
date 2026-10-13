@@ -83,9 +83,57 @@ export interface Squad {
 
 export type SquadInput = Omit<Squad, 'builtin' | 'updatedAt'>
 
-/** How hard the model thinks. Claude: `--effort`; Codex: `model_reasoning_effort`. */
-export type Effort = 'low' | 'medium' | 'high'
-export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high']
+/**
+ * How hard the model thinks, weakest first. Claude: `--effort`; Codex: `model_reasoning_effort`.
+ * Which levels apply depends on the CLI and the model: see `Catalog`.
+ */
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
+export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']
+export const EFFORT_LABEL: Record<Effort, string> = { low: 'baixo', medium: 'médio', high: 'alto', xhigh: 'muito alto', max: 'máximo', ultra: 'ultra' }
+
+/** A model an agent CLI offers, with the effort levels it accepts. */
+export interface ModelInfo {
+  id: string
+  label: string
+  description: string
+  efforts: Effort[]
+  defaultEffort: Effort | null
+}
+
+export interface CliCatalog {
+  models: ModelInfo[]
+  /** Levels the CLI accepts when the model is not in the list (its own default model, an alias…). */
+  efforts: Effort[]
+  /** `cli`: read from the installed CLI; `builtin`: Orbit's list, when the CLI cannot be asked. */
+  source: 'cli' | 'builtin'
+}
+
+export type Catalog = Record<AgentCliForRole, CliCatalog>
+
+/** Effort levels valid for this CLI and model. */
+export function effortsFor(catalog: Catalog | null, cli: AgentCli, model: string | null): readonly Effort[] {
+  if (cli === 'shell') return []
+  if (!catalog) return EFFORTS
+  const entry = catalog[cli]
+  return entry.models.find((m) => m.id === model)?.efforts ?? entry.efforts
+}
+
+/** An installed agent CLI as Orbit sees it. */
+export interface CliStatus {
+  cli: AgentCliForRole
+  installed: boolean
+  /** Where `command -v` points, resolved through symlinks. */
+  path: string | null
+  version: string | null
+  /** How it was installed, which decides how Orbit updates it. */
+  method: 'npm' | 'native' | 'brew' | 'unknown'
+  latest: string | null
+  checkedAt: number | null
+  busy: 'checking' | 'updating' | null
+  /** Outcome of the last check or update, for the person. */
+  message: string | null
+  ok: boolean | null
+}
 
 /** One row of "who does each task": the agent an agentic lead gets for that kind of work. */
 export interface TaskType {
@@ -165,6 +213,9 @@ export type ClientMessage =
   | { type: 'squad.save'; squad: SquadInput }
   | { type: 'squad.delete'; squadId: string }
   | { type: 'routing.save'; routing: Routing }
+  /** Look up installed versions, the latest releases and the model catalogs again. */
+  | { type: 'cli.check' }
+  | { type: 'cli.update'; cli: AgentCliForRole }
   /** Back to the table Orbit ships with. */
   | { type: 'routing.reset' }
 
@@ -186,6 +237,8 @@ export type ServerMessage =
   | { type: 'squad.updated'; squad: Squad }
   | { type: 'squad.removed'; squadId: string }
   | { type: 'routing.updated'; routing: Routing }
+  | { type: 'catalog'; catalog: Catalog }
+  | { type: 'cli.status'; clis: CliStatus[] }
   | { type: 'error'; message: string }
 
 /** Model ids reach a shell command line, so only plain identifiers are accepted. */

@@ -2,8 +2,9 @@ import { statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { EFFORTS, WORKSPACE_LIMITS, type AgentCli, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { EFFORT_LABEL, EFFORTS, WORKSPACE_LIMITS, effortsFor, type AgentCli, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { normalizeRouting } from './routing.ts'
+import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import type { AgentLaunch, PaneCommand } from './command.ts'
 import { statusFromHook, type HookPayload } from './hooks.ts'
@@ -15,7 +16,6 @@ import { Store } from './store.ts'
 const CLIS: readonly AgentCli[] = ['claude', 'codex', 'shell']
 const MODES: readonly MissionMode[] = ['livre', 'squad', 'agentica']
 const CLI_LABEL: Record<AgentCli, string> = { claude: 'Claude', codex: 'Codex', shell: 'Terminal' }
-const EFFORT_LABEL: Record<Effort, string> = { low: 'baixo', medium: 'médio', high: 'alto' }
 const HOOK_SCRIPT = process.env.ORBIT_HOOK_SCRIPT ?? fileURLToPath(new URL('../hooks/report.mjs', import.meta.url))
 
 export type Broadcast = (message: ServerMessage) => void
@@ -26,6 +26,8 @@ export interface CoreOptions {
   broadcast: Broadcast
   /** Tests replace the real agent CLIs with a stand-in command. */
   agentCommand?: (launch: AgentLaunch, shell: string) => PaneCommand
+  /** Runs probes and updates of the agent CLIs; tests replace it. Default: the login shell. */
+  run?: Run
 }
 
 /** Orbit's domain logic: UI messages, MCP tool calls and hook reports all land here. */
@@ -37,9 +39,14 @@ export class OrbitCore {
   /** Per-pane secret used by that agent's MCP client and hooks. Lives only in memory. */
   private readonly paneTokens = new Map<string, number>()
   private endpoint = ''
+  private readonly run: Run
+  /** Models and effort levels per CLI; null until first loaded. */
+  private catalog: Catalog | null = null
+  private readonly clis = new Map<AgentCliForRole, CliStatus>([['claude', blankStatus('claude')], ['codex', blankStatus('codex')]])
 
-  constructor({ dataDir, shell, broadcast, agentCommand }: CoreOptions) {
+  constructor({ dataDir, shell, broadcast, agentCommand, run }: CoreOptions) {
     this.broadcast = broadcast
+    this.run = run ?? loginShellRunner(shell)
     this.dataDir = dataDir
     this.store = new Store(dataDir)
     removeAgentFiles(join(dataDir, 'panes'))
@@ -66,7 +73,47 @@ export class OrbitCore {
 
   /** What a newly connected client needs; terminal contents come per view via `pane.attach`. */
   welcome(): ServerMessage[] {
-    return [{ type: 'snapshot', snapshot: this.store.snapshot() }]
+    const messages: ServerMessage[] = [{ type: 'snapshot', snapshot: this.store.snapshot() }, { type: 'cli.status', clis: [...this.clis.values()] }]
+    if (this.catalog) messages.push({ type: 'catalog', catalog: this.catalog })
+    return messages
+  }
+
+  /** Model catalogs, read from the CLIs in the background; agents can open before it arrives. */
+  async refreshCatalog(): Promise<void> {
+    this.catalog = await loadCatalog(this.run)
+    this.broadcast({ type: 'catalog', catalog: this.catalog })
+  }
+
+  private setCli(cli: AgentCliForRole, patch: Partial<CliStatus>): void {
+    this.clis.set(cli, { ...this.clis.get(cli)!, ...patch })
+    this.broadcast({ type: 'cli.status', clis: [...this.clis.values()] })
+  }
+
+  /** Installed version, install method and latest release of each CLI, plus the catalogs. */
+  async checkClis(): Promise<void> {
+    await Promise.all((['claude', 'codex'] as const).map(async (cli) => {
+      if (this.clis.get(cli)!.busy) return
+      this.setCli(cli, { busy: 'checking' })
+      try {
+        const [found, latest] = await Promise.all([inspectCli(this.run, cli), latestVersion(this.run, cli)])
+        this.setCli(cli, { ...found, latest, checkedAt: Date.now(), busy: null, ok: found.installed, message: found.installed ? null : 'Não encontrado no PATH do seu shell.' })
+      } catch (error) {
+        this.setCli(cli, { busy: null, ok: false, message: error instanceof Error ? error.message : String(error) })
+      }
+    }))
+    await this.refreshCatalog()
+  }
+
+  /** Updates one CLI the way it was installed, then checks it again. */
+  async updateCli(cli: AgentCliForRole): Promise<void> {
+    const status = this.clis.get(cli)!
+    if (status.busy) return
+    this.setCli(cli, { busy: 'updating', message: null, ok: null })
+    const { ok, output } = await runUpdate(this.run, status)
+    const found = await inspectCli(this.run, cli)
+    const works = ok && found.installed && found.version !== null
+    this.setCli(cli, { ...found, busy: null, ok: works, checkedAt: Date.now(), message: works ? `Atualizado para ${found.version}.` : output || 'A atualização falhou.' })
+    if (cli === 'codex') await this.refreshCatalog()
   }
 
   /** A pane's screen for a view that just mounted (see the server's attach handling). */
@@ -132,6 +179,13 @@ export class OrbitCore {
         this.broadcast({ type: 'routing.updated', routing: this.store.routing() })
         return
       }
+      case 'cli.check':
+        void this.checkClis()
+        return
+      case 'cli.update':
+        if (message.cli !== 'claude' && message.cli !== 'codex') throw new Error('CLI desconhecida')
+        void this.updateCli(message.cli)
+        return
       case 'routing.reset':
         this.store.saveRouting(null)
         this.broadcast({ type: 'routing.updated', routing: this.store.routing() })
@@ -275,6 +329,11 @@ export class OrbitCore {
         : input
     if (!CLIS.includes(request.cli)) throw new Error(`Agente inválido: ${request.cli}`)
     if (request.effort && !EFFORTS.includes(request.effort)) throw new Error(`Esforço inválido: ${request.effort}`)
+    // Each model accepts its own levels (Codex lists them; Claude takes low…max).
+    const allowed = effortsFor(this.catalog, request.cli, request.model)
+    if (request.effort && request.cli !== 'shell' && !allowed.includes(request.effort)) {
+      throw new Error(`Esforço "${EFFORT_LABEL[request.effort]}" não vale para ${request.model ?? `o modelo padrão do ${CLI_LABEL[request.cli]}`}; use ${allowed.map((e) => EFFORT_LABEL[e]).join(', ')}`)
+    }
 
     const id = this.store.allocatePaneId()
     const title = request.title.trim().slice(0, 120) || squadRole?.name || taskType?.name || `${CLI_LABEL[request.cli]} #${id}`

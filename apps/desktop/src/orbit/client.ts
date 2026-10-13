@@ -1,4 +1,4 @@
-import type { ClientMessage, Mission, MissionEvent, Pane, Routing, ServerMessage, Squad, Workspace } from '@orbit/protocol'
+import type { Catalog, ClientMessage, CliStatus, Mission, MissionEvent, Pane, Routing, ServerMessage, Squad, Workspace } from '@orbit/protocol'
 
 export interface OrbitState {
   connection: 'connecting' | 'open' | 'closed'
@@ -9,6 +9,9 @@ export interface OrbitState {
   squads: Squad[]
   /** null until the first snapshot arrives. */
   routing: Routing | null
+  /** Models and effort levels per CLI; null until the sidecar has read them. */
+  catalog: Catalog | null
+  clis: CliStatus[]
   lastError: string | null
 }
 
@@ -31,7 +34,7 @@ export interface PaneView {
  * (for useSyncExternalStore); terminal bytes bypass React through `attachPane`.
  */
 export class OrbitClient {
-  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, lastError: null }
+  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, catalog: null, clis: [], lastError: null }
   private readonly listeners = new Set<() => void>()
   /** Views per pane; `ready` once the view applied its snapshot and can take live output. */
   private readonly views = new Map<number, Map<PaneView, { ready: boolean }>>()
@@ -160,6 +163,12 @@ export class OrbitClient {
         return
       case 'routing.updated':
         this.update({ routing: message.routing })
+        return
+      case 'catalog':
+        this.update({ catalog: message.catalog })
+        return
+      case 'cli.status':
+        this.update({ clis: message.clis })
         return
       case 'error':
         this.update({ lastError: message.message })
