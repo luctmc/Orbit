@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { timingSafeEqual } from 'node:crypto'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { ClientMessage, ServerMessage } from '@orbit/protocol'
-import { OrbitCore } from './core.ts'
+import { OrbitCore, type CoreOptions } from './core.ts'
 import type { HookPayload } from './hooks.ts'
 import { handleMcp } from './mcp.ts'
 
@@ -14,6 +14,7 @@ export interface ServerOptions {
   allowedOrigins: string[]
   dataDir: string
   shell: string
+  agentCommand?: CoreOptions['agentCommand']
 }
 
 export interface RunningServer {
@@ -35,6 +36,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   const core = new OrbitCore({
     dataDir: options.dataDir,
     shell: options.shell,
+    agentCommand: options.agentCommand,
     broadcast: (message) => {
       for (const ws of clients) send(ws, message)
     },

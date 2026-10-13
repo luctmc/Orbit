@@ -1,4 +1,4 @@
-import type { ClientMessage, Mission, MissionEvent, Pane, ServerMessage, Workspace } from '@orbit/protocol'
+import type { ClientMessage, Mission, MissionEvent, Pane, ServerMessage, Squad, Workspace } from '@orbit/protocol'
 
 const SCROLLBACK_LIMIT = 512 * 1024
 
@@ -8,6 +8,7 @@ export interface OrbitState {
   missions: Mission[]
   panes: Pane[]
   events: MissionEvent[]
+  squads: Squad[]
   lastError: string | null
 }
 
@@ -18,7 +19,7 @@ type DataListener = (data: string) => void
  * (for useSyncExternalStore); terminal bytes bypass React through `onPaneData`.
  */
 export class OrbitClient {
-  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], lastError: null }
+  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], lastError: null }
   private readonly listeners = new Set<() => void>()
   private readonly dataListeners = new Map<number, Set<DataListener>>()
   private readonly buffers = new Map<number, string>()
@@ -115,6 +116,12 @@ export class OrbitClient {
         return
       case 'event.added':
         this.update({ events: [...this.state.events, message.event] })
+        return
+      case 'squad.updated':
+        this.update({ squads: upsert(this.state.squads, message.squad, (s) => s.id) })
+        return
+      case 'squad.removed':
+        this.update({ squads: this.state.squads.filter((s) => s.id !== message.squadId) })
         return
       case 'error':
         this.update({ lastError: message.message })

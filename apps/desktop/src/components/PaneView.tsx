@@ -13,7 +13,7 @@ export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: b
     <section className={`pane${selected ? ' pane--selected' : ''}${pane.status === 'waiting' ? ' pane--waiting' : ''}`} aria-label={`Agente ${pane.id}: ${pane.title}`}>
       <header className="pane__head">
         <span className={`dot dot--${status.tone}`} title={status.label} />
-        <span className={`role role--${pane.role}`}>{pane.role === 'lead' ? 'Líder' : 'Ajudante'}</span>
+        <span className={`role role--${pane.role}`}>{pane.role === 'lead' ? 'Líder' : pane.squadRole ?? 'Ajudante'}</span>
         <span className="pane__id">#{pane.id}</span>
         <button type="button" className="pane__title" onClick={onSelect}>{pane.title}</button>
         {pane.deliveredAt !== null && <span className="chip chip--done">entregue</span>}

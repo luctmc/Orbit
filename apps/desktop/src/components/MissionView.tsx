@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import type { Mission, Pane } from '@orbit/protocol'
-import { useOrbitClient } from '../orbit/context.tsx'
+import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { MODE_LABEL } from '../orbit/labels.ts'
 import { ArchiveIcon, PlusIcon, SendIcon } from './icons.tsx'
 import { PaneView } from './PaneView.tsx'
@@ -17,6 +17,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   onAddAgent: () => void
 }) {
   const client = useOrbitClient()
+  const squad = useOrbit().squads.find((s) => s.id === mission.squadId)
   const [command, setCommand] = useState('')
   const archived = mission.status === 'archived'
   const selected = panes.find((p) => p.id === selectedPaneId) ?? panes[0] ?? null
@@ -36,7 +37,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
         <div className="mission__title">
           <div className="mission__title-row">
             <h1>{mission.title}</h1>
-            <span className={`badge badge--${mission.mode}`}>{MODE_LABEL[mission.mode]}</span>
+            <span className={`badge badge--${mission.mode}`}>{MODE_LABEL[mission.mode]}{squad ? ` · ${squad.name}` : ''}</span>
             {archived && <span className="badge">Arquivada</span>}
           </div>
           <p className="muted">{mission.objective || 'Sem objetivo descrito.'} · {alive} {alive === 1 ? 'agente vivo' : 'agentes vivos'}</p>

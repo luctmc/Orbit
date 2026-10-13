@@ -2,11 +2,13 @@ import { statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { AgentCli, ClientMessage, Mission, MissionEvent, MissionEventKind, MissionMode, Pane, ServerMessage, SpawnPaneRequest } from '@orbit/protocol'
+import type { AgentCli, ClientMessage, Mission, MissionEvent, MissionEventKind, MissionMode, Pane, ServerMessage, SpawnPaneRequest, Squad } from '@orbit/protocol'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
+import type { AgentLaunch, PaneCommand } from './command.ts'
 import { statusFromHook, type HookPayload } from './hooks.ts'
 import { PaneManager } from './panes.ts'
 import { crewRole, leadRole, objectiveTask } from './prompts.ts'
+import { normalizeSquad } from './squads.ts'
 import { Store } from './store.ts'
 
 const CLIS: readonly AgentCli[] = ['claude', 'codex', 'shell']
@@ -20,6 +22,8 @@ export interface CoreOptions {
   dataDir: string
   shell: string
   broadcast: Broadcast
+  /** Tests replace the real agent CLIs with a stand-in command. */
+  agentCommand?: (launch: AgentLaunch, shell: string) => PaneCommand
 }
 
 /** Orbit's domain logic: UI messages, MCP tool calls and hook reports all land here. */
@@ -32,12 +36,12 @@ export class OrbitCore {
   private readonly paneTokens = new Map<string, number>()
   private endpoint = ''
 
-  constructor({ dataDir, shell, broadcast }: CoreOptions) {
+  constructor({ dataDir, shell, broadcast, agentCommand }: CoreOptions) {
     this.broadcast = broadcast
     this.dataDir = dataDir
     this.store = new Store(dataDir)
     removeAgentFiles(join(dataDir, 'panes'))
-    this.panes = new PaneManager(shell)
+    this.panes = new PaneManager(shell, agentCommand)
     this.panes.on('data', (paneId, data) => this.broadcast({ type: 'pane.data', paneId, data }))
     this.panes.on('status', (pane, previous) => {
       this.syncPane(pane)
@@ -78,16 +82,32 @@ export class OrbitCore {
         if (!this.store.workspace(message.workspaceId)) throw new Error('Workspace desconhecido')
         if (!MODES.includes(message.mode)) throw new Error(`Modo inválido: ${message.mode}`)
         const title = requireText(message.title, 'título', 120)
+        const squad = message.mode === 'squad' ? this.store.squad(message.squadId ?? '') : undefined
+        if (message.mode === 'squad' && !squad) throw new Error('Escolha um squad para a missão')
         const mission = this.store.createMission({
           workspaceId: message.workspaceId,
           title,
           objective: message.objective.trim().slice(0, 4000),
           mode: message.mode,
+          squadId: squad?.id ?? null,
         })
         this.broadcast({ type: 'mission.updated', mission })
-        this.event(mission.id, 'mission.created', 'Missão iniciada', mission.objective || 'Sem objetivo descrito.', null)
-        const task = mission.mode === 'agentica' && mission.objective ? objectiveTask(mission) : null
+        const opening = squad ? `Squad ${squad.name}. ${mission.objective || 'Sem objetivo descrito.'}` : mission.objective || 'Sem objetivo descrito.'
+        this.event(mission.id, 'mission.created', 'Missão iniciada', opening, null)
+        // Agentic and squad leads start working on the objective right away.
+        const task = mission.mode !== 'livre' && mission.objective ? objectiveTask(mission) : null
         this.spawn({ ...message.lead, missionId: mission.id, role: 'lead', task })
+        return
+      }
+      case 'squad.save': {
+        const squad = normalizeSquad(message.squad, this.store.customSquadIds())
+        this.store.saveSquad(squad)
+        this.broadcast({ type: 'squad.updated', squad })
+        return
+      }
+      case 'squad.delete': {
+        if (this.store.squad(message.squadId)?.builtin) throw new Error('Squads que vêm com o Orbit não podem ser apagados')
+        if (this.store.deleteSquad(message.squadId)) this.broadcast({ type: 'squad.removed', squadId: message.squadId })
         return
       }
       case 'mission.archive': {
@@ -133,7 +153,13 @@ export class OrbitCore {
     return this.store.snapshot().events.filter((e) => e.missionId === missionId && (!kind || e.kind === kind))
   }
 
-  spawnHelper(caller: Pane, input: { title: string; task: string; cli: AgentCli; model: string | null }): Pane {
+  /** The squad a mission follows, if any. */
+  missionSquad(missionId: string): Squad | undefined {
+    const squadId = this.store.mission(missionId)?.squadId
+    return squadId ? this.store.squad(squadId) : undefined
+  }
+
+  spawnHelper(caller: Pane, input: { title: string; task: string; cli: AgentCli; model: string | null; squadRoleId?: string | null }): Pane {
     return this.spawn({ missionId: caller.missionId, role: 'crew', ...input })
   }
 
@@ -182,18 +208,26 @@ export class OrbitCore {
 
   // ---- internals ----
 
-  private spawn(request: SpawnPaneRequest): Pane {
-    const mission = this.store.mission(request.missionId)
+  private spawn(input: SpawnPaneRequest): Pane {
+    const mission = this.store.mission(input.missionId)
     if (!mission || mission.status !== 'active') throw new Error('Missão inexistente ou arquivada')
-    if (!CLIS.includes(request.cli)) throw new Error(`Agente inválido: ${request.cli}`)
     const workspace = this.store.workspace(mission.workspaceId)
     if (!workspace) throw new Error('Workspace da missão sumiu')
 
+    // A squad role decides the CLI and model of the helper that plays it.
+    const squad = this.missionSquad(mission.id)
+    let squadRole = undefined as Squad['roles'][number] | undefined
+    if (input.squadRoleId) {
+      squadRole = squad?.roles.find((r) => r.id === input.squadRoleId)
+      if (!squadRole) throw new Error(`Papel "${input.squadRoleId}" não existe no squad desta missão`)
+    }
+    const request: SpawnPaneRequest = squadRole ? { ...input, role: 'crew', cli: squadRole.cli, model: squadRole.model } : input
+    if (!CLIS.includes(request.cli)) throw new Error(`Agente inválido: ${request.cli}`)
+
     const id = this.store.allocatePaneId()
-    const title = request.title.trim().slice(0, 120) || `${CLI_LABEL[request.cli]} #${id}`
+    const title = request.title.trim().slice(0, 120) || squadRole?.name || `${CLI_LABEL[request.cli]} #${id}`
     const token = randomBytes(24).toString('base64url')
     const lead = this.missionPanes(mission.id).find((p) => p.role === 'lead')
-    const draft = { id, title, role: request.role } as Pane
     const launch = writeAgentFiles({
       paneDir: this.paneDir(id),
       cli: request.cli,
@@ -201,7 +235,7 @@ export class OrbitCore {
       endpoint: this.endpoint,
       token,
       hookCommand: hookCommand(process.execPath, HOOK_SCRIPT),
-      rolePrompt: request.role === 'lead' ? leadRole(mission, draft) : crewRole(mission, draft, lead),
+      rolePrompt: request.role === 'lead' ? leadRole(mission, { id }, squad) : crewRole(mission, { id }, lead, squadRole),
       task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
     })
 
@@ -210,6 +244,7 @@ export class OrbitCore {
       pane = this.panes.spawn({
         id,
         request: { ...request, title },
+        squadRole: squadRole?.name ?? null,
         cwd: workspace.path,
         launch,
         hookDriven: request.cli === 'claude',
@@ -228,7 +263,7 @@ export class OrbitCore {
     }
     this.paneTokens.set(token, id)
     this.syncPane(pane)
-    const who = [CLI_LABEL[request.cli], request.model, request.role === 'lead' ? 'líder' : 'ajudante'].filter(Boolean).join(' · ')
+    const who = [CLI_LABEL[request.cli], request.model, request.role === 'lead' ? 'líder' : squadRole?.name.toLowerCase() ?? 'ajudante'].filter(Boolean).join(' · ')
     this.event(mission.id, 'pane.spawned', `Agente #${id} aberto`, `${title} — ${who}`, id)
     return pane
   }

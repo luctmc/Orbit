@@ -1,13 +1,16 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { Mission, MissionEvent, MissionMode, Pane, Snapshot, Workspace } from '@orbit/protocol'
+import type { Mission, MissionEvent, MissionMode, Pane, Snapshot, Squad, Workspace } from '@orbit/protocol'
+import { BUILTIN_SQUADS } from './squads.ts'
 
 const EVENTS_PER_MISSION = 200
 
-interface PersistedState extends Snapshot {
+interface PersistedState extends Omit<Snapshot, 'squads'> {
   version: 1
   nextPaneId: number
+  /** User squads; builtins live in code. */
+  customSquads: Squad[]
 }
 
 /** Durable state in `<dataDir>/state.json`. Writes are debounced and atomic (tmp + rename). */
@@ -20,17 +23,48 @@ export class Store {
     mkdirSync(dataDir, { recursive: true })
     this.file = join(dataDir, 'state.json')
     this.state = this.load()
+    // Older state files predate some fields.
+    this.state.customSquads ??= []
+    for (const mission of this.state.missions) mission.squadId ??= null
     // Processes do not survive a sidecar restart.
     for (const pane of this.state.panes) {
       pane.attention = null
       pane.deliveredAt ??= null
+      pane.squadRole ??= null
       if (pane.status !== 'exited') Object.assign(pane, { status: 'exited', pid: null })
     }
   }
 
   snapshot(): Snapshot {
     const { workspaces, missions, panes, events } = this.state
-    return structuredClone({ workspaces, missions, panes, events })
+    return structuredClone({ workspaces, missions, panes, events, squads: this.squads() })
+  }
+
+  squads(): Squad[] {
+    return [...BUILTIN_SQUADS, ...this.state.customSquads].map((s) => structuredClone(s))
+  }
+
+  squad(id: string): Squad | undefined {
+    const squad = BUILTIN_SQUADS.find((s) => s.id === id) ?? this.state.customSquads.find((s) => s.id === id)
+    return squad && structuredClone(squad)
+  }
+
+  customSquadIds(): Set<string> {
+    return new Set(this.state.customSquads.map((s) => s.id))
+  }
+
+  saveSquad(squad: Squad): void {
+    const index = this.state.customSquads.findIndex((s) => s.id === squad.id)
+    if (index === -1) this.state.customSquads.push(squad)
+    else this.state.customSquads[index] = squad
+    this.save()
+  }
+
+  deleteSquad(id: string): boolean {
+    const before = this.state.customSquads.length
+    this.state.customSquads = this.state.customSquads.filter((s) => s.id !== id)
+    this.save()
+    return this.state.customSquads.length !== before
   }
 
   openWorkspace(path: string): Workspace {
@@ -48,7 +82,7 @@ export class Store {
     return this.state.workspaces.find((w) => w.id === id)
   }
 
-  createMission(input: { workspaceId: string; title: string; objective: string; mode: MissionMode }): Mission {
+  createMission(input: { workspaceId: string; title: string; objective: string; mode: MissionMode; squadId: string | null }): Mission {
     const now = Date.now()
     const mission: Mission = { id: randomUUID(), status: 'active', createdAt: now, updatedAt: now, ...input }
     this.state.missions.push(mission)
@@ -123,6 +157,6 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
-    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [] }
+    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [] }
   }
 }

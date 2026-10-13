@@ -47,6 +47,11 @@ npm test
 - **Hooks do Claude Code** (`POST /hooks`): status real (`rodando`, `ocioso`, `espera você` com o
   motivo). Codex e terminais usam a atividade do terminal.
 - Missão **agêntica**: o líder recebe o objetivo e as instruções de papel e monta o time sozinho.
+- Missão de **squad**: um time com papéis (agente, modelo e instruções de cada um) e um roteiro
+  que o líder segue. O líder abre cada papel com `agent_spawn` + `role`; o Orbit aplica o CLI, o
+  modelo e as instruções do papel. Vêm três squads prontos (Caça-bugs, Funcionalidade,
+  Auditoria), só leitura; dá para duplicá-los ou criar os seus na tela **Squads** (salvos em
+  `state.json`). Ao abrir um agente à mão numa missão de squad, dá para escolher o papel.
 
 ### Como um agente é lançado
 
@@ -57,4 +62,4 @@ prompt; texto livre nunca vai direto para a linha de comando. O token do agente 
 ambiente dele (`ORBIT_PANE_TOKEN`) e o auto-update do Claude fica desligado nos agentes, para
 vários processos não atualizarem a mesma instalação ao mesmo tempo.
 
-Próximos passos: squads com roteiro, Node embutido no `.app`, assinatura e notarização.
+Próximos passos: Node embutido no `.app`, assinatura e notarização.

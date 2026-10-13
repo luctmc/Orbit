@@ -23,6 +23,7 @@ const guarded = <A>(body: (args: A) => unknown) => async (args: A): Promise<Tool
 const agentView = (p: Pane) => ({
   id: p.id,
   role: p.role === 'lead' ? 'líder' : 'ajudante',
+  squadRole: p.squadRole,
   title: p.title,
   agent: p.cli,
   model: p.model,
@@ -52,25 +53,34 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     inputSchema: { events: z.number().int().min(1).max(100).optional().describe('Quantos eventos recentes trazer (padrão 20)') },
   }, guarded(({ events }: { events?: number }) => {
     const mission = core.mission(caller.missionId)
+    const squad = core.missionSquad(caller.missionId)
     return {
       mission: mission && { title: mission.title, mode: mission.mode, objective: mission.objective, status: mission.status },
+      squad: squad && { name: squad.name, playbook: squad.playbook, roles: squad.roles.map((r) => ({ id: r.id, name: r.name, agent: r.cli, model: r.model })) },
       agents: core.missionPanes(caller.missionId).map(agentView),
       events: core.missionEvents(caller.missionId).slice(-(events ?? 20)).map((e) => ({ at: new Date(e.at).toISOString(), title: e.title, body: e.body })),
     }
   }))
 
   if (caller.role === 'lead') {
+    const squad = core.missionSquad(caller.missionId)
+    const roleIds = squad?.roles.map((r) => r.id) ?? []
+    const roleField: Record<string, z.ZodType> = roleIds.length
+      ? { role: z.enum(roleIds as [string, ...string[]]).optional().describe(`Papel do squad "${squad?.name}" (${squad?.roles.map((r) => `${r.id} = ${r.name}`).join(', ')}). Com papel, o agente, o modelo e as instruções vêm do squad.`) }
+      : {}
+
     server.registerTool('agent_spawn', {
       description: 'Abre um ajudante num terminal visível ao usuário, na mesma pasta, já com a tarefa. A tarefa deve ser autocontida: contexto, arquivos, o que entregar e como verificar. O ajudante devolve o resultado com handoff_submit e ele chega a você como "[Orbit] Retorno de #N".',
       inputSchema: {
-        title: z.string().min(1).max(120).describe('Função curta do ajudante, ex.: "Mapear leituras do token"'),
+        title: z.string().max(120).optional().describe('Função curta do ajudante, ex.: "Mapear leituras do token" (padrão: nome do papel)'),
         task: z.string().min(1).max(20000).describe('A tarefa completa para o ajudante'),
-        agent: z.enum(['claude', 'codex']).optional().describe('Qual CLI usar (padrão: claude)'),
-        model: z.string().regex(MODEL_ID).optional().describe('Modelo, ex.: claude-sonnet-5-5 (padrão do CLI se omitido)'),
+        ...roleField,
+        agent: z.enum(['claude', 'codex']).optional().describe('Qual CLI usar quando não há papel (padrão: claude)'),
+        model: z.string().regex(MODEL_ID).optional().describe('Modelo quando não há papel, ex.: claude-sonnet-5-5'),
       },
-    }, guarded(({ title, task, agent, model }: { title: string; task: string; agent?: 'claude' | 'codex'; model?: string }) => {
-      const pane = core.spawnHelper(caller, { title, task, cli: agent ?? 'claude', model: model ?? null })
-      return `Ajudante #${pane.id} aberto (${pane.title}). Ele vai mandar o retorno quando terminar.`
+    }, guarded(({ title, task, role, agent, model }: { title?: string; task: string; role?: string; agent?: 'claude' | 'codex'; model?: string }) => {
+      const pane = core.spawnHelper(caller, { title: title ?? '', task, cli: agent ?? 'claude', model: model ?? null, squadRoleId: role ?? null })
+      return `${pane.squadRole ?? 'Ajudante'} #${pane.id} aberto (${pane.title}). Ele vai mandar o retorno quando terminar.`
     }))
 
     server.registerTool('agent_close', {

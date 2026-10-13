@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import pty, { type IPty } from 'node-pty'
 import headless from '@xterm/headless'
 import type { Pane, PaneStatus, SpawnPaneRequest } from '@orbit/protocol'
-import { buildCommand, paneEnv, type AgentLaunch } from './command.ts'
+import { buildCommand, paneEnv, type AgentLaunch, type PaneCommand } from './command.ts'
 
 const SCROLLBACK_LIMIT = 512 * 1024
 /** Output silence after which a running pane is considered idle. */
@@ -29,6 +29,7 @@ export interface PaneManagerEvents {
 export interface SpawnInput {
   id: number
   request: SpawnPaneRequest
+  squadRole: string | null
   cwd: string
   launch: AgentLaunch
   env: Record<string, string>
@@ -40,19 +41,22 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   private readonly live = new Map<number, LivePane>()
   private readonly panes = new Map<number, Pane>()
   private readonly shell: string
+  private readonly command: (launch: AgentLaunch, shell: string) => PaneCommand
 
-  constructor(shell: string) {
+  constructor(shell: string, command: (launch: AgentLaunch, shell: string) => PaneCommand = buildCommand) {
     super()
     this.shell = shell
+    this.command = command
   }
 
-  spawn({ id, request, cwd, launch, env, hookDriven }: SpawnInput, cols = 100, rows = 30): Pane {
-    const { file, args } = buildCommand(launch, this.shell)
+  spawn({ id, request, squadRole, cwd, launch, env, hookDriven }: SpawnInput, cols = 100, rows = 30): Pane {
+    const { file, args } = this.command(launch, this.shell)
     const proc = pty.spawn(file, args, { name: 'xterm-256color', cols, rows, cwd, env: paneEnv(process.env, env) })
     const pane: Pane = {
       id,
       missionId: request.missionId,
       role: request.role,
+      squadRole,
       cli: request.cli,
       model: request.model,
       title: request.title,

@@ -29,12 +29,13 @@ export function TitleBar({ connection, liveAgents }: { connection: OrbitState['c
   )
 }
 
-export function WorkspaceTabs({ workspaces, activeId, onSelect, onOpen, onNewMission }: {
+export function WorkspaceTabs({ workspaces, activeId, onSelect, onOpen, onNewMission, onSquads }: {
   workspaces: Workspace[]
   activeId: string | null
   onSelect: (id: string) => void
   onOpen: () => void
   onNewMission: (() => void) | null
+  onSquads: () => void
 }) {
   return (
     <nav className="tabs" aria-label="Workspaces">
@@ -47,6 +48,7 @@ export function WorkspaceTabs({ workspaces, activeId, onSelect, onOpen, onNewMis
         ))}
         <button className="icon-btn" aria-label="Abrir pasta como workspace" onClick={onOpen}><PlusIcon size={15} /></button>
       </div>
+      <button className="btn btn--ghost btn--sm" onClick={onSquads}>Squads</button>
       {onNewMission && (
         <button className="btn btn--primary btn--sm" onClick={onNewMission}><PlusIcon size={14} />Nova missão</button>
       )}

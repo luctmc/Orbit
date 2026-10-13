@@ -6,9 +6,10 @@ import { MissionRail } from './components/MissionRail.tsx'
 import { MissionView, type Layout } from './components/MissionView.tsx'
 import { FlowTimeline } from './components/FlowTimeline.tsx'
 import { AddAgentDialog, NewMissionDialog, OpenWorkspaceDialog } from './components/dialogs.tsx'
+import { SquadsDialog } from './components/SquadsDialog.tsx'
 import { OrbitMark, PlusIcon } from './components/icons.tsx'
 
-type DialogKind = 'workspace' | 'mission' | 'agent' | null
+type DialogKind = 'workspace' | 'mission' | 'agent' | 'squads' | null
 
 const BOOT_AT = Date.now()
 
@@ -80,6 +81,7 @@ export function App() {
         onSelect={(id) => { setWorkspaceId(id); setMissionId(null) }}
         onOpen={() => setDialog('workspace')}
         onNewMission={workspace ? () => setDialog('mission') : null}
+        onSquads={() => setDialog('squads')}
       />
 
       {state.lastError && (
@@ -130,8 +132,9 @@ export function App() {
       )}
 
       {dialog === 'workspace' && <OpenWorkspaceDialog onClose={() => setDialog(null)} />}
-      {dialog === 'mission' && workspace && <NewMissionDialog workspaceId={workspace.id} onClose={() => setDialog(null)} />}
+      {dialog === 'mission' && workspace && <NewMissionDialog workspaceId={workspace.id} onClose={() => setDialog(null)} onManageSquads={() => setDialog('squads')} />}
       {dialog === 'agent' && mission && <AddAgentDialog missionId={mission.id} onClose={() => setDialog(null)} />}
+      {dialog === 'squads' && <SquadsDialog onClose={() => setDialog(null)} />}
     </div>
   )
 }
