@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import type { Mission, Pane } from '@orbit/protocol'
-import { MODE_LABEL, STATUS } from '../orbit/labels.ts'
+import type { Mission, Pane, Workspace } from '@orbit/protocol'
+import { MODE_LABEL, pathText, STATUS } from '../orbit/labels.ts'
 import { ChevronIcon, MissionGlyph, PlusIcon } from './icons.tsx'
 
-export function MissionRail({ missions, panes, activeMissionId, selectedPaneId, onSelectMission, onSelectPane, onNewMission }: {
+export function MissionRail({ workspace, onEditWorkspace, missions, panes, activeMissionId, selectedPaneId, onSelectMission, onSelectPane, onNewMission }: {
+  workspace: Workspace
+  onEditWorkspace: () => void
   missions: Mission[]
   panes: Pane[]
   activeMissionId: string | null
@@ -32,6 +34,15 @@ export function MissionRail({ missions, panes, activeMissionId, selectedPaneId, 
 
   return (
     <aside className="rail" aria-label="Missões">
+      <div className="rail-ws">
+        <div className="rail-ws__text">
+          <span className="rail-ws__name">{workspace.name}</span>
+          <span className="rail-ws__folders" title={workspace.folders.join('\n')}>
+            {workspace.folders.length === 1 ? pathText(workspace.path) : `${workspace.folders.length} pastas`}
+          </span>
+        </div>
+        <button className="btn btn--ghost btn--sm" onClick={onEditWorkspace} aria-label={`Editar workspace ${workspace.name}`}>Editar</button>
+      </div>
       <div className="rail__head">
         <span className="eyebrow">Missões</span>
         <button className="icon-btn" aria-label="Nova missão" onClick={onNewMission}><PlusIcon size={14} /></button>

@@ -42,6 +42,10 @@ npm test
 
 ## Estado atual
 
+- **Workspaces com várias pastas**: um workspace junta uma ou mais pastas (a primeira é a
+  principal, onde os agentes começam). No app as pastas vêm do seletor nativo do macOS; no
+  navegador, colando o caminho. Todo agente recebe as outras pastas com `--add-dir` (Claude e
+  Codex) e a lista delas nas instruções; o `whoami` do MCP também devolve as pastas.
 - Tela de missão: workspaces em abas, missões, tripulação, agentes em grade/foco com terminal real,
   barra de comando para o agente selecionado, fluxo da missão.
 - **MCP do Orbit** (`POST /mcp`, um token por agente): o líder abre ajudantes (`agent_spawn`),

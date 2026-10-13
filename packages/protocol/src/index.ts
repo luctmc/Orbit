@@ -5,7 +5,10 @@ export type MissionStatus = 'active' | 'archived'
 
 export interface Workspace {
   id: string
+  /** The main folder: agents start here. Always `folders[0]`. */
   path: string
+  /** Every folder in the workspace, main first. Agents get access to all of them. */
+  folders: string[]
   name: string
   lastOpenedAt: number
 }
@@ -142,6 +145,10 @@ export interface SpawnPaneRequest {
 
 export type ClientMessage =
   | { type: 'workspace.open'; path: string }
+  /** A workspace made of several folders; the first is the main one. */
+  | { type: 'workspace.create'; name: string; folders: string[] }
+  /** Rename, or replace the folder list (new agents get the new list). */
+  | { type: 'workspace.update'; workspaceId: string; name?: string; folders?: string[] }
   | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; squadId?: string | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'> }
   | { type: 'mission.archive'; missionId: string }
   | { type: 'pane.spawn'; request: SpawnPaneRequest }
@@ -187,4 +194,5 @@ export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/
 
 export const SQUAD_LIMITS = { name: 60, description: 280, playbook: 8000, brief: 4000, roles: 8 } as const
+export const WORKSPACE_LIMITS = { folders: 10, name: 60 } as const
 export const ROUTING_LIMITS = { taskTypes: 16, name: 40, description: 200, skills: 6, skill: 40 } as const

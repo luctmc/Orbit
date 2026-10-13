@@ -39,10 +39,11 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
   const self = () => core.missionPanes(caller.missionId).find((p) => p.id === caller.id) ?? caller
 
   server.registerTool('whoami', {
-    description: 'Quem você é no Orbit: seu número de agente, papel, missão e objetivo.',
+    description: 'Quem você é no Orbit: seu número de agente, papel, missão, objetivo e as pastas do workspace (a primeira é a principal).',
   }, guarded(() => {
     const mission = core.mission(caller.missionId)
-    return { agent: agentView(self()), mission: mission && { title: mission.title, mode: mission.mode, objective: mission.objective } }
+    const workspace = core.missionWorkspace(caller.missionId)
+    return { agent: agentView(self()), mission: mission && { title: mission.title, mode: mission.mode, objective: mission.objective }, workspace: workspace && { name: workspace.name, folders: workspace.folders } }
   }))
 
   server.registerTool('agent_list', {
