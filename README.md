@@ -61,6 +61,13 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Uso de tokens e limites**: cada agente mostra os tokens da sessão e quanto do contexto está
+  ocupado; a missão soma os agentes e a Base mostra os tokens por dia (Claude e Codex) nos últimos
+  12 meses. A barra de título mostra o uso das janelas de 5 h e semanal de cada conta, com quando
+  renovam. O Claude manda os dados pela status line do Orbit (`POST /status`, com o token do
+  agente); do Codex, o sidecar lê o arquivo de sessão em `~/.codex/sessions` aberto na pasta do
+  agente. O custo que o Claude informa é o equivalente em preço de API (não é cobrado em
+  assinatura). Os limites só aparecem depois da primeira chamada de cada CLI.
 - **Hooks do Claude Code** (`POST /hooks`): status real (`rodando`, `ocioso`, `espera você` com o
   motivo; o Claude avisa alguns segundos depois de abrir o pedido de permissão). Codex e terminais
   usam a atividade do terminal, então um pedido de confirmação do Codex aparece como `rodando`.
@@ -81,7 +88,7 @@ npm test
 ### Como um agente é lançado
 
 Para cada agente o sidecar escreve em `~/.orbit/panes/<id>/` (modo 0600): `mcp.json`,
-`settings.json` (hooks), `role.md` e `task.md`. O CLI roda num login shell com
+`settings.json` (hooks e status line), `role.md` e `task.md`. O CLI roda num login shell com
 `--mcp-config`, `--settings`, `--append-system-prompt "$(cat role.md)"` e a tarefa como primeiro
 prompt; texto livre nunca vai direto para a linha de comando. O token do agente só existe no
 ambiente dele (`ORBIT_PANE_TOKEN`) e o auto-update do Claude fica desligado nos agentes, para

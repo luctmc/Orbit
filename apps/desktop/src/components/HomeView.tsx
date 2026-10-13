@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Mission, MissionEvent, Pane, Workspace } from '@orbit/protocol'
+import type { Mission, Pane, UsageDay, Workspace } from '@orbit/protocol'
 import { useOrbit } from '../orbit/context.tsx'
-import { CLI_LABEL, MODE_LABEL, STATUS } from '../orbit/labels.ts'
+import { CLI_LABEL, MODE_LABEL, STATUS, tokensText } from '../orbit/labels.ts'
 import { pathText } from '../orbit/labels.ts'
 import { dayKey, relativeTime, startOfDay } from '../orbit/time.ts'
 import { OrbitMark, PlusIcon, SearchIcon } from './icons.tsx'
@@ -26,7 +26,7 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
   onNewMission: (() => void) | null
   onAddFolder: () => void
 }) {
-  const { missions, panes, events, workspaces, squads } = useOrbit()
+  const { missions, panes, events, workspaces, squads, usageDays } = useOrbit()
   const [filter, setFilter] = useState<Filter>('todas')
   const [query, setQuery] = useState('')
   const search = useRef<HTMLInputElement>(null)
@@ -119,7 +119,7 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
             {!needle && visible.length > shown.length && <p className="muted home__more">Mais {visible.length - shown.length} na busca ou nas abas de workspace.</p>}
           </section>
 
-          <ActivityMap events={events} />
+          <ActivityMap days={usageDays} />
         </main>
 
         <aside className="home__aside" aria-labelledby="home-workspaces">
@@ -139,7 +139,7 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
 function MissionCard({ summary, squadName, onOpen }: { summary: MissionSummary; squadName: string | undefined; onOpen: () => void }) {
   const { mission, workspace, crew, live, lastActivity } = summary
   const lead = crew.find((p) => p.role === 'lead')
-  const meta = [workspace?.name, lead && [CLI_LABEL[lead.cli], lead.model].filter(Boolean).join(' '), relativeTime(lastActivity)].filter(Boolean).join(' · ')
+  const meta = [workspace?.name, lead && [CLI_LABEL[lead.cli], lead.model].filter(Boolean).join(' '), mission.usage.total > 0 && `${tokensText(mission.usage.total)} tokens`, relativeTime(lastActivity)].filter(Boolean).join(' · ')
   return (
     <article className="home-card">
       <div className="home-card__main">
@@ -194,45 +194,52 @@ function WorkspaceGroup({ label, workspaces, live, onOpen }: { label: string; wo
   )
 }
 
-/** Agents opened per day over the last year, from the mission flow. */
-function ActivityMap({ events }: { events: MissionEvent[] }) {
-  const { cells, total, months } = useMemo(() => {
-    const perDay = new Map<string, number>()
-    let total = 0
+/** Tokens the agents used per day over the last year, split by CLI in each day's tooltip. */
+function ActivityMap({ days }: { days: UsageDay[] }) {
+  const { cells, total, split, months } = useMemo(() => {
+    const perDay = new Map(days.map((d) => [d.day, d]))
     const today = startOfDay(Date.now())
     const first = new Date(today)
     first.setDate(first.getDate() - (WEEKS - 1) * 7 - first.getDay())
-    for (const e of events) {
-      if (e.kind !== 'pane.spawned' || e.at < first.getTime()) continue
-      perDay.set(dayKey(e.at), (perDay.get(dayKey(e.at)) ?? 0) + 1)
-      total++
+    const counted: UsageDay[] = []
+    for (const day = new Date(first); day.getTime() <= today; day.setDate(day.getDate() + 1)) {
+      const d = perDay.get(dayKey(day.getTime()))
+      if (d) counted.push(d)
     }
-    const max = Math.max(1, ...perDay.values())
+    const split = { claude: counted.reduce((n, d) => n + d.claude, 0), codex: counted.reduce((n, d) => n + d.codex, 0) }
+    const max = Math.max(1, ...counted.map((d) => d.claude + d.codex))
     const cells: Array<{ key: string; level: number; label: string }> = []
     const months: Array<{ column: number; label: string }> = []
     const day = new Date(first)
     for (let i = 0; day.getTime() <= today; i++, day.setDate(day.getDate() + 1)) {
-      const count = perDay.get(dayKey(day.getTime())) ?? 0
-      const level = count === 0 ? 0 : Math.min(4, Math.ceil((count / max) * 4))
+      const key = dayKey(day.getTime())
+      const d = perDay.get(key)
+      const count = d ? d.claude + d.codex : 0
+      // Square root, so one heavy day does not wash out the rest.
+      const level = count === 0 ? 0 : Math.max(1, Math.min(4, Math.ceil(Math.sqrt(count / max) * 4)))
       const date = day.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
-      cells.push({ key: dayKey(day.getTime()), level, label: `${date}: ${count} ${count === 1 ? 'agente aberto' : 'agentes abertos'}` })
+      const parts = d ? [d.claude && `Claude ${tokensText(d.claude)}`, d.codex && `Codex ${tokensText(d.codex)}`].filter(Boolean).join(', ') : ''
+      cells.push({ key, level, label: count ? `${date}: ${tokensText(count)} tokens (${parts})` : `${date}: nenhum token` })
       if (day.getDate() === 1) months.push({ column: Math.floor(i / 7) + 1, label: day.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') })
     }
-    return { cells, total, months }
-  }, [events])
+    return { cells, total: split.claude + split.codex, split, months }
+  }, [days])
 
   return (
     <section aria-labelledby="home-activity" className="home__section">
       <div className="home__section-head">
         <h2 id="home-activity" className="eyebrow">Atividade · 12 meses</h2>
-        <span className="muted"><strong className="home__total">{total}</strong> {total === 1 ? 'agente aberto' : 'agentes abertos'}</span>
+        <span className="muted">
+          <strong className="home__total">{tokensText(total)}</strong> tokens
+          {total > 0 && ` · Claude ${tokensText(split.claude)} · Codex ${tokensText(split.codex)}`}
+        </span>
       </div>
       <div className="activity">
         <div className="activity__scroll">
           <div className="activity__months" aria-hidden="true" style={{ gridTemplateColumns: `repeat(${Math.ceil(cells.length / 7)}, var(--cell))` }}>
             {months.map((m) => <span key={`${m.column}-${m.label}`} style={{ gridColumn: `${m.column} / span 4` }}>{m.label}</span>)}
           </div>
-          <div className="activity__grid" role="img" aria-label={`Agentes abertos por dia nos últimos 12 meses: ${total} no total`}>
+          <div className="activity__grid" role="img" aria-label={`Tokens por dia nos últimos 12 meses: ${tokensText(total)} no total`}>
             {cells.map((c) => <span key={c.key} className={`activity__cell activity__cell--${c.level}`} title={c.label} />)}
           </div>
         </div>

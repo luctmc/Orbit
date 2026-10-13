@@ -30,3 +30,16 @@ export function pathText(path: string): string {
 export function timeOf(at: number): string {
   return new Date(at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
+
+/** 950, "41 mil", "1,2 mi" — token counts at a glance. */
+export function tokensText(n: number): string {
+  if (n >= 1e6) return `${(n / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`
+  if (n >= 1e3) return `${Math.round(n / 1e3).toLocaleString('pt-BR')} mil`
+  return String(n)
+}
+
+/** API-equivalent cost Claude reports; on a subscription it is not billed. */
+export function costText(usd: number | null): string | null {
+  if (usd === null || usd <= 0) return null
+  return usd < 0.01 ? '< US$ 0,01' : `US$ ${usd.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}

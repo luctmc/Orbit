@@ -120,7 +120,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
 
 async function handleAgentRequest(core: OrbitCore, port: number, req: IncomingMessage, res: ServerResponse): Promise<void> {
   const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname
-  if (path !== '/mcp' && path !== '/hooks') return void res.writeHead(404).end()
+  if (path !== '/mcp' && path !== '/hooks' && path !== '/status') return void res.writeHead(404).end()
 
   // Agents are CLIs: a browser Origin or a foreign Host means a web page is trying to reach us.
   const host = req.headers.host ?? ''
@@ -135,6 +135,10 @@ async function handleAgentRequest(core: OrbitCore, port: number, req: IncomingMe
 
   if (path === '/hooks') {
     core.hookReport(caller.id, (body ?? {}) as HookPayload)
+    return void res.writeHead(204).end()
+  }
+  if (path === '/status') {
+    core.statusReport(caller.id, body)
     return void res.writeHead(204).end()
   }
   await handleMcp(core, caller, req, res, body)

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { Mission, Pane } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
-import { MODE_LABEL } from '../orbit/labels.ts'
+import { costText, MODE_LABEL, tokensText } from '../orbit/labels.ts'
 import { ArchiveIcon, PlusIcon, SendIcon } from './icons.tsx'
 import { PaneView } from './PaneView.tsx'
 
@@ -40,7 +40,10 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
             <span className={`badge badge--${mission.mode}`}>{MODE_LABEL[mission.mode]}{squad ? ` · ${squad.name}` : ''}</span>
             {archived && <span className="badge">Arquivada</span>}
           </div>
-          <p className="muted">{mission.objective || 'Sem objetivo descrito.'} · {alive} {alive === 1 ? 'agente vivo' : 'agentes vivos'}</p>
+          <p className="muted">
+            {mission.objective || 'Sem objetivo descrito.'} · {alive} {alive === 1 ? 'agente vivo' : 'agentes vivos'}
+            {mission.usage.total > 0 && <span title={costText(mission.usage.costUsd) ? `${costText(mission.usage.costUsd)} em preço de API (Claude)` : undefined}> · {tokensText(mission.usage.total)} tokens</span>}
+          </p>
         </div>
         <div className="mission__actions">
           <div className="segmented" role="group" aria-label="Layout dos agentes">
