@@ -2,13 +2,13 @@ import { statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { EFFORTS, type AgentCli, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { EFFORTS, WORKSPACE_LIMITS, type AgentCli, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { normalizeRouting } from './routing.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import type { AgentLaunch, PaneCommand } from './command.ts'
 import { statusFromHook, type HookPayload } from './hooks.ts'
 import { PaneManager, type PaneSnapshot } from './panes.ts'
-import { crewRole, leadRole, objectiveTask } from './prompts.ts'
+import { crewRole, leadRole, objectiveTask, workspaceNote } from './prompts.ts'
 import { normalizeSquad } from './squads.ts'
 import { Store } from './store.ts'
 
@@ -77,9 +77,22 @@ export class OrbitCore {
   handle(message: ClientMessage): void {
     switch (message.type) {
       case 'workspace.open': {
-        const path = resolve(message.path)
-        if (!isAbsolute(message.path) || !isDirectory(path)) throw new Error(`Pasta não encontrada: ${message.path}`)
-        this.broadcast({ type: 'workspace.updated', workspace: this.store.openWorkspace(path) })
+        const [path] = validFolders([message.path])
+        this.broadcast({ type: 'workspace.updated', workspace: this.store.openWorkspace(path!) })
+        return
+      }
+      case 'workspace.create': {
+        const folders = validFolders(message.folders)
+        this.broadcast({ type: 'workspace.updated', workspace: this.store.createWorkspace(workspaceName(message.name), folders) })
+        return
+      }
+      case 'workspace.update': {
+        if (!this.store.workspace(message.workspaceId)) throw new Error('Workspace desconhecido')
+        const workspace = this.store.updateWorkspace(message.workspaceId, {
+          name: message.name === undefined ? undefined : workspaceName(message.name),
+          folders: message.folders === undefined ? undefined : validFolders(message.folders),
+        })
+        if (workspace) this.broadcast({ type: 'workspace.updated', workspace })
         return
       }
       case 'mission.create': {
@@ -176,6 +189,12 @@ export class OrbitCore {
     return this.store.routing()
   }
 
+  /** The workspace a mission runs in. */
+  missionWorkspace(missionId: string) {
+    const workspaceId = this.store.mission(missionId)?.workspaceId
+    return workspaceId ? this.store.workspace(workspaceId) : undefined
+  }
+
   /** The squad a mission follows, if any. */
   missionSquad(missionId: string): Squad | undefined {
     const squadId = this.store.mission(missionId)?.squadId
@@ -269,7 +288,8 @@ export class OrbitCore {
       endpoint: this.endpoint,
       token,
       hookCommand: hookCommand(process.execPath, HOOK_SCRIPT),
-      rolePrompt: request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, lead, squadRole, taskType),
+      addDirs: workspace.folders.slice(1),
+      rolePrompt: workspaceNote(workspace.folders) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, lead, squadRole, taskType)),
       task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
     })
 
@@ -333,6 +353,24 @@ export class OrbitCore {
   private event(missionId: string, kind: MissionEventKind, title: string, body: string, paneId: number | null): void {
     this.broadcast({ type: 'event.added', event: this.store.addEvent({ missionId, kind, title, body, paneId }) })
   }
+}
+
+/** Absolute, existing, distinct folders; at least one, at most WORKSPACE_LIMITS.folders. */
+function validFolders(input: unknown): string[] {
+  if (!Array.isArray(input) || input.length === 0) throw new Error('Inclua pelo menos uma pasta')
+  if (input.length > WORKSPACE_LIMITS.folders) throw new Error(`No máximo ${WORKSPACE_LIMITS.folders} pastas por workspace`)
+  const folders: string[] = []
+  for (const raw of input) {
+    const given = typeof raw === 'string' ? raw.trim() : ''
+    if (!isAbsolute(given) || !isDirectory(resolve(given))) throw new Error(`Pasta não encontrada: ${given || '(vazia)'}`)
+    const path = resolve(given)
+    if (!folders.includes(path)) folders.push(path)
+  }
+  return folders
+}
+
+function workspaceName(value: unknown): string {
+  return typeof value === 'string' ? value.trim().slice(0, WORKSPACE_LIMITS.name) : ''
 }
 
 function isDirectory(path: string): boolean {

@@ -10,6 +10,8 @@ export interface AgentLaunch {
   cli: AgentCli
   model: string | null
   effort?: Effort | null
+  /** Extra workspace folders the agent may read and write besides its cwd. */
+  addDirs?: string[]
   /** Claude: MCP config file. */
   mcpConfigPath?: string
   /** Claude: settings file carrying the status hooks. */
@@ -44,6 +46,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
     parts.push('claude')
     if (model) parts.push('--model', model)
     if (effort) parts.push('--effort', effort)
+    for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
     if (launch.mcpConfigPath) parts.push('--mcp-config', shellQuote(launch.mcpConfigPath))
     if (launch.settingsPath) parts.push('--settings', shellQuote(launch.settingsPath))
     if (launch.rolePromptPath) parts.push('--append-system-prompt', fromFile(launch.rolePromptPath))
@@ -52,6 +55,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
     parts.push('codex')
     if (model) parts.push('-m', model)
     if (effort) parts.push('-c', shellQuote(`model_reasoning_effort="${effort}"`))
+    for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
     if (launch.mcpUrl) {
       parts.push('-c', shellQuote(`mcp_servers.orbit.url="${launch.mcpUrl}"`))
       parts.push('-c', shellQuote('mcp_servers.orbit.bearer_token_env_var="ORBIT_PANE_TOKEN"'))

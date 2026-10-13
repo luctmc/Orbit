@@ -54,6 +54,20 @@ export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, lead: Pane | 
   ].join('\n\n')
 }
 
+/** Told to every agent of a multi-folder workspace, before its role. Empty for a single folder. */
+export function workspaceNote(folders: string[]): string {
+  if (folders.length <= 1) return ''
+  const [main, ...others] = folders
+  return [
+    `Este workspace tem ${folders.length} pastas, e todas fazem parte do trabalho:`,
+    `- ${main} (pasta principal: você começa nela)`,
+    ...others.map((f) => `- ${f}`),
+    'Você tem acesso de leitura e escrita a todas. Fora da principal, use caminhos absolutos; ao entregar, diga em qual pasta fica cada mudança.',
+    '',
+    '',
+  ].join('\n')
+}
+
 export function objectiveTask(mission: Mission): string {
   return `Objetivo da missão:\n\n${mission.objective}`
 }

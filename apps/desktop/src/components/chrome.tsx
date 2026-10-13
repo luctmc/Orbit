@@ -45,11 +45,11 @@ export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSele
       <button className="tabs__home" aria-label="Base" aria-current={homeActive} title="Base" onClick={onHome}><HomeIcon size={18} /></button>
       <div className="tabs__list">
         {workspaces.map((w) => (
-          <button key={w.id} aria-current={w.id === activeId} className="tab" title={w.path} onClick={() => onSelect(w.id)}>
+          <button key={w.id} aria-current={w.id === activeId} className="tab" title={w.folders.join('\n')} onClick={() => onSelect(w.id)}>
             {w.name}
           </button>
         ))}
-        <button className="icon-btn" aria-label="Abrir pasta como workspace" onClick={onOpen}><PlusIcon size={15} /></button>
+        <button className="icon-btn" aria-label="Novo workspace" onClick={onOpen}><PlusIcon size={15} /></button>
       </div>
       <button className="btn btn--ghost btn--sm" onClick={onSquads}>Squads</button>
       <button className="btn btn--ghost btn--sm" onClick={onSettings} title="Quem faz cada tarefa">Ajustes</button>

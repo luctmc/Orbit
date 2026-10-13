@@ -70,23 +70,6 @@ function invalidModel(choice: AgentChoice): boolean {
   return model !== null && !MODEL_ID.test(model)
 }
 
-export function OpenWorkspaceDialog({ onClose }: { onClose: () => void }) {
-  const client = useOrbitClient()
-  const [path, setPath] = useState('')
-  return (
-    <Dialog eyebrow="Workspace" title="Abrir pasta" submitLabel="Abrir" onClose={onClose} onSubmit={() => {
-      if (!path.trim()) return
-      client.send({ type: 'workspace.open', path: path.trim() })
-      onClose()
-    }}>
-      <div className="field">
-        <label htmlFor="ws-path">Caminho absoluto da pasta do projeto</label>
-        <input id="ws-path" className="mono" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/Users/voce/projetos/meu-app" autoFocus spellCheck={false} />
-      </div>
-    </Dialog>
-  )
-}
-
 export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManageSquads, onManageRouting }: { workspaceId: string; workspaceName: string; onClose: () => void; onManageSquads: () => void; onManageRouting: () => void }) {
   const client = useOrbitClient()
   const { squads, routing } = useOrbit()

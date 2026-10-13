@@ -11,6 +11,8 @@ export interface AgentFilesInput {
   cli: AgentCli
   model: string | null
   effort: Effort | null
+  /** Workspace folders besides the main one (the agent's cwd). */
+  addDirs?: string[]
   endpoint: string
   token: string
   hookCommand: string
@@ -31,7 +33,7 @@ export function writeAgentFiles(input: AgentFilesInput): AgentLaunch {
     return path
   }
 
-  const launch: AgentLaunch = { cli, model: input.model, effort: input.effort }
+  const launch: AgentLaunch = { cli, model: input.model, effort: input.effort, addDirs: input.addDirs ?? [] }
   if (cli === 'shell') return launch
 
   if (input.rolePrompt) launch.rolePromptPath = write('role.md', input.rolePrompt)

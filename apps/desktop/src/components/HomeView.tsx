@@ -71,7 +71,7 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
   const liveAgents = panes.filter((p) => p.status !== 'exited').length
   const liveByWorkspace = new Map<string, number>()
   for (const s of summaries) if (s.workspace) liveByWorkspace.set(s.workspace.id, (liveByWorkspace.get(s.workspace.id) ?? 0) + s.live)
-  const sortedWorkspaces = [...workspaces].filter((w) => matches(w.name) || matches(w.path)).sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
+  const sortedWorkspaces = [...workspaces].filter((w) => matches(w.name) || w.folders.some((f) => matches(f))).sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
   const busy = sortedWorkspaces.filter((w) => (liveByWorkspace.get(w.id) ?? 0) > 0)
   const quiet = sortedWorkspaces.filter((w) => (liveByWorkspace.get(w.id) ?? 0) === 0)
 
@@ -125,7 +125,7 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
         <aside className="home__aside" aria-labelledby="home-workspaces">
           <div className="home__section-head">
             <h2 id="home-workspaces" className="eyebrow">Workspaces</h2>
-            <button className="btn btn--ghost btn--sm" onClick={onAddFolder}><PlusIcon size={14} />Adicionar pasta</button>
+            <button className="btn btn--ghost btn--sm" onClick={onAddFolder}><PlusIcon size={14} />Novo workspace</button>
           </div>
           {sortedWorkspaces.length === 0 && <p className="muted">{needle ? 'Nenhuma pasta encontrada.' : 'Nenhuma pasta aberta ainda.'}</p>}
           {busy.length > 0 && <WorkspaceGroup label="Com agentes vivos" workspaces={busy} live={liveByWorkspace} onOpen={onOpenWorkspace} />}
@@ -182,7 +182,7 @@ function WorkspaceGroup({ label, workspaces, live, onOpen }: { label: string; wo
                 <span className={`dot ${count > 0 ? 'dot--live' : 'dot--off'}`} />
                 <span className="ws-item__text">
                   <span className="ws-item__name">{w.name}</span>
-                  <span className="ws-item__path" title={w.path}>{pathText(w.path)}</span>
+                  <span className="ws-item__path" title={w.folders.join('\n')}>{w.folders.length > 1 ? `${w.folders.length} pastas · ` : ''}{pathText(w.path)}</span>
                 </span>
                 <span className="muted ws-item__when">{count > 0 ? `${count} ${count === 1 ? 'agente' : 'agentes'}` : relativeTime(w.lastOpenedAt)}</span>
               </button>

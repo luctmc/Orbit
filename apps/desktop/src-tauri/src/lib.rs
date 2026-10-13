@@ -14,6 +14,7 @@ async fn orbit_connection(sidecar: tauri::State<'_, Sidecar>) -> Result<Connecti
 
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let sidecar = Sidecar::start(app.handle())?;
             app.manage(sidecar);

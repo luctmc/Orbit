@@ -29,6 +29,7 @@ export class Store {
     // Older state files predate some fields.
     this.state.customSquads ??= []
     this.state.routing ??= null
+    for (const workspace of this.state.workspaces) workspace.folders ??= [workspace.path]
     for (const mission of this.state.missions) mission.squadId ??= null
     // Processes do not survive a sidecar restart.
     for (const pane of this.state.panes) {
@@ -83,15 +84,32 @@ export class Store {
     return this.state.customSquads.length !== before
   }
 
+  /** A single-folder workspace: reuses the one whose only folder is `path`. */
   openWorkspace(path: string): Workspace {
-    let workspace = this.state.workspaces.find((w) => w.path === path)
-    if (!workspace) {
-      workspace = { id: randomUUID(), path, name: basename(path) || path, lastOpenedAt: 0 }
-      this.state.workspaces.push(workspace)
+    const existing = this.state.workspaces.find((w) => w.folders.length === 1 && w.path === path)
+    if (existing) {
+      existing.lastOpenedAt = Date.now()
+      this.save()
+      return structuredClone(existing)
     }
-    workspace.lastOpenedAt = Date.now()
+    return this.createWorkspace('', [path])
+  }
+
+  /** `folders` are validated by the caller; the first one is the main folder. */
+  createWorkspace(name: string, folders: string[]): Workspace {
+    const workspace: Workspace = { id: randomUUID(), path: folders[0]!, folders: [...folders], name: name || defaultName(folders), lastOpenedAt: Date.now() }
+    this.state.workspaces.push(workspace)
     this.save()
-    return { ...workspace }
+    return structuredClone(workspace)
+  }
+
+  updateWorkspace(id: string, patch: { name?: string; folders?: string[] }): Workspace | undefined {
+    const workspace = this.workspace(id)
+    if (!workspace) return undefined
+    if (patch.folders) Object.assign(workspace, { folders: [...patch.folders], path: patch.folders[0] })
+    if (patch.name !== undefined) workspace.name = patch.name || defaultName(workspace.folders)
+    this.save()
+    return structuredClone(workspace)
   }
 
   workspace(id: string): Workspace | undefined {
@@ -175,4 +193,10 @@ export class Store {
     }
     return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null }
   }
+}
+
+/** "app" for one folder, "app + 2" for three. */
+function defaultName(folders: string[]): string {
+  const first = basename(folders[0] ?? '') || folders[0] || 'workspace'
+  return folders.length > 1 ? `${first} + ${folders.length - 1}` : first
 }

@@ -5,13 +5,14 @@ import { TitleBar, WorkspaceTabs } from './components/chrome.tsx'
 import { MissionRail } from './components/MissionRail.tsx'
 import { MissionView, type Layout } from './components/MissionView.tsx'
 import { FlowTimeline } from './components/FlowTimeline.tsx'
-import { AddAgentDialog, NewMissionDialog, OpenWorkspaceDialog } from './components/dialogs.tsx'
+import { AddAgentDialog, NewMissionDialog } from './components/dialogs.tsx'
+import { WorkspaceDialog } from './components/WorkspaceDialog.tsx'
 import { SquadsDialog } from './components/SquadsDialog.tsx'
 import { HomeView } from './components/HomeView.tsx'
 import { RoutingDialog } from './components/RoutingDialog.tsx'
 import { OrbitMark, PlusIcon } from './components/icons.tsx'
 
-type DialogKind = 'workspace' | 'mission' | 'agent' | 'squads' | 'routing' | null
+type DialogKind = 'workspace' | 'workspace-edit' | 'mission' | 'agent' | 'squads' | 'routing' | null
 
 const BOOT_AT = Date.now()
 
@@ -112,9 +113,9 @@ export function App() {
         <div className="welcome">
           <OrbitMark size={48} />
           <h1>Bem-vindo ao Orbit</h1>
-          <p className="muted">Abra a pasta de um projeto para lançar a primeira missão.</p>
+          <p className="muted">Crie um workspace com uma ou mais pastas de projeto para lançar a primeira missão.</p>
           <button className="btn btn--primary" onClick={() => setDialog('workspace')} disabled={state.connection !== 'open'}>
-            <PlusIcon size={14} />Abrir pasta
+            <PlusIcon size={14} />Novo workspace
           </button>
         </div>
       ) : view === 'home' ? (
@@ -127,6 +128,8 @@ export function App() {
       ) : (
         <div className="body">
           <MissionRail
+            workspace={workspace}
+            onEditWorkspace={() => setDialog('workspace-edit')}
             missions={missions}
             panes={state.panes}
             activeMissionId={mission?.id ?? null}
@@ -155,7 +158,8 @@ export function App() {
         </div>
       )}
 
-      {dialog === 'workspace' && <OpenWorkspaceDialog onClose={() => setDialog(null)} />}
+      {dialog === 'workspace' && <WorkspaceDialog onClose={() => setDialog(null)} />}
+      {dialog === 'workspace-edit' && workspace && <WorkspaceDialog workspace={workspace} onClose={() => setDialog(null)} />}
       {dialog === 'mission' && workspace && <NewMissionDialog workspaceId={workspace.id} workspaceName={workspace.name} onClose={() => setDialog(null)} onManageSquads={() => setDialog('squads')} onManageRouting={() => setDialog('routing')} />}
       {dialog === 'agent' && mission && <AddAgentDialog missionId={mission.id} onClose={() => setDialog(null)} />}
       {dialog === 'squads' && <SquadsDialog onClose={() => setDialog(null)} />}
