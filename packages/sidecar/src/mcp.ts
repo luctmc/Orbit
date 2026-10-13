@@ -2,10 +2,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
-import { EFFORTS, MODEL_ID, type Effort, type Pane } from '@orbit/protocol'
+import { BROWSER_KEYS, BROWSER_VIEWPORT, EFFORTS, MODEL_ID, type Effort, type Pane } from '@orbit/protocol'
 import type { OrbitCore } from './core.ts'
 
-type ToolResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean }
+type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
+type ToolResult = { content: Content[]; isError?: boolean }
+
+/** A tool body may return its own content (e.g. a screenshot) instead of text. */
+const isResult = (value: unknown): value is ToolResult => typeof value === 'object' && value !== null && Array.isArray((value as ToolResult).content)
 
 const text = (value: unknown): ToolResult => ({
   content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }],
@@ -14,7 +18,8 @@ const text = (value: unknown): ToolResult => ({
 /** Runs a tool body, turning domain errors into MCP tool errors the agent can read. */
 const guarded = <A>(body: (args: A) => unknown) => async (args: A): Promise<ToolResult> => {
   try {
-    return text(await body(args))
+    const value = await body(args)
+    return isResult(value) ? value : text(value)
   } catch (error) {
     return { ...text(error instanceof Error ? error.message : String(error)), isError: true }
   }
@@ -118,6 +123,8 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     inputSchema: { agent: z.number().int().describe('Número do agente'), lines: z.number().int().min(1).max(400).optional().describe('Quantas linhas finais (padrão 60)') },
   }, guarded(({ agent, lines }: { agent: number; lines?: number }) => core.readScreen(caller, agent, lines ?? 60) || '(tela vazia)'))
 
+  registerBrowserTools(server, core, caller)
+
   if (caller.role === 'crew') {
     server.registerTool('handoff_submit', {
       description: 'Entrega o resultado da sua tarefa ao líder. Use ao terminar ou se ficar bloqueado. O resumo é digitado no terminal do líder; os detalhes ficam guardados no fluxo da missão.',
@@ -132,6 +139,69 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
   }
 
   return server
+}
+
+/** The mission's browser: one page shared by its agents and shown to the person. */
+function registerBrowserTools(server: McpServer, core: OrbitCore, caller: Pane): void {
+  const { width, height } = BROWSER_VIEWPORT
+  server.registerTool('browser_open', {
+    description: `Abre um endereço no navegador da missão (Chromium sem janela, ${width}×${height}); o usuário vê a mesma página no Orbit. Use para conferir a aplicação rodando, ex.: http://localhost:5173. Espera a página carregar.`,
+    inputSchema: { url: z.string().min(1).max(2000).describe('Endereço http(s); "localhost:3000" também vale') },
+  }, guarded(async ({ url }: { url: string }) => {
+    const state = await core.browserOpen(caller, url)
+    return { url: state.url, title: state.title, error: state.error }
+  }))
+
+  server.registerTool('browser_screenshot', {
+    description: 'Captura a tela atual do navegador da missão (PNG). Coordenadas de clique são em pixels desta imagem.',
+  }, guarded(async () => ({ content: [{ type: 'image', data: await core.browserScreenshot(caller), mimeType: 'image/png' }] })))
+
+  server.registerTool('browser_text', {
+    description: 'Texto visível da página aberta (innerText), com endereço e título.',
+    inputSchema: { maxChars: z.number().int().min(100).max(100_000).optional().describe('Limite de caracteres (padrão 20000)') },
+  }, guarded(({ maxChars }: { maxChars?: number }) => core.browserText(caller, maxChars ?? 20_000)))
+
+  server.registerTool('browser_click', {
+    description: 'Clica num elemento (seletor CSS, de preferência) ou num ponto da tela (x, y da captura).',
+    inputSchema: {
+      selector: z.string().min(1).max(500).optional().describe('Seletor CSS, ex.: button[type=submit]'),
+      x: z.number().min(0).max(width).optional(),
+      y: z.number().min(0).max(height).optional(),
+    },
+  }, guarded(async ({ selector, x, y }: { selector?: string; x?: number; y?: number }) => {
+    if (!selector && (x === undefined || y === undefined)) throw new Error('Passe um seletor ou x e y')
+    const point = await core.browserClick(caller, selector ? { selector } : { x: x!, y: y! })
+    return `Clique em (${point.x}, ${point.y}).`
+  }))
+
+  server.registerTool('browser_type', {
+    description: 'Digita no campo que está com foco (clique nele antes). Com submit, tecla Enter no fim.',
+    inputSchema: { text: z.string().max(10_000), submit: z.boolean().optional() },
+  }, guarded(async ({ text: value, submit }: { text: string; submit?: boolean }) => {
+    await core.browserType(caller, value, submit ?? false)
+    return 'Digitado.'
+  }))
+
+  server.registerTool('browser_key', {
+    description: 'Pressiona uma tecla na página.',
+    inputSchema: { key: z.enum(BROWSER_KEYS as unknown as [string, ...string[]]) },
+  }, guarded(async ({ key }: { key: string }) => {
+    await core.browserKey(caller, key)
+    return `Tecla ${key}.`
+  }))
+
+  server.registerTool('browser_scroll', {
+    description: 'Rola a página (positivo desce, negativo sobe), em pixels.',
+    inputSchema: { dy: z.number().int().min(-5000).max(5000) },
+  }, guarded(async ({ dy }: { dy: number }) => {
+    await core.browserScroll(caller, dy)
+    return 'Rolado.'
+  }))
+
+  server.registerTool('browser_console', {
+    description: 'Mensagens do console, erros de JavaScript e requisições que falharam na página, das mais antigas às mais novas.',
+    inputSchema: { lines: z.number().int().min(1).max(200).optional().describe('Quantas (padrão 50)') },
+  }, guarded(({ lines }: { lines?: number }) => core.browserConsole(caller, lines ?? 50).join('\n') || '(nada no console)'))
 }
 
 /** POST /mcp — stateless Streamable HTTP; the bearer token picks the calling pane. */

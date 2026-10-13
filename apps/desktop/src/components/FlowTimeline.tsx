@@ -7,6 +7,7 @@ const TONE: Record<MissionEventKind, string> = {
   'pane.exited': 'off',
   'pane.waiting': 'wait',
   handoff: 'idle',
+  browser: 'neutral',
 }
 
 export function FlowTimeline({ events }: { events: MissionEvent[] }) {

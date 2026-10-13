@@ -21,6 +21,9 @@ export const ChevronIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M9 6l6
 export const FolderIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
 export const SearchIcon = (p: IconProps) => <svg {...stroke(p)}><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
 export const SendIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+export const GlobeIcon = (p: IconProps) => <svg {...stroke(p)}><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z" /></svg>
+export const BackIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M15 6l-6 6 6 6" /></svg>
+export const ReloadIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" /></svg>
 export const ArchiveIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M4 7h16v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM3 4h18v3H3zM10 11h4" /></svg>
 
 export function MissionGlyph({ size = 26 }: { size?: number }) {

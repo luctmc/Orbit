@@ -61,6 +61,14 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Navegador da missão**: cada missão tem uma página, aberta num Chromium sem janela (o Chrome,
+  Brave, Edge ou Chromium instalado; `ORBIT_BROWSER` escolhe outro). Os agentes usam as
+  ferramentas `browser_open`, `browser_screenshot`, `browser_text`, `browser_click`,
+  `browser_type`, `browser_key`, `browser_scroll` e `browser_console` do MCP; você vê a mesma
+  página ao vivo no painel **Navegador** da missão e pode digitar o endereço, clicar, rolar e
+  digitar nela. O navegador usa um perfil próprio do Orbit (`~/.orbit/browser`, sem os seus
+  cookies) e é controlado por pipe (`--remote-debugging-pipe`), sem porta aberta; ele fecha
+  junto com o Orbit, e arquivar a missão fecha a página dela.
 - **Contas** (Ajustes › Contas): além do login do Claude e do Codex deste Mac, dá para
   adicionar outras assinaturas (cada uma numa pasta própria, via `CLAUDE_CONFIG_DIR` ou
   `CODEX_HOME`, com login por um terminal dentro do Orbit) e chaves de API: Anthropic, OpenRouter

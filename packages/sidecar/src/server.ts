@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { timingSafeEqual } from 'node:crypto'
+import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { ClientMessage, ServerMessage } from '@orbit/protocol'
 import { OrbitCore, type CoreOptions } from './core.ts'
@@ -16,6 +16,7 @@ export interface ServerOptions {
   shell: string
   agentCommand?: CoreOptions['agentCommand']
   run?: CoreOptions['run']
+  browser?: CoreOptions['browser']
 }
 
 export interface RunningServer {
@@ -30,8 +31,11 @@ export interface RunningServer {
  * - agents, over HTTP `/mcp` and `/hooks`, each with its own pane token and no browser Origin.
  */
 export async function startServer(options: ServerOptions): Promise<RunningServer> {
-  /** Per connection: panes whose snapshot is being prepared, with the output held back meanwhile. */
-  const clients = new Map<WebSocket, Map<number, ServerMessage[]>>()
+  /**
+   * Per connection: panes whose snapshot is being prepared (with the output held back meanwhile)
+   * and the missions whose browser it is watching (frames only go there).
+   */
+  const clients = new Map<WebSocket, { id: string; attaching: Map<number, ServerMessage[]>; watching: Set<string> }>()
   const send = (ws: WebSocket, message: ServerMessage) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message))
   }
@@ -40,8 +44,10 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     shell: options.shell,
     agentCommand: options.agentCommand,
     run: options.run,
+    browser: options.browser,
     broadcast: (message) => {
-      for (const [ws, attaching] of clients) {
+      for (const [ws, { attaching, watching }] of clients) {
+        if (message.type === 'browser.frame' && !watching.has(message.missionId)) continue
         const held = message.type === 'pane.data' ? attaching.get(message.paneId) : undefined
         if (held) held.push(message)
         else send(ws, message)
@@ -54,7 +60,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
    * sent right behind the snapshot. The view ignores `pane.data` until its snapshot arrives.
    */
   const attach = async (ws: WebSocket, paneId: number) => {
-    const attaching = clients.get(ws)
+    const attaching = clients.get(ws)?.attaching
     if (!attaching || attaching.has(paneId)) return
     attaching.set(paneId, [])
     try {
@@ -87,18 +93,26 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   })
 
   wss.on('connection', (ws: WebSocket) => {
-    clients.set(ws, new Map())
+    const client = { id: randomUUID(), attaching: new Map<number, ServerMessage[]>(), watching: new Set<string>() }
+    clients.set(ws, client)
     for (const message of core.welcome()) send(ws, message)
     ws.on('message', (raw) => {
       try {
         const message = JSON.parse(String(raw)) as ClientMessage
         if (message.type === 'pane.attach') void attach(ws, message.paneId)
-        else core.handle(message)
+        else if (message.type === 'browser.watch') {
+          if (message.on) client.watching.add(message.missionId)
+          else client.watching.delete(message.missionId)
+          core.browser.watch(message.missionId, client.id, message.on)
+        } else core.handle(message)
       } catch (error) {
         send(ws, { type: 'error', message: error instanceof Error ? error.message : String(error) })
       }
     })
-    ws.on('close', () => clients.delete(ws))
+    ws.on('close', () => {
+      clients.delete(ws)
+      core.browser.unwatchAll(client.id)
+    })
   })
 
   await new Promise<void>((resolve) => http.listen(options.port, '127.0.0.1', resolve))
