@@ -123,9 +123,10 @@ test('each agent works in its own worktree and branch, and the mission becomes a
     assert.match(create, new RegExp(`--base 'main' --head '${branch}' --title 'Novo cálculo de frete' --body-file '[^']+pr-body.md' --draft$`))
     await ui.next('mission.updated', (m) => m.mission.git?.pr?.number === 7)
 
-    // Reopening a helper keeps its copy and branch.
+    // Reopening a helper keeps its number, copy and branch.
     ui.send({ type: 'pane.restart', paneId: helper.id, resume: false })
-    const { pane: again } = await ui.next('pane.updated', (m) => m.pane.id > helper.id && m.pane.title === 'Frete')
+    await ui.next('pane.removed', (m) => m.paneId === helper.id)
+    const { pane: again } = await ui.next('pane.updated', (m) => m.pane.id === helper.id && m.pane.title === 'Frete')
     assert.deepEqual([again.branch, again.cwd], [helper.branch, helper.cwd])
 
     // Archiving removes clean copies and keeps the one with uncommitted work; branches stay.

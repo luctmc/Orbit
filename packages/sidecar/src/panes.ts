@@ -59,6 +59,8 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   private readonly live = new Map<number, LivePane>()
   private readonly screens = new Map<number, Screen>()
   private readonly panes = new Map<number, Pane>()
+  /** Agents with a question for the person: they stay "waiting" until the person answers. */
+  private readonly asking = new Set<number>()
   private readonly shell: string
   private readonly command: (launch: AgentLaunch, shell: string) => PaneCommand
 
@@ -87,6 +89,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       cwd,
       status: 'starting',
       attention: null,
+      choices: null,
       deliveredAt: null,
       handoffStatus: null,
       assignedBy: null,
@@ -105,15 +108,21 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     this.screens.set(id, screen)
     this.panes.set(id, pane)
 
+    // A pane reopened under the same number gets a new process: the old one's last output and
+    // exit must not touch it.
+    const current = () => this.live.get(id) === live
     proc.onData((data) => {
+      if (!current()) return
       screen.term.write(data)
       this.emit('data', id, data)
       if (!live.hookDriven) this.markActive(id, live)
     })
     proc.onExit(({ exitCode }) => {
       if (live.idleTimer) clearTimeout(live.idleTimer)
+      if (!current()) return
       this.live.delete(id)
-      Object.assign(pane, { status: 'exited', attention: null, pid: null, exitCode })
+      this.asking.delete(id)
+      Object.assign(pane, { status: 'exited', attention: null, choices: null, pid: null, exitCode })
       this.emit('exit', { ...pane })
     })
     return { ...pane }
@@ -162,7 +171,11 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
 
   /** Drops everything kept for a closed pane. */
   forget(id: number): void {
+    const live = this.live.get(id)
+    if (live?.idleTimer) clearTimeout(live.idleTimer)
     this.kill(id)
+    this.live.delete(id)
+    this.asking.delete(id)
     this.screens.get(id)?.term.dispose()
     this.screens.delete(id)
     this.panes.delete(id)
@@ -194,10 +207,28 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     return this.live.has(id)
   }
 
+  /** The agent asked the person something (ask_user): waiting, with the question and choices. */
+  ask(id: number, question: string, choices: string[]): void {
+    const pane = this.panes.get(id)
+    if (!pane || pane.status === 'exited') return
+    const previous = pane.status
+    this.asking.add(id)
+    Object.assign(pane, { status: 'waiting', attention: question, choices: choices.length ? choices : null })
+    this.emit('status', { ...pane }, previous)
+  }
+
+  /** The person typed into the agent: its question, if any, is answered. */
+  answered(id: number): void {
+    const pane = this.panes.get(id)
+    if (!pane || !this.asking.delete(id)) return
+    Object.assign(pane, { status: pane.status === 'waiting' ? 'running' : pane.status, attention: null, choices: null })
+    this.emit('status', { ...pane }, 'waiting')
+  }
+
   /** Status reported by the agent itself (hooks). */
   report(id: number, status: PaneStatus, attention: string | null): void {
     const pane = this.panes.get(id)
-    if (!pane || pane.status === 'exited') return
+    if (!pane || pane.status === 'exited' || this.asking.has(id)) return
     if (pane.status === status && pane.attention === attention) return
     const previous = pane.status
     Object.assign(pane, { status, attention })
@@ -256,6 +287,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   private setStatus(id: number, status: PaneStatus): void {
     const pane = this.panes.get(id)
     if (!pane || pane.status === status || pane.status === 'exited') return
+    if (this.asking.has(id) && status !== 'exited') return
     const previous = pane.status
     pane.status = status
     this.emit('status', { ...pane }, previous)

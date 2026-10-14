@@ -103,7 +103,10 @@ export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: b
       {pane.status === 'waiting' && (
         <div className="attention" role="status">
           <span className="attention__text">Precisa de você: {pane.attention ?? 'o agente está esperando'}</span>
-          <button type="button" className="btn btn--sm btn--attention" onClick={onSelect}>Responder no terminal</button>
+          {pane.choices?.map((choice) => (
+            <button key={choice} type="button" className="btn btn--sm btn--ghost" onClick={() => client.send({ type: 'pane.submit', paneId: pane.id, text: choice })}>{choice}</button>
+          ))}
+          <button type="button" className="btn btn--sm btn--attention" onClick={onSelect}>{pane.choices ? 'Outra resposta' : 'Responder no terminal'}</button>
         </div>
       )}
       <footer className="pane__foot">

@@ -173,6 +173,17 @@ npm test
   entrega. O líder interrompe (`agent_interrupt`, Esc e nova orientação), retoma na mesma conversa
   (`agent_resume`) e, com o objetivo verificado, declara a missão pronta (`mission_ready`): ela
   ganha o selo "Pronta", o resumo entra no relatório e você recebe um aviso.
+- **Qualidade**: cada tipo de tarefa da tabela tem um "como fazer" (reproduzir antes de corrigir,
+  tentar refutar na revisão…) que vai na primeira mensagem do ajudante, então chega também ao
+  Codex; investigação e revisão são só leitura. O líder pode passar critérios de aceite, e o
+  ajudante só entrega `done` respondendo a cada um. Um ajudante pode abrir até dois sub-ajudantes,
+  cujos retornos voltam para ele. O líder pergunta a você com `ask_user` (o terminal fica "espera
+  você" com as opções em botões). O recibo de cada abertura fica no fluxo da missão. Num workspace
+  com várias pastas, o ajudante pode nascer na pasta do trabalho (`folder`).
+- **Continuidade**: retomar um agente mantém o número dele; ao abrir o Orbit, os agentes que
+  estavam rodando voltam na mesma conversa, e quem devia uma entrega recebe um aviso para
+  continuar (dá para desligar em Ajustes › Quem faz cada tarefa). A folga das contas do Codex é
+  lida do último arquivo de sessão de cada conta, mesmo sem agente do Orbit rodando nela.
 - Missão **agêntica**: o líder recebe o objetivo e as instruções de papel e monta o time sozinho,
   classificando cada atividade na tabela **Quem faz cada tarefa** (Ajustes): cada tipo de tarefa
   define agente, modelo, esforço (`--effort` no Claude, `model_reasoning_effort` no Codex) e

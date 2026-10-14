@@ -39,6 +39,22 @@ const agentView = (p: Pane) => ({
   handoff: p.handoffStatus,
 })
 
+const ACCEPT = z.array(z.string().min(1).max(300)).max(8).optional().describe('Critérios de aceite: o que precisa ser verdade para a entrega valer. O ajudante só entrega done respondendo a cada um')
+
+type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: 'claude' | 'codex'; model?: string; effort?: Effort; accept?: string[]; folder?: string }
+
+/** In a workspace with several folders, a helper can start in the one its work is in. */
+function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
+  const folders = core.missionWorkspace(caller.missionId)?.folders ?? []
+  return folders.length > 1 ? { folder: z.enum(folders as [string, ...string[]]).optional().describe(`Pasta onde o ajudante começa, quando o trabalho é noutro repositório do workspace (padrão: ${folders[0]})`) } : {}
+}
+
+/** Opens a helper and returns its line of the reply: number, title and the receipt. */
+function openHelper(core: OrbitCore, caller: Pane, h: HelperInput): string {
+  const { pane, receipt } = core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null })
+  return `#${pane.id} ${pane.title}\n${receipt.map((line) => `  ▸ ${line}`).join('\n')}`
+}
+
 /** One MCP server per request (stateless), scoped to the calling pane's identity and role. */
 function buildServer(core: OrbitCore, caller: Pane): McpServer {
   const server = new McpServer({ name: 'orbit', version: '0.1.0' })
@@ -89,12 +105,10 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       agent: z.enum(['claude', 'codex']).optional().describe(agentic ? 'Só se o usuário pediu uma CLI específica; sem isso o Orbit escolhe pela tabela' : 'Qual CLI usar sem papel nem tipo (padrão: claude)'),
       model: z.string().regex(MODEL_ID).optional().describe('Só se o usuário pediu um modelo específico'),
       effort: z.enum(EFFORTS as [Effort, ...Effort[]]).optional().describe('Só se o usuário pediu. Claude: low…max; Codex: depende do modelo (low a ultra)'),
+      accept: ACCEPT,
+      ...folderField(core, caller),
     }
-    type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: 'claude' | 'codex'; model?: string; effort?: Effort }
-    const open = (h: HelperInput) => {
-      const { pane, receipt } = core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null })
-      return `#${pane.id} ${pane.title}\n${receipt.map((line) => `  ▸ ${line}`).join('\n')}`
-    }
+    const open = (h: HelperInput) => openHelper(core, caller, h)
 
     server.registerTool('agent_spawn', {
       description: 'Abre um ajudante num terminal visível ao usuário, já com a tarefa. O Orbit escolhe a CLI (Claude ou Codex), o modelo, o esforço e a conta com mais folga pelo tipo da tarefa, e devolve um recibo dizendo o que escolheu e por quê. O ajudante entrega com handoff_submit, e o retorno chega sozinho ao seu terminal como "[Orbit] Retorno de #N": depois de delegar, encerre o seu turno e espere.',
@@ -139,8 +153,8 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       description: 'Retoma um ajudante que parou (processo encerrado, travou, o Orbit foi reaberto) na mesma conversa, com a mensagem para continuar. Ele volta com um número novo e o mesmo branch.',
       inputSchema: { agent: z.number().int().describe('Número do ajudante'), message: z.string().max(8000).optional().describe('O que fazer agora (padrão: continuar a tarefa e entregar)') },
     }, guarded(({ agent, message }: { agent: number; message?: string }) => {
-      const pane = core.resumeHelper(caller, agent, message ?? null)
-      return `#${agent} retomado como #${pane.id}. O retorno chega sozinho.`
+      core.resumeHelper(caller, agent, message ?? null)
+      return `#${agent} retomado na mesma conversa. O retorno chega sozinho.`
     }))
 
     server.registerTool('mission_ready', {
@@ -163,6 +177,17 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       }))
     }
 
+    server.registerTool('ask_user', {
+      description: 'Pergunta ao usuário algo que só ele decide. O seu terminal fica marcado como "espera você" com a pergunta e as opções em botões, e o usuário recebe um aviso; a resposta chega digitada no seu terminal. Depois de perguntar, encerre o turno.',
+      inputSchema: {
+        question: z.string().min(1).max(600).describe('A pergunta, com o contexto mínimo para decidir'),
+        choices: z.array(z.string().min(1).max(80)).max(6).optional().describe('Respostas sugeridas (até 6)'),
+      },
+    }, guarded(({ question, choices }: { question: string; choices?: string[] }) => {
+      core.askUser(caller, question, choices ?? [])
+      return 'Pergunta feita. Encerre o turno: a resposta chega no seu terminal.'
+    }))
+
     server.registerTool('handoff_list', {
       description: 'Íntegra dos retornos que os ajudantes enviaram nesta missão.',
     }, guarded(() => core.missionEvents(caller.missionId, 'handoff').map((e) => ({ from: e.paneId, at: new Date(e.at).toISOString(), text: e.body }))))
@@ -184,6 +209,29 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
   registerBrowserTools(server, core, caller)
   registerBoardTools(server, core, caller)
 
+  // Helpers the lead opened may open a couple of sub-helpers; their results come back to them.
+  if (caller.role === 'crew' && (core.childSlots(caller) > 0 || core.missionPanes(caller.missionId).some((p) => p.assignedBy === caller.id))) {
+    const kinds = core.routing().taskTypes
+    server.registerTool('agent_spawn', {
+      description: 'Abre um sub-ajudante para uma parte grande e independente da sua tarefa (no máximo 2 abertos). O Orbit escolhe CLI, modelo e conta; o retorno dele chega ao seu terminal, e a sua entrega final continua sendo sua.',
+      inputSchema: {
+        title: z.string().max(120).optional(),
+        task: z.string().min(1).max(20000).describe('A parte da tarefa, autocontida: contexto, arquivos, o que entregar, como verificar'),
+        kind: z.enum(kinds.map((t) => t.id) as [string, ...string[]]).optional().describe(`Tipo de tarefa (${kinds.map((t) => t.id).join(', ')}); sem ele o Orbit classifica`),
+        accept: ACCEPT,
+        ...folderField(core, caller),
+      },
+    }, guarded((h: HelperInput) => `Aberto:\n${openHelper(core, caller, h)}\n\nContinue a sua parte; o retorno dele chega sozinho.`))
+
+    server.registerTool('agent_close', {
+      description: 'Fecha um sub-ajudante seu que já entregou. Com force, fecha mesmo sem retorno (só se travou).',
+      inputSchema: { agent: z.number().int(), force: z.boolean().optional() },
+    }, guarded(({ agent, force }: { agent: number; force?: boolean }) => {
+      core.closeHelper(caller, agent, force === true)
+      return `Sub-ajudante #${agent} fechado.`
+    }))
+  }
+
   if (caller.role === 'crew') {
     server.registerTool('handoff_submit', {
       description: 'Entrega o resultado da sua tarefa a quem pediu (o líder, normalmente). done = terminou, com evidence; blocked = travou, com a pergunta ou o impedimento; progress = aviso no meio do caminho, só registrado (você continua). O resumo é digitado no terminal de quem recebe; os detalhes ficam no fluxo da missão.',
@@ -193,9 +241,10 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
         evidence: z.string().max(4000).optional().describe('Como verificou: comandos rodados e o resultado, testes, arquivos conferidos. Obrigatório com done'),
         details: z.string().max(20000).optional().describe('Detalhes opcionais (lista de arquivos, saídas de teste…)'),
         to: z.number().int().optional().describe('Entregar a outro agente da missão (ex.: o revisor) em vez de ao líder, quando a sua tarefa mandar'),
+        criteria: z.array(z.object({ item: z.number().int().min(1), met: z.boolean(), how: z.string().max(300) })).max(8).optional().describe('Resposta a cada critério de aceite da tarefa: número, se cumpriu e como conferiu'),
       },
-    }, guarded(({ summary, status, evidence, details, to }: { summary: string; status?: HandoffStatus; evidence?: string; details?: string; to?: number }) => {
-      const result = core.handoff(caller, { summary, status, evidence, details, to })
+    }, guarded(({ summary, status, evidence, details, to, criteria }: { summary: string; status?: HandoffStatus; evidence?: string; details?: string; to?: number; criteria?: Array<{ item: number; met: boolean; how: string }> }) => {
+      const result = core.handoff(caller, { summary, status, evidence, details, to, criteria })
       if (result.status === 'progress' && result.deliveredTo === null) return 'Progresso registrado no fluxo da missão. Continue e entregue com done ou blocked ao terminar.'
       return result.deliveredTo === null ? 'Retorno registrado no fluxo da missão (ninguém rodando para receber agora).' : `Retorno entregue a #${result.deliveredTo}.`
     }))
