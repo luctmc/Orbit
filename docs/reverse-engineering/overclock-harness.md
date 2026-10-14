@@ -337,3 +337,36 @@ Missão agêntica num Orbit separado. O usuário escolheu só o líder (Claude H
   - `npm test` passou (5/5), e os dois retornos chegaram ao líder, que resumiu quem fez o quê.
 - **Falhou:** o líder fechou o primeiro Codex (#38) antes de ele entregar ("por erro meu") e abriu outro (#40) com a mesma tarefa. Sem uma forma de esperar e sem proteção contra fechar quem não entregou, o líder julgou pela tela e errou. Isso confirma as lacunas 3 e 4 acima e acrescenta uma: o `agent_close` deveria recusar fechar um ajudante que ainda não entregou, salvo pedido explícito.
 - **Custo:** cerca de 294 mil tokens (líder Haiku com esforço alto, a maior parte em cache).
+
+---
+
+## 5. O que o Orbit já fechou
+
+### Fase 1, Maestro (PR #31)
+
+- Itens 2, 14: o líder não executa (prompt, reforço por `UserPromptSubmit`, `PreToolUse` recusa Edit/Write no Claude) e encerra o turno depois de delegar.
+- Itens 3, 4, 5: classificação por palavra-chave quando falta `kind`; recibo com tipo, CLI, conta e motivo; tabela de fábrica misturando Claude e Codex; CLIs permitidas por missão.
+- Itens 9, 10, 11: conta pela folga mais os agentes já nela, troca de CLI quando uma enche, recusa com "volta em"; `accounts_status`; `agent_spawn_many`.
+- `agent_close` recusa fechar quem não entregou (falha vista no teste da seção 4).
+
+### Fase 2, entrega garantida e comunicação
+
+- Item 15: hook Stop do ajudante Claude bloqueia uma vez (`stop_hook_active` evita laço) e, na segunda, o Orbit entrega a última mensagem (`last_assistant_message`) a quem espera. Conferido com o Claude real.
+- Item 25: no Codex, o fim do turno vem do `task_complete` do arquivo de sessão (com `last_agent_message`); a cobrança é digitada no terminal, e depois vem a entrega automática. Não sobrescrevemos o `notify` do Codex, que o usuário pode já usar.
+- Item 16: `status` (done, blocked, progress) e `evidence`, obrigatória com done.
+- Item 18: `to` entrega a outro agente, que passa a dever a entrega a quem lidera; `progress` só registra, sem acordar ninguém. A "origem da entrada" virou `assignedBy`: só deve entrega quem recebeu trabalho de um agente; mensagem do líder renova a dívida.
+- Itens 20, 21: `agent_resume` (mesma conversa, com a mensagem como próximo turno) e `agent_interrupt` (Esc e nova orientação).
+- Item 23: `mission_ready` marca a missão como pronta (recusa com ajudantes devendo), aviso no macOS, selo na tela e resumo no relatório; trabalho novo tira o selo.
+- Teste ao vivo: líder Haiku; correção no Claude Sonnet (bug), revisão no Codex (revisão, esforço alto), os dois com evidência; o revisor confirmou que os testes novos falham no código antigo; o líder declarou a missão pronta.
+
+### Ainda abertos
+
+- Item 6, 26, 27: método por tipo de tarefa no prompt (vale para o Codex também) e política de tiers.
+- Item 8: folga de contas sem agente rodando.
+- Item 12: pasta por ajudante.
+- Item 17: contrato de entrega (critérios de aceite conferidos no submit).
+- Item 19: sub-ajudantes com teto.
+- Item 22: pergunta formal ao usuário.
+- Item 32: recibo no fluxo da missão.
+- Item 33: retomar a tripulação ao reabrir o Orbit.
+- Itens 31 e 34 (tabela editada por agente, decisor LLM): baixo impacto, fora por ora.

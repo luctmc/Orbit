@@ -7,6 +7,10 @@ export interface HookPayload {
   tool_name?: string
   tool_input?: unknown
   session_id?: string
+  /** Stop: Claude is already continuing because a Stop hook blocked it once. */
+  stop_hook_active?: boolean
+  /** Stop: the text of the turn's last answer (recent Claude Code versions). */
+  last_assistant_message?: string
 }
 
 export interface HookStatus {

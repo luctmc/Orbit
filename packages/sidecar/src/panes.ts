@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import pty, { type IPty } from 'node-pty'
 import headless from '@xterm/headless'
 import serialize from '@xterm/addon-serialize'
-import type { Pane, PaneStatus, SpawnPaneRequest, TokenUsage } from '@orbit/protocol'
+import type { Pane, PaneHandoff, PaneStatus, SpawnPaneRequest, TokenUsage } from '@orbit/protocol'
 import { buildCommand, paneEnv, type AgentLaunch, type PaneCommand } from './command.ts'
 
 /** Output silence after which a running pane is considered idle. */
@@ -88,6 +88,8 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       status: 'starting',
       attention: null,
       deliveredAt: null,
+      handoffStatus: null,
+      assignedBy: null,
       usage: null,
       contextPercent: null,
       pid: proc.pid,
@@ -227,10 +229,17 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     return { ...pane }
   }
 
-  markDelivered(id: number): void {
+  /**
+   * Where the helper stands with its handoff: `assignedBy` gives it work (it owes a result again),
+   * a status records what it reported; done, blocked and auto count as delivered.
+   */
+  setHandoff(id: number, change: { status: PaneHandoff | null; assignedBy?: number }): void {
     const pane = this.panes.get(id)
     if (!pane) return
-    pane.deliveredAt = Date.now()
+    if (change.assignedBy !== undefined) pane.assignedBy = change.assignedBy
+    pane.handoffStatus = change.status
+    if (change.status === null) pane.deliveredAt = null
+    else if (change.status !== 'progress') pane.deliveredAt = Date.now()
     this.emit('status', { ...pane }, pane.status)
   }
 

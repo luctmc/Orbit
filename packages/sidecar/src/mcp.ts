@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
-import { BROWSER_KEYS, BROWSER_VIEWPORT, CARD_COLUMNS, CARD_LIMITS, EFFORTS, MODEL_ID, type CardColumn, type Effort, type Pane } from '@orbit/protocol'
+import { BROWSER_KEYS, BROWSER_VIEWPORT, CARD_COLUMNS, CARD_LIMITS, EFFORTS, MODEL_ID, type CardColumn, type Effort, type HandoffStatus, type Pane } from '@orbit/protocol'
 import type { OrbitCore } from './core.ts'
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
@@ -36,6 +36,7 @@ const agentView = (p: Pane) => ({
   status: p.status,
   attention: p.attention,
   delivered: p.deliveredAt !== null,
+  handoff: p.handoffStatus,
 })
 
 /** One MCP server per request (stateless), scoped to the calling pane's identity and role. */
@@ -126,6 +127,33 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       return `Ajudante #${agent} fechado.`
     }))
 
+    server.registerTool('agent_interrupt', {
+      description: 'Interrompe o que um ajudante está fazendo (como apertar Esc no terminal dele) e, se passar message, dá a nova orientação logo em seguida. Use quando ele foi pelo caminho errado; para só conversar, agent_send.',
+      inputSchema: { agent: z.number().int().describe('Número do ajudante'), message: z.string().max(8000).optional().describe('Nova orientação, digitada depois da interrupção') },
+    }, guarded(async ({ agent, message }: { agent: number; message?: string }) => {
+      await core.interrupt(caller, agent, message ?? null)
+      return message ? `#${agent} interrompido e reorientado.` : `#${agent} interrompido. Ele espera no terminal; mande a orientação com agent_send.`
+    }))
+
+    server.registerTool('agent_resume', {
+      description: 'Retoma um ajudante que parou (processo encerrado, travou, o Orbit foi reaberto) na mesma conversa, com a mensagem para continuar. Ele volta com um número novo e o mesmo branch.',
+      inputSchema: { agent: z.number().int().describe('Número do ajudante'), message: z.string().max(8000).optional().describe('O que fazer agora (padrão: continuar a tarefa e entregar)') },
+    }, guarded(({ agent, message }: { agent: number; message?: string }) => {
+      const pane = core.resumeHelper(caller, agent, message ?? null)
+      return `#${agent} retomado como #${pane.id}. O retorno chega sozinho.`
+    }))
+
+    server.registerTool('mission_ready', {
+      description: 'Declara a missão pronta, com o objetivo cumprido e verificado. O Orbit marca a missão e avisa o usuário. Recusa enquanto algum ajudante ainda deve retorno, a menos que force seja true.',
+      inputSchema: {
+        summary: z.string().min(1).max(4000).describe('O que foi feito, por quem, como foi verificado e o que falta'),
+        force: z.boolean().optional().describe('Declarar mesmo com ajudantes sem retorno'),
+      },
+    }, guarded(({ summary, force }: { summary: string; force?: boolean }) => {
+      core.missionReady(caller, summary, force === true)
+      return 'Missão marcada como pronta; o usuário foi avisado. Diga a ele, em poucas linhas, o resultado.'
+    }))
+
     if (core.mission(caller.missionId)?.git) {
       server.registerTool('branches', {
         description: 'Missão com um branch por agente: o branch da missão (o seu) e o de cada ajudante, com quantos commits ainda não foram integrados ao seu e os arquivos sem commit.',
@@ -158,14 +186,18 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
 
   if (caller.role === 'crew') {
     server.registerTool('handoff_submit', {
-      description: 'Entrega o resultado da sua tarefa ao líder. Use ao terminar ou se ficar bloqueado. O resumo é digitado no terminal do líder; os detalhes ficam guardados no fluxo da missão.',
+      description: 'Entrega o resultado da sua tarefa a quem pediu (o líder, normalmente). done = terminou, com evidence; blocked = travou, com a pergunta ou o impedimento; progress = aviso no meio do caminho, só registrado (você continua). O resumo é digitado no terminal de quem recebe; os detalhes ficam no fluxo da missão.',
       inputSchema: {
-        summary: z.string().min(1).max(2000).describe('Resumo curto: o que mudou, onde, como verificar, o que ficou pendente'),
+        summary: z.string().min(1).max(2000).describe('Resumo curto: o que mudou, onde, o que ficou pendente'),
+        status: z.enum(['done', 'blocked', 'progress']).optional().describe('Padrão: done'),
+        evidence: z.string().max(4000).optional().describe('Como verificou: comandos rodados e o resultado, testes, arquivos conferidos. Obrigatório com done'),
         details: z.string().max(20000).optional().describe('Detalhes opcionais (lista de arquivos, saídas de teste…)'),
+        to: z.number().int().optional().describe('Entregar a outro agente da missão (ex.: o revisor) em vez de ao líder, quando a sua tarefa mandar'),
       },
-    }, guarded(({ summary, details }: { summary: string; details?: string }) => {
-      const { deliveredTo } = core.handoff(caller, summary, details ?? '')
-      return deliveredTo === null ? 'Retorno registrado no fluxo da missão (o líder não está rodando).' : `Retorno entregue ao líder #${deliveredTo}.`
+    }, guarded(({ summary, status, evidence, details, to }: { summary: string; status?: HandoffStatus; evidence?: string; details?: string; to?: number }) => {
+      const result = core.handoff(caller, { summary, status, evidence, details, to })
+      if (result.status === 'progress' && result.deliveredTo === null) return 'Progresso registrado no fluxo da missão. Continue e entregue com done ou blocked ao terminar.'
+      return result.deliveredTo === null ? 'Retorno registrado no fluxo da missão (ninguém rodando para receber agora).' : `Retorno entregue a #${result.deliveredTo}.`
     }))
   }
 

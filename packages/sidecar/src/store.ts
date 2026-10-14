@@ -60,11 +60,15 @@ export class Store {
       mission.git ??= null
       mission.scheduleId ??= null
       mission.allowedClis ??= ['claude', 'codex']
+      mission.readyAt ??= null
+      mission.readySummary ??= null
     }
     // Processes do not survive a sidecar restart.
     for (const pane of this.state.panes) {
       pane.attention = null
       pane.deliveredAt ??= null
+      pane.handoffStatus ??= pane.deliveredAt === null ? null : 'done'
+      pane.assignedBy ??= null
       pane.squadRole ??= null
       pane.taskType ??= null
       pane.effort ??= null
@@ -231,7 +235,7 @@ export class Store {
   createMission(input: { workspaceId: string; title: string; objective: string; mode: MissionMode; squadId: string | null; allowedClis?: Mission['allowedClis'] }, git: (id: string) => Mission['git'] = () => null, scheduleId: string | null = null): Mission {
     const now = Date.now()
     const id = randomUUID()
-    const mission: Mission = { id, status: 'active', createdAt: now, updatedAt: now, usage: { ...EMPTY_USAGE }, git: git(id), scheduleId, ...input, allowedClis: input.allowedClis?.length ? input.allowedClis : ['claude', 'codex'] }
+    const mission: Mission = { id, status: 'active', createdAt: now, updatedAt: now, usage: { ...EMPTY_USAGE }, git: git(id), scheduleId, readyAt: null, readySummary: null, ...input, allowedClis: input.allowedClis?.length ? input.allowedClis : ['claude', 'codex'] }
     this.state.missions.push(mission)
     this.save()
     return { ...mission }
@@ -241,7 +245,7 @@ export class Store {
     return this.state.missions.find((m) => m.id === id)
   }
 
-  updateMission(id: string, patch: Partial<Pick<Mission, 'status' | 'title' | 'objective' | 'git'>>): Mission | undefined {
+  updateMission(id: string, patch: Partial<Pick<Mission, 'status' | 'title' | 'objective' | 'git' | 'readyAt' | 'readySummary'>>): Mission | undefined {
     const mission = this.mission(id)
     if (!mission) return undefined
     Object.assign(mission, patch, { updatedAt: Date.now() })
