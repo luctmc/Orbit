@@ -30,7 +30,7 @@ test('an unclear activity goes to the decider, and the lead proposes table chang
   const run: Run = async (command) => {
     if (command.endsWith('codex login status')) return { code: 0, stdout: 'Logged in using ChatGPT\n', stderr: '' }
     if (command.endsWith('claude auth status')) return { code: 0, stdout: JSON.stringify({ loggedIn: true, authMethod: 'claude.ai' }), stderr: '' }
-    if (command.startsWith('claude -p')) {
+    if (command.startsWith('claude -p') && command.includes('--json-schema')) {
       asked.push(command)
       return { code: 0, stdout: JSON.stringify({ structured_output: { kind: 'investigacao', why: 'lentidão pede medir antes' } }), stderr: '' }
     }

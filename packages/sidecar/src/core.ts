@@ -15,6 +15,7 @@ import { addWorktree, BRANCH, commitsAhead, dirtyFiles, filesChanged, hasRemote,
 import { slugify } from './squads.ts'
 import { normalizeRouting } from './routing.ts'
 import { decideTaskType } from './decider.ts'
+import { CLAUDE_USAGE_COMMAND, parseClaudeUsage, usageText } from './claudeUsage.ts'
 import { codexHome, codexLastTurn, findCodexRolloutById, latestCodexRollout, codexSessionId, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
@@ -35,6 +36,8 @@ const STATUS_SCRIPT = join(dirname(HOOK_SCRIPT), 'statusline.mjs')
 const ORBIT_CLI_SCRIPT = join(dirname(HOOK_SCRIPT), 'orbit-cli.mjs')
 /** How often live Codex agents' session files are read for usage. */
 const CODEX_POLL_MS = 5000
+/** How often the accounts' room is read again when no agent reports it. */
+const USAGE_WATCH_MS = 10 * 60_000
 /** Time for a CLI to stop its turn after Esc before new orders are typed. */
 const INTERRUPT_SETTLE_MS = 700
 const HANDOFF_STATUSES: readonly HandoffStatus[] = ['done', 'blocked', 'progress']
@@ -85,6 +88,7 @@ export class OrbitCore {
   /** Helpers whose task type only reads (Claude's edit tools are refused). */
   private readonly readOnly = new Set<number>()
   private codexTimer: NodeJS.Timeout | null = null
+  private usageTimer: NodeJS.Timeout | null = null
   private readonly accountFiles: AccountFiles
   /** Login state per account, from the CLIs; kept in memory and asked again on start. */
   private readonly accountStatus = new Map<string, AccountStatus>()
@@ -834,8 +838,35 @@ export class OrbitCore {
     }
     if (!this.store.account(accountId)) return // removed meanwhile
     if (account.cli === 'codex') this.readCodexLimits(account)
+    if (account.cli === 'claude' && account.kind === 'assinatura' && found.loggedIn !== false) void this.readClaudeLimits(account)
     const loginPaneId = this.accountStatus.get(accountId)?.loginPaneId ?? null
     this.setAccountStatus(accountId, { ...found, checkedAt: Date.now(), busy: loginPaneId && this.panes.isAlive(loginPaneId) ? 'login' : null })
+  }
+
+  /**
+   * A Claude subscription's limits from Claude Code's `/usage`, run headless: a local command
+   * (no model call, no cost), so the maestro knows its room even with no Claude agent open.
+   */
+  private async readClaudeLimits(account: Account): Promise<void> {
+    const { code, stdout } = await this.run(`${this.accountFiles.envPrefix(account)}${CLAUDE_USAGE_COMMAND}`, 30_000).catch(() => ({ code: 1, stdout: '' }))
+    const text = code === 0 ? usageText(stdout) : null
+    const usage = text ? parseClaudeUsage(text) : null
+    if (!usage || !this.store.account(account.id)) return
+    const known = this.store.limits().find((l) => l.accountId === account.id)
+    this.broadcast({ type: 'limits', limits: this.store.setLimits({ accountId: account.id, cli: 'claude', fiveHour: usage.fiveHour, weekly: usage.weekly, plan: known?.plan ?? null, updatedAt: Date.now() }) })
+  }
+
+  /** Every few minutes, the room of each Claude subscription (Codex's comes from its session files). */
+  startUsageWatch(): void {
+    if (this.usageTimer) return
+    this.usageTimer = setInterval(() => {
+      for (const account of this.store.accounts()) {
+        const signedOut = this.accountStatus.get(account.id)?.loggedIn === false
+        if (account.cli === 'claude' && account.kind === 'assinatura' && !signedOut) void this.readClaudeLimits(account)
+        if (account.cli === 'codex') this.readCodexLimits(account)
+      }
+    }, USAGE_WATCH_MS)
+    this.usageTimer.unref()
   }
 
   /**
@@ -1720,6 +1751,7 @@ export class OrbitCore {
   shutdown(): void {
     if (this.codexTimer) clearInterval(this.codexTimer)
     if (this.scheduleTimer) clearInterval(this.scheduleTimer)
+    if (this.usageTimer) clearInterval(this.usageTimer)
     this.browser.shutdown()
     this.panes.killAll()
     this.store.flush()
