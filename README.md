@@ -61,6 +61,11 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Instruções do workspace** (Editar workspace): convenções, comandos e cuidados que todo agente
+  daquele workspace recebe nas instruções.
+- **Modelos de missão**: "Salvar como modelo" (na missão) guarda título, objetivo, modo, squad,
+  líder, o branch por agente e os cartões do quadro, para este workspace ou para qualquer um. Na
+  Nova missão, escolher o modelo preenche tudo, e o quadro começa com os cartões dele.
 - **Um branch por agente** (opção da nova missão): o líder trabalha numa cópia do repositório
   (git worktree em `~/.orbit/worktrees`) num branch da missão criado a partir do branch atual, e
   cada ajudante numa cópia e num branch próprios (`<branch>--N`), sem tocar na sua pasta. O retorno

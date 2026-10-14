@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { EMPTY_USAGE, type Account, type Card, type CardColumn, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
+import { EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
 import { BUILTIN_ACCOUNTS, migrateLimits } from './accounts.ts'
 import { DEFAULT_ROUTING } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
@@ -44,11 +44,15 @@ export class Store {
     this.state.disabledCatalog ??= []
     this.state.paneSpecs ??= {}
     this.state.cards ??= []
+    this.state.templates ??= []
     this.state.usageDays ??= []
     this.state.limits = migrateLimits(this.state.limits ?? [])
     this.state.customAccounts ??= []
     this.state.builtinAuto ??= {}
-    for (const workspace of this.state.workspaces) workspace.folders ??= [workspace.path]
+    for (const workspace of this.state.workspaces) {
+      workspace.folders ??= [workspace.path]
+      workspace.instructions ??= ''
+    }
     for (const mission of this.state.missions) {
       mission.squadId ??= null
       mission.usage ??= { ...EMPTY_USAGE }
@@ -71,8 +75,8 @@ export class Store {
   }
 
   snapshot(): Snapshot {
-    const { workspaces, missions, panes, events, usageDays, limits, cards } = this.state
-    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing(), usageDays, limits, accounts: this.accounts(), cards })
+    const { workspaces, missions, panes, events, usageDays, limits, cards, templates } = this.state
+    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing(), usageDays, limits, accounts: this.accounts(), cards, templates })
   }
 
   /**
@@ -201,15 +205,16 @@ export class Store {
 
   /** `folders` are validated by the caller; the first one is the main folder. */
   createWorkspace(name: string, folders: string[]): Workspace {
-    const workspace: Workspace = { id: randomUUID(), path: folders[0]!, folders: [...folders], name: name || defaultName(folders), lastOpenedAt: Date.now() }
+    const workspace: Workspace = { id: randomUUID(), path: folders[0]!, folders: [...folders], name: name || defaultName(folders), lastOpenedAt: Date.now(), instructions: '' }
     this.state.workspaces.push(workspace)
     this.save()
     return structuredClone(workspace)
   }
 
-  updateWorkspace(id: string, patch: { name?: string; folders?: string[] }): Workspace | undefined {
+  updateWorkspace(id: string, patch: { name?: string; folders?: string[]; instructions?: string }): Workspace | undefined {
     const workspace = this.workspace(id)
     if (!workspace) return undefined
+    if (patch.instructions !== undefined) workspace.instructions = patch.instructions
     if (patch.folders) Object.assign(workspace, { folders: [...patch.folders], path: patch.folders[0] })
     if (patch.name !== undefined) workspace.name = patch.name || defaultName(workspace.folders)
     this.save()
@@ -329,6 +334,29 @@ export class Store {
     return this.state.cards.length !== before
   }
 
+  template(id: string): MissionTemplate | undefined {
+    const template = this.state.templates.find((t) => t.id === id)
+    return template && structuredClone(template)
+  }
+
+  templateCount(): number {
+    return this.state.templates.length
+  }
+
+  saveTemplate(template: MissionTemplate): void {
+    const index = this.state.templates.findIndex((t) => t.id === template.id)
+    if (index === -1) this.state.templates.push(template)
+    else this.state.templates[index] = template
+    this.save()
+  }
+
+  deleteTemplate(id: string): boolean {
+    const before = this.state.templates.length
+    this.state.templates = this.state.templates.filter((t) => t.id !== id)
+    this.save()
+    return this.state.templates.length !== before
+  }
+
   setPaneSpec(id: number, spec: SpawnPaneRequest): void {
     this.state.paneSpecs[String(id)] = structuredClone(spec)
     this.save()
@@ -372,7 +400,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
-    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [], paneSpecs: {}, cards: [] }
+    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [], paneSpecs: {}, cards: [], templates: [] }
   }
 }
 

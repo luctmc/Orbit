@@ -70,6 +70,7 @@ export function WorkspaceDialog({ workspace, onClose }: { workspace?: Workspace;
   const client = useOrbitClient()
   const [name, setName] = useState(workspace?.name ?? '')
   const [folders, setFolders] = useState<string[]>(workspace?.folders ?? [])
+  const [instructions, setInstructions] = useState(workspace?.instructions ?? '')
   const [error, setError] = useState<string | null>(null)
   const editing = Boolean(workspace)
   const suggested = folders.length ? `${baseName(folders[0]!)}${folders.length > 1 ? ` + ${folders.length - 1}` : ''}` : 'meu-projeto'
@@ -78,7 +79,7 @@ export function WorkspaceDialog({ workspace, onClose }: { workspace?: Workspace;
     <Dialog eyebrow="Workspace" title={editing ? 'Editar workspace' : 'Novo workspace'} submitLabel={editing ? 'Salvar' : 'Criar workspace'} onClose={onClose} onSubmit={() => {
       if (folders.length === 0) return setError('Inclua pelo menos uma pasta.')
       if (folders.some((f) => !f.startsWith('/'))) return setError('Use caminhos absolutos (começando com /).')
-      if (workspace) client.send({ type: 'workspace.update', workspaceId: workspace.id, name, folders })
+      if (workspace) client.send({ type: 'workspace.update', workspaceId: workspace.id, name, folders, instructions })
       else client.send({ type: 'workspace.create', name, folders })
       onClose()
     }}>
@@ -87,7 +88,14 @@ export function WorkspaceDialog({ workspace, onClose }: { workspace?: Workspace;
         <label htmlFor="ws-name">Nome <span className="muted">(opcional)</span></label>
         <input id="ws-name" value={name} maxLength={WORKSPACE_LIMITS.name} onChange={(e) => setName(e.target.value)} placeholder={suggested} />
       </div>
-      {editing && <p className="note">Agentes já abertos continuam com as pastas que tinham; os próximos recebem esta lista.</p>}
+      {editing && (
+        <div className="field">
+          <label htmlFor="ws-instructions">Instruções para os agentes <span className="muted">(opcional)</span></label>
+          <textarea id="ws-instructions" rows={6} value={instructions} maxLength={WORKSPACE_LIMITS.instructions} onChange={(e) => setInstructions(e.target.value)}
+            placeholder={'Convenções, comandos e cuidados que todo agente deste workspace deve seguir. Ex.:\n- Rode npm test antes de entregar.\n- Não mexa em migrations/.'} />
+        </div>
+      )}
+      {editing && <p className="note">Agentes já abertos continuam com as pastas e instruções que tinham; os próximos recebem estas.</p>}
       {error && <p className="form-error" role="alert">{error}</p>}
     </Dialog>
   )

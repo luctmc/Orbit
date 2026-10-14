@@ -7,7 +7,8 @@ import { BoardPanel } from './BoardPanel.tsx'
 import { BrowserPanel } from './BrowserPanel.tsx'
 import { FilesPanel } from './FilesPanel.tsx'
 import { PrDialog } from './PrDialog.tsx'
-import { ArchiveIcon, BoardIcon, BranchIcon, FolderIcon, GlobeIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
+import { SaveTemplateDialog } from './SaveTemplateDialog.tsx'
+import { ArchiveIcon, BoardIcon, BookmarkIcon, BranchIcon, FolderIcon, GlobeIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
 import { PaneView } from './PaneView.tsx'
 
 export type Layout = 'grade' | 'foco'
@@ -41,6 +42,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   const page = browsers.find((b) => b.missionId === mission.id)
   /** One side panel at a time, next to the agents. */
   const [prOpen, setPrOpen] = useState(false)
+  const [savingTemplate, setSavingTemplate] = useState(false)
   type Side = 'quadro' | 'arquivos' | 'navegador'
   const [side, setSide] = useState<Side | null>(null)
   const browserOpen = side === 'navegador'
@@ -158,6 +160,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
           {!archived && (
             <>
               <button className="btn btn--ghost btn--sm" onClick={onAddAgent}><PlusIcon size={14} />Agente</button>
+              <button className="icon-btn" aria-label="Salvar como modelo" title="Salvar como modelo" onClick={() => setSavingTemplate(true)}><BookmarkIcon /></button>
               <button className="icon-btn" aria-label="Arquivar missão" title="Arquivar missão (encerra os agentes)" onClick={() => {
                 if (confirm('Arquivar a missão encerra todos os agentes dela. Continuar?')) client.send({ type: 'mission.archive', missionId: mission.id })
               }}><ArchiveIcon /></button>
@@ -211,6 +214,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
           <button type="submit" className="icon-btn icon-btn--boxed" aria-label="Enviar"><SendIcon /></button>
         </form>
       )}
+      {savingTemplate && <SaveTemplateDialog mission={mission} lead={panes.find((p) => p.role === 'lead')} onClose={() => setSavingTemplate(false)} />}
       {prOpen && mission.git && <PrDialog mission={mission} onClose={() => setPrOpen(false)} />}
       {dictation.error && (
         <div className="command__note" role="alert">

@@ -97,3 +97,9 @@ export function worktreeNote(git: MissionGit, role: 'lead' | 'crew', branch: str
       ]
   return `${lines.join('\n')}\n\n`
 }
+
+/** The workspace's own instructions, written by the person; empty when there are none. */
+export function instructionsNote(instructions: string | undefined): string {
+  const text = instructions?.trim()
+  return text ? `Instruções deste workspace (escritas pelo usuário; valem para todos os agentes):\n${text}\n\n` : ''
+}
