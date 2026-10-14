@@ -511,3 +511,18 @@ h1, h2, p { margin: 0; }
 .notices__row strong { font-weight: 500; }
 .notices__row .muted { font-size: 12.5px; }
 .notices__test { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12.5px; }
+
+/* Agent menu, rename, ended agents, columns */
+.menu-anchor { position: relative; display: inline-flex; }
+.menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; min-width: 220px; padding: 4px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface-3); box-shadow: 0 12px 32px rgb(0 0 0 / 0.45); display: flex; flex-direction: column; }
+.menu button { padding: 7px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; font-size: 13px; color: var(--text-2); }
+.menu button:hover, .menu button:focus-visible { background: var(--surface-2); color: var(--text); outline: none; }
+.menu hr { border: 0; border-top: 1px solid var(--line-2); margin: 4px 2px; }
+.menu__danger { color: var(--danger) !important; }
+.pane__title-input { flex: 1; min-width: 0; height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--accent-line); background: var(--bg); font-weight: 500; }
+.ended { flex: none; padding: 8px 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--line); background: var(--surface-2); }
+.ended__text { flex: 1 1 200px; min-width: 0; font-size: 13px; color: var(--text-2); }
+.columns select { height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--surface); font-size: 12.5px; color: var(--text-2); }
+.pane-grid--cols-1 { grid-template-columns: minmax(0, 1fr); }
+.pane-grid--cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pane-grid--cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }

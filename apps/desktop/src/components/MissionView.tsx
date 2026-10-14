@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Mission, Pane } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { dictationAvailable, joinText, useDictation } from '../orbit/dictation.ts'
@@ -9,6 +9,17 @@ import { ArchiveIcon, FolderIcon, GlobeIcon, MicIcon, PlusIcon, SendIcon } from 
 import { PaneView } from './PaneView.tsx'
 
 export type Layout = 'grade' | 'foco'
+type Columns = 'auto' | '1' | '2' | '3'
+const COLUMNS: Columns[] = ['auto', '1', '2', '3']
+
+function rememberedColumns(): Columns {
+  try {
+    const saved = localStorage.getItem('orbit.columns') as Columns | null
+    return saved && COLUMNS.includes(saved) ? saved : 'auto'
+  } catch {
+    return 'auto'
+  }
+}
 
 export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, onSelectPane, onAddAgent }: {
   mission: Mission
@@ -30,6 +41,14 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   const toggleSide = (panel: 'arquivos' | 'navegador') => setSide((open) => (open === panel ? null : panel))
   const [command, setCommand] = useState('')
   const commandInput = useRef<HTMLInputElement>(null)
+  const [columns, setColumns] = useState<Columns>(rememberedColumns)
+  useEffect(() => {
+    try {
+      localStorage.setItem('orbit.columns', columns)
+    } catch {
+      // private window
+    }
+  }, [columns])
   /** What was typed before dictating, plus each phrase already recognized. */
   const dictated = useRef('')
   const dictation = useDictation((text, final) => {
@@ -49,6 +68,32 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   const archived = mission.status === 'archived'
   const selected = panes.find((p) => p.id === selectedPaneId) ?? panes[0] ?? null
   const visible = layout === 'foco' && selected ? [selected] : panes
+
+  // ⌘1–9 picks an agent, ⌘[ and ⌘] step through them, ⌘J writes to the selected one.
+  const latest = useRef({ panes, selected, onSelectPane })
+  latest.current = { panes, selected, onSelectPane }
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
+      const { panes: list, selected: current, onSelectPane: select } = latest.current
+      const at = current ? list.findIndex((p) => p.id === current.id) : -1
+      let target: number | null = null
+      if (/^[1-9]$/.test(event.key)) target = Number(event.key) - 1
+      else if (event.key === '[') target = at <= 0 ? list.length - 1 : at - 1
+      else if (event.key === ']') target = at >= list.length - 1 ? 0 : at + 1
+      else if (event.key.toLowerCase() === 'j') {
+        event.preventDefault()
+        commandInput.current?.focus()
+        return
+      } else return
+      const pane = list[target]
+      if (!pane) return
+      event.preventDefault()
+      select(pane.id)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
   const alive = panes.filter((p) => p.status !== 'exited').length
 
   const sendCommand = (event: FormEvent) => {
@@ -79,6 +124,14 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
             <button type="button" aria-pressed={layout === 'grade'} onClick={() => onLayout('grade')}>Grade</button>
             <button type="button" aria-pressed={layout === 'foco'} onClick={() => onLayout('foco')}>Foco</button>
           </div>
+          {layout === 'grade' && panes.length > 1 && (
+            <label className="columns" title="Colunas da grade">
+              <span className="sr-only">Colunas</span>
+              <select value={columns} onChange={(e) => setColumns(e.target.value as Columns)}>
+                {COLUMNS.map((c) => <option key={c} value={c}>{c === 'auto' ? 'Colunas: auto' : `${c} ${c === '1' ? 'coluna' : 'colunas'}`}</option>)}
+              </select>
+            </label>
+          )}
           {workspace && (
             <button className="btn btn--ghost btn--sm" aria-pressed={side === 'arquivos'} onClick={() => toggleSide('arquivos')} title="O que os agentes mudaram e os arquivos do workspace">
               <FolderIcon size={14} />Arquivos
@@ -106,7 +159,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
             {!archived && <button className="btn btn--primary" onClick={onAddAgent}><PlusIcon size={14} />Abrir um agente</button>}
           </div>
         ) : (
-          <div className={`pane-grid pane-grid--${layout}`}>
+          <div className={`pane-grid pane-grid--${layout}${layout === 'grade' && columns !== 'auto' ? ` pane-grid--cols-${columns}` : ''}`}>
             {visible.map((p) => <PaneView key={p.id} pane={p} selected={p.id === selected?.id} onSelect={() => onSelectPane(p.id)} />)}
           </div>
         )}
@@ -116,7 +169,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
 
       {selected && selected.status !== 'exited' && (
         <form className="command" onSubmit={sendCommand}>
-          <label htmlFor="command" className="command__label">Falar com #{selected.id}</label>
+          <label htmlFor="command" className="command__label" title="⌘J escreve aqui · ⌘1–9 troca de agente · ⌘[ ⌘] anterior e próximo">Falar com #{selected.id}</label>
           <input
             id="command"
             ref={commandInput}

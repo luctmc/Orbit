@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { EMPTY_USAGE, type Account, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type MissionMode, type Pane, type Routing, type Snapshot, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
+import { EMPTY_USAGE, type Account, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
 import { BUILTIN_ACCOUNTS, migrateLimits } from './accounts.ts'
 import { DEFAULT_ROUTING } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
@@ -22,6 +22,8 @@ interface PersistedState extends Omit<Snapshot, 'squads' | 'routing' | 'accounts
   builtinAuto: Record<string, boolean>
   /** Catalog items (skills, agents, MCP servers) Orbit's agents may not use. */
   disabledCatalog: string[]
+  /** How each pane was opened (without its first task), to restart or resume it later. */
+  paneSpecs: Record<string, SpawnPaneRequest>
 }
 
 /** Durable state in `<dataDir>/state.json`. Writes are debounced and atomic (tmp + rename). */
@@ -40,6 +42,7 @@ export class Store {
     for (const squad of this.state.customSquads) for (const role of squad.roles) Object.assign(role, { skills: role.skills ?? [], onlySkills: role.onlySkills ?? false })
     for (const row of this.state.routing?.taskTypes ?? []) row.onlySkills ??= false
     this.state.disabledCatalog ??= []
+    this.state.paneSpecs ??= {}
     this.state.usageDays ??= []
     this.state.limits = migrateLimits(this.state.limits ?? [])
     this.state.customAccounts ??= []
@@ -57,6 +60,7 @@ export class Store {
       pane.taskType ??= null
       pane.effort ??= null
       pane.accountId ??= null
+      pane.sessionId ??= null
       pane.usage ??= null
       pane.contextPercent = null
       if (pane.status !== 'exited') Object.assign(pane, { status: 'exited', pid: null })
@@ -252,7 +256,18 @@ export class Store {
 
   removePane(id: number): void {
     this.state.panes = this.state.panes.filter((p) => p.id !== id)
+    delete this.state.paneSpecs[String(id)]
     this.save()
+  }
+
+  setPaneSpec(id: number, spec: SpawnPaneRequest): void {
+    this.state.paneSpecs[String(id)] = structuredClone(spec)
+    this.save()
+  }
+
+  paneSpec(id: number): SpawnPaneRequest | undefined {
+    const spec = this.state.paneSpecs[String(id)]
+    return spec && structuredClone(spec)
   }
 
   addEvent(input: Omit<MissionEvent, 'id' | 'at'>): MissionEvent {
@@ -288,7 +303,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
-    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [] }
+    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [], paneSpecs: {} }
   }
 }
 

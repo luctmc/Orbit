@@ -80,6 +80,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       model: request.model,
       effort: launch.effort ?? null,
       accountId,
+      sessionId: null,
       title: request.title,
       cwd,
       status: 'starting',
@@ -206,6 +207,22 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     if (usage) pane.usage = usage
     if (contextPercent !== null) pane.contextPercent = contextPercent
     this.emit('status', { ...pane }, pane.status)
+  }
+
+  /** The CLI told us its conversation id. */
+  setSession(id: number, sessionId: string): void {
+    const pane = this.panes.get(id)
+    if (!pane || pane.sessionId === sessionId) return
+    pane.sessionId = sessionId
+    this.emit('status', { ...pane }, pane.status)
+  }
+
+  rename(id: number, title: string): Pane | undefined {
+    const pane = this.panes.get(id)
+    if (!pane) return undefined
+    pane.title = title
+    this.emit('status', { ...pane }, pane.status)
+    return { ...pane }
   }
 
   markDelivered(id: number): void {

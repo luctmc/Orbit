@@ -48,6 +48,8 @@ export interface Pane {
   effort: Effort | null
   /** Account it runs as; null for terminals and for agents from before accounts existed. */
   accountId: string | null
+  /** The CLI's conversation id (Claude's hooks, Codex's session file), to resume it later. */
+  sessionId: string | null
   title: string
   cwd: string
   status: PaneStatus
@@ -403,6 +405,11 @@ export type ClientMessage =
   | { type: 'pane.resize'; paneId: number; cols: number; rows: number }
   /** Kills the process if alive and removes the pane from the mission. */
   | { type: 'pane.close'; paneId: number }
+  | { type: 'pane.rename'; paneId: number; title: string }
+  /** Opens the agent again with the same settings: a new conversation, or (resume) the same one. */
+  | { type: 'pane.restart'; paneId: number; resume: boolean }
+  /** Another helper with the same settings, without a task. */
+  | { type: 'pane.duplicate'; paneId: number }
   /** Creates or replaces a custom squad (builtins cannot be changed). */
   | { type: 'squad.save'; squad: SquadInput }
   | { type: 'squad.delete'; squadId: string }
@@ -477,6 +484,9 @@ export type ServerMessage =
   /** A JPEG of the page, for connections watching it. */
   | { type: 'browser.frame'; missionId: string; data: string; width: number; height: number }
   | { type: 'error'; message: string }
+
+/** Conversation ids reach a command line too: UUIDs and similar only. */
+export const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/
 
 /** Model ids reach a shell command line, so only plain identifiers are accepted (`/` for providers' ids). */
 export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$/
