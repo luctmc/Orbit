@@ -61,6 +61,14 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Um branch por agente** (opção da nova missão): o líder trabalha numa cópia do repositório
+  (git worktree em `~/.orbit/worktrees`) num branch da missão criado a partir do branch atual, e
+  cada ajudante numa cópia e num branch próprios (`<branch>--N`), sem tocar na sua pasta. O retorno
+  de um ajudante diz ao líder quantos commits integrar (`git merge`) e avisa de arquivos sem
+  commit; o líder tem a ferramenta `branches`. O botão **Abrir PR** mostra commits e arquivos
+  contra a base, envia o branch ao `origin` e abre o PR com o `gh` (com descrição sugerida a
+  partir do objetivo, do quadro e dos retornos); depois mostra o estado e o CI. Arquivar a missão
+  apaga as cópias limpas e mantém as que têm mudanças sem commit; os branches ficam.
 - **Quadro** (painel na missão): cartões em A fazer, Fazendo e Feito, com número (T1, T2…),
   notas e responsável. Os agentes usam `board_list`, `board_add` e `board_update` (o líder é
   instruído a planejar nele; os ajudantes movem os próprios cartões), e você cria, edita, atribui

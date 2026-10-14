@@ -112,7 +112,7 @@ export class OrbitClient {
   }
 
   /**
-   * Sends a files.* question and resolves with the first answer that matches; a files.error
+   * Sends a files.* or git.* question and resolves with the first answer that matches; a files.error
    * rejects it.
    */
   ask<T extends ServerMessage['type']>(message: ClientMessage, type: T, match: (m: Extract<ServerMessage, { type: T }>) => boolean = () => true, timeoutMs = 20_000): Promise<Extract<ServerMessage, { type: T }>> {
@@ -191,7 +191,7 @@ export class OrbitClient {
   }
 
   private receive(message: ServerMessage): void {
-    if (message.type.startsWith('files.')) {
+    if (message.type.startsWith('files.') || message.type.startsWith('git.')) {
       for (const answer of [...this.answers]) answer(message)
       return
     }

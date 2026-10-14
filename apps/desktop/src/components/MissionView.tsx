@@ -6,7 +6,8 @@ import { costText, MODE_LABEL, tokensText } from '../orbit/labels.ts'
 import { BoardPanel } from './BoardPanel.tsx'
 import { BrowserPanel } from './BrowserPanel.tsx'
 import { FilesPanel } from './FilesPanel.tsx'
-import { ArchiveIcon, BoardIcon, FolderIcon, GlobeIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
+import { PrDialog } from './PrDialog.tsx'
+import { ArchiveIcon, BoardIcon, BranchIcon, FolderIcon, GlobeIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
 import { PaneView } from './PaneView.tsx'
 
 export type Layout = 'grade' | 'foco'
@@ -39,6 +40,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   const workspace = workspaces.find((w) => w.id === mission.workspaceId)
   const page = browsers.find((b) => b.missionId === mission.id)
   /** One side panel at a time, next to the agents. */
+  const [prOpen, setPrOpen] = useState(false)
   type Side = 'quadro' | 'arquivos' | 'navegador'
   const [side, setSide] = useState<Side | null>(null)
   const browserOpen = side === 'navegador'
@@ -136,6 +138,11 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
               </select>
             </label>
           )}
+          {mission.git && (
+            <button className="btn btn--ghost btn--sm" onClick={() => setPrOpen(true)} title={`Branch ${mission.git.branch} (a partir de ${mission.git.base})`}>
+              <BranchIcon size={14} />{mission.git.pr ? `PR #${mission.git.pr.number}` : 'Abrir PR'}
+            </button>
+          )}
           <button className="btn btn--ghost btn--sm" aria-pressed={side === 'quadro'} onClick={() => toggleSide('quadro')} title="O que está planejado, em andamento e feito">
             <BoardIcon size={14} />Quadro{missionCards.length > 0 && <span className="muted"> {cardsDone}/{missionCards.length}</span>}
           </button>
@@ -204,6 +211,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
           <button type="submit" className="icon-btn icon-btn--boxed" aria-label="Enviar"><SendIcon /></button>
         </form>
       )}
+      {prOpen && mission.git && <PrDialog mission={mission} onClose={() => setPrOpen(false)} />}
       {dictation.error && (
         <div className="command__note" role="alert">
           <span>{dictation.error}</span>

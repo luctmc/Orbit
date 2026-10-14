@@ -105,6 +105,15 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       return `Ajudante #${agent} fechado.`
     }))
 
+    if (core.mission(caller.missionId)?.git) {
+      server.registerTool('branches', {
+        description: 'Missão com um branch por agente: o branch da missão (o seu) e o de cada ajudante, com quantos commits ainda não foram integrados ao seu e os arquivos sem commit.',
+      }, guarded(() => {
+        const summary = core.gitSummary(caller.missionId)
+        return { mission: { branch: summary.branch, base: summary.base, commits: summary.commits.length }, helpers: summary.agents.map((a) => ({ agent: `#${a.paneId}`, title: a.title, branch: a.branch, toMerge: a.ahead, uncommitted: a.dirty.length })) }
+      }))
+    }
+
     server.registerTool('handoff_list', {
       description: 'Íntegra dos retornos que os ajudantes enviaram nesta missão.',
     }, guarded(() => core.missionEvents(caller.missionId, 'handoff').map((e) => ({ from: e.paneId, at: new Date(e.at).toISOString(), text: e.body }))))

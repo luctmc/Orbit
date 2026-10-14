@@ -78,6 +78,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   const [mode, setMode] = useState<MissionMode>('livre')
   const [squadId, setSquadId] = useState<string | null>(null)
   const [lead, setLead] = useState<AgentChoice>(DEFAULT_AGENT)
+  const [worktrees, setWorktrees] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Each mode suggests its own lead: the squad's, or the task table's for agentic missions.
@@ -95,7 +96,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
       if (!title.trim()) return setError('Dê um título para a missão.')
       if (mode === 'squad' && !squadId) return setError('Escolha o squad da missão.')
       if (invalidModel(lead)) return setError('Modelo inválido: use só letras, números, ponto, hífen, barra ou dois-pontos.')
-      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
+      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
       onClose()
     }}>
       <div className="field">
@@ -142,6 +143,13 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
         </p>
       )}
       {mode === 'squad' && <p className="note">O líder recebe o objetivo e o roteiro do squad e abre cada papel quando o roteiro mandar.</p>}
+      <label className="check mission-git">
+        <input type="checkbox" checked={worktrees} onChange={(e) => setWorktrees(e.target.checked)} />
+        <span>
+          <strong>Cada agente no seu branch</strong>
+          <span className="muted">O líder e cada ajudante trabalham numa cópia própria do repositório (git worktree), sem mexer na sua pasta; o líder integra os branches e você abre o PR pelo Orbit.</span>
+        </span>
+      </label>
       {error && <p className="form-error" role="alert">{error}</p>}
     </Dialog>
   )

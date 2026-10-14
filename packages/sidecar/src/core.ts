@@ -1,21 +1,23 @@
-import { realpathSync, statSync } from 'node:fs'
+import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, CARD_COLUMNS, CARD_LIMITS, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, CARD_COLUMNS, CARD_LIMITS, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type MissionGit, type PrStatus, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
 import { fileDiff, folderStatus, folderTree, readFile } from './files.ts'
 import { Updates } from './updates.ts'
+import { addWorktree, BRANCH, commitsAhead, dirtyFiles, filesChanged, hasRemote, pushBranch, removeWorktree, repoInfo } from './git.ts'
+import { slugify } from './squads.ts'
 import { normalizeRouting } from './routing.ts'
 import { codexHome, codexSessionId, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
-import type { AgentLaunch, PaneCommand } from './command.ts'
+import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
 import { statusFromHook, type HookPayload } from './hooks.ts'
 import { PaneManager, type PaneSnapshot } from './panes.ts'
-import { crewRole, leadRole, objectiveTask, workspaceNote } from './prompts.ts'
+import { crewRole, leadRole, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
 import { normalizeSquad } from './squads.ts'
 import { Store } from './store.ts'
 
@@ -178,6 +180,75 @@ export class OrbitCore {
     if (cli === 'codex') await this.refreshCatalog()
   }
 
+  // ---- git: a worktree and branch per agent ----
+
+  /** The working copy an agent of a worktree mission is in (its cwd without the subfolder). */
+  private worktreeOf(pane: Pane, git: MissionGit): string {
+    return git.sub && pane.cwd.endsWith(`/${git.sub}`) ? pane.cwd.slice(0, -(git.sub.length + 1)) : pane.cwd
+  }
+
+  /** Commits and files of the mission branch against its base, and every agent's branch. */
+  gitSummary(missionId: string): GitSummary {
+    const git = this.store.mission(missionId)?.git
+    if (!git) throw new Error('Esta missão não usa um branch por agente')
+    const agents = this.missionPanes(missionId)
+      .filter((p) => p.branch && p.branch !== git.branch)
+      .map((p) => ({ paneId: p.id, title: p.title, branch: p.branch!, ahead: safe(() => commitsAhead(git.repo, git.branch, p.branch!).length, 0), dirty: safe(() => dirtyFiles(this.worktreeOf(p, git)), []) }))
+    return {
+      base: git.base,
+      branch: git.branch,
+      commits: safe(() => commitsAhead(git.repo, git.base, git.branch), []),
+      files: safe(() => filesChanged(git.repo, git.base, git.branch), []),
+      agents,
+      remote: safe(() => hasRemote(git.repo), false),
+    }
+  }
+
+  /** Pushes the mission branch and opens the PR with the person's gh. */
+  private async createPr(missionId: string, rawTitle: string, body: string, draft: boolean): Promise<PrStatus> {
+    const mission = this.store.mission(missionId)
+    const git = mission?.git
+    if (!mission || !git) throw new Error('Esta missão não usa um branch por agente')
+    if (git.pr) return this.prStatus(missionId)
+    const title = requireText(rawTitle, 'título do PR', 200)
+    if (!hasRemote(git.repo)) throw new Error('O repositório não tem um remoto "origin" para enviar o branch')
+    if (commitsAhead(git.repo, git.base, git.branch).length === 0) throw new Error(`O branch ${git.branch} ainda não tem commits além de ${git.base}`)
+    pushBranch(git.leadPath, git.branch)
+    const bodyFile = join(this.dataDir, 'worktrees', missionId, 'pr-body.md')
+    writeFileSync(bodyFile, String(body ?? '').slice(0, 60_000), { mode: 0o600 })
+    const created = await this.run(`cd ${shellQuote(git.leadPath)} && gh pr create --base ${shellQuote(git.base)} --head ${shellQuote(git.branch)} --title ${shellQuote(title)} --body-file ${shellQuote(bodyFile)}${draft ? ' --draft' : ''}`, 120_000)
+    const url = /https:\/\/\S+\/pull\/(\d+)/.exec(created.stdout)
+    if (created.code !== 0 || !url) throw new Error((created.stderr || created.stdout).trim().slice(-400) || 'O gh não criou o PR')
+    const updated = this.store.updateMission(missionId, { git: { ...git, pr: { number: Number(url[1]), url: url[0] } } })
+    if (updated) this.broadcast({ type: 'mission.updated', mission: updated })
+    this.event(missionId, 'handoff', `PR #${url[1]} aberto`, url[0], null)
+    return this.prStatus(missionId)
+  }
+
+  /** The PR's state and CI checks, from gh. */
+  async prStatus(missionId: string): Promise<PrStatus> {
+    const git = this.store.mission(missionId)?.git
+    if (!git?.pr) throw new Error('Esta missão ainda não tem PR')
+    const result = await this.run(`cd ${shellQuote(git.leadPath)} && gh pr view ${git.pr.number} --json number,url,state,isDraft,statusCheckRollup`, 60_000)
+    if (result.code !== 0) throw new Error((result.stderr || result.stdout).trim().slice(-300) || 'O gh não respondeu')
+    return parsePrStatus(result.stdout)
+  }
+
+  /** On archive: working copies with nothing uncommitted go away; branches (and their commits) stay. */
+  private cleanWorktrees(missionId: string): void {
+    const mission = this.store.mission(missionId)
+    const git = mission?.git
+    if (!git) return
+    const root = join(this.dataDir, 'worktrees', missionId)
+    const kept: string[] = []
+    for (const entry of safe(() => readdirSync(root), [] as string[])) {
+      const path = join(root, entry)
+      if (!statSync(path).isDirectory()) continue
+      if (!safe(() => removeWorktree(git.repo, path), false)) kept.push(entry === 'lider' ? 'do líder' : `de #${entry}`)
+    }
+    if (kept.length) this.event(missionId, 'pane.exited', 'Cópias mantidas', `Ficaram mudanças sem commit nas cópias ${kept.join(', ')}, em ${root}. Os branches continuam no repositório.`, null)
+  }
+
   // ---- the mission's board ----
 
   private existingCard(id: string): Card {
@@ -261,19 +332,23 @@ export class OrbitCore {
   private async files(message: Extract<ClientMessage, { type: `files.${string}` }>, reply: (message: ServerMessage) => void): Promise<void> {
     const workspace = this.store.workspace(message.workspaceId)
     if (!workspace) throw new Error('Workspace desconhecido')
+    // A mission with a branch per agent is looked at in the agents' copies, not the person's checkout.
+    const mission = message.missionId ? this.store.mission(message.missionId) : undefined
+    const copies = mission?.git ? [...new Set(this.missionPanes(mission.id).filter((p) => p.branch).sort((a, b) => (a.role === 'lead' ? -1 : b.role === 'lead' ? 1 : a.id - b.id)).map((p) => p.cwd))].filter(isDirectory) : []
+    const folders = copies.length ? [...copies, ...workspace.folders.slice(1)] : workspace.folders
     if (message.type === 'files.status') {
       const missionId = message.missionId ?? null
       const by = (absolute: string) => {
         const seen = this.touched.get(realPath(absolute)) ?? []
         return [...new Set(seen.filter((t) => !missionId || t.missionId === missionId).map((t) => t.paneId))]
       }
-      const folders = await Promise.all(workspace.folders.map((folder) => folderStatus(folder, by).catch((error) => ({
+      const statuses = await Promise.all(folders.map((folder) => folderStatus(folder, by).catch((error) => ({
         folder, git: false, branch: null, ahead: 0, behind: 0, changes: [], error: error instanceof Error ? error.message : String(error),
       }))))
-      reply({ type: 'files.status', workspaceId: workspace.id, folders })
+      reply({ type: 'files.status', workspaceId: workspace.id, folders: statuses })
       return
     }
-    if (!workspace.folders.includes(message.folder)) throw new Error('Essa pasta não é do workspace')
+    if (!folders.includes(message.folder)) throw new Error('Essa pasta não é do workspace')
     if (message.type === 'files.tree') {
       reply({ type: 'files.tree', workspaceId: workspace.id, folder: message.folder, ...(await folderTree(message.folder)) })
     } else if (message.type === 'files.diff') {
@@ -484,13 +559,23 @@ export class OrbitCore {
         const title = requireText(message.title, 'título', 120)
         const squad = message.mode === 'squad' ? this.store.squad(message.squadId ?? '') : undefined
         if (message.mode === 'squad' && !squad) throw new Error('Escolha um squad para a missão')
+        const workspace = this.store.workspace(message.workspaceId)!
+        // Each agent in its own worktree: the mission branch starts from the main folder's branch.
+        let git: ((id: string) => MissionGit) | undefined
+        if (message.isolation === 'worktrees') {
+          const info = repoInfo(workspace.path)
+          if (!info.branch) throw new Error('A pasta principal está fora de um branch (HEAD solto); troque para um branch antes')
+          const branch = `orbit/${slugify(title).slice(0, 40)}-${randomBytes(2).toString('hex')}`
+          if (!BRANCH.test(branch)) throw new Error(`Não consegui montar um nome de branch para "${title}"`)
+          git = (id) => ({ repo: info.top, sub: info.sub, base: info.branch!, branch, leadPath: join(this.dataDir, 'worktrees', id, 'lider'), pr: null })
+        }
         const mission = this.store.createMission({
           workspaceId: message.workspaceId,
           title,
           objective: message.objective.trim().slice(0, 4000),
           mode: message.mode,
           squadId: squad?.id ?? null,
-        })
+        }, git)
         this.broadcast({ type: 'mission.updated', mission })
         const opening = squad ? `Squad ${squad.name}. ${mission.objective || 'Sem objetivo descrito.'}` : mission.objective || 'Sem objetivo descrito.'
         this.event(mission.id, 'mission.created', 'Missão iniciada', opening, null)
@@ -567,6 +652,7 @@ export class OrbitCore {
           this.closePane(pane.id)
         }
         void this.browser.close(message.missionId)
+        this.cleanWorktrees(message.missionId)
         const mission = this.store.updateMission(message.missionId, { status: 'archived' })
         if (mission) this.broadcast({ type: 'mission.updated', mission })
         return
@@ -594,6 +680,19 @@ export class OrbitCore {
         return
       case 'pane.restart':
         this.restartPane(message.paneId, message.resume === true)
+        return
+      case 'git.summary':
+        reply({ type: 'git.summary', missionId: message.missionId, summary: this.gitSummary(message.missionId) })
+        return
+      case 'git.pr.create':
+        void this.createPr(message.missionId, message.title, message.body, message.draft === true)
+          .then((status) => reply({ type: 'git.pr', missionId: message.missionId, status }))
+          .catch((error) => reply({ type: 'files.error', message: error instanceof Error ? error.message : String(error) }))
+        return
+      case 'git.pr.status':
+        void this.prStatus(message.missionId)
+          .then((status) => reply({ type: 'git.pr', missionId: message.missionId, status }))
+          .catch((error) => reply({ type: 'files.error', message: error instanceof Error ? error.message : String(error) }))
         return
       case 'card.add':
         this.addCard(message.missionId, 'você', message)
@@ -677,8 +776,18 @@ export class OrbitCore {
 
   /** A helper's result: recorded in the mission flow and typed into the lead's terminal. */
   handoff(caller: Pane, summary: string, details: string): { deliveredTo: number | null } {
-    const text = summary.trim().slice(0, 2000)
+    let text = summary.trim().slice(0, 2000)
     if (!text) throw new Error('O resumo do retorno está vazio')
+    const git = this.store.mission(caller.missionId)?.git
+    if (git && caller.branch && caller.branch !== git.branch) {
+      const dirty = safe(() => dirtyFiles(this.worktreeOf(caller, git)), [])
+      const ahead = safe(() => commitsAhead(git.repo, git.branch, caller.branch!).length, 0)
+      const notes = [
+        ahead ? `branch ${caller.branch} com ${ahead} commit(s) para integrar (git merge ${caller.branch})` : `branch ${caller.branch} sem commits novos`,
+        dirty.length ? `atenção: ${dirty.length} arquivo(s) sem commit no branch dele` : null,
+      ].filter(Boolean)
+      text = `${text} [${notes.join('; ')}]`
+    }
     const body = details.trim() ? `${text}\n\n${details.trim().slice(0, 20000)}` : text
     this.event(caller.missionId, 'handoff', `Retorno de #${caller.id}`, body, caller.id)
     this.panes.markDelivered(caller.id)
@@ -823,7 +932,7 @@ export class OrbitCore {
   // ---- internals ----
 
   /** `resume` continues that conversation of the CLI; `opened` replaces the flow's "Agente #N aberto". */
-  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string } = {}): Pane {
+  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string } } = {}): Pane {
     const mission = this.store.mission(input.missionId)
     if (!mission || mission.status !== 'active') throw new Error('Missão inexistente ou arquivada')
     const workspace = this.store.workspace(mission.workspaceId)
@@ -862,6 +971,21 @@ export class OrbitCore {
     const policy: SkillPolicy | undefined = roleSkills?.onlySkills ? { only: roleSkills.skills } : undefined
 
     const id = this.store.allocatePaneId()
+    // Worktree missions: the lead on the mission branch, each helper on its own branch cut from it.
+    let cwd = workspace.path
+    let branch: string | null = null
+    if (mission.git) {
+      const git = mission.git
+      // A plain terminal helper works in the lead's copy (to run tests, look around); agents get their own.
+      const own = request.role === 'lead' || request.cli !== 'shell'
+      const tree = options.worktree ?? (request.role === 'lead' || !own
+        ? { path: git.leadPath, branch: git.branch }
+        : { path: join(this.dataDir, 'worktrees', mission.id, String(id)), branch: `${git.branch}--${id}` })
+      addWorktree(git.repo, git.leadPath, git.branch, git.base)
+      if (tree.path !== git.leadPath) addWorktree(git.repo, tree.path, tree.branch, git.branch)
+      cwd = git.sub ? join(tree.path, git.sub) : tree.path
+      branch = tree.branch
+    }
     const title = request.title.trim().slice(0, 120) || squadRole?.name || taskType?.name || `${CLI_LABEL[request.cli]} #${id}`
     const token = randomBytes(24).toString('base64url')
     const lead = this.missionPanes(mission.id).find((p) => p.role === 'lead')
@@ -876,7 +1000,7 @@ export class OrbitCore {
       statusCommand: hookCommand(process.execPath, STATUS_SCRIPT),
       apiKeyHelper: account ? this.accountFiles.apiKeyHelper(account) : undefined,
       addDirs: workspace.folders.slice(1),
-      rolePrompt: workspaceNote(workspace.folders) + this.skillNote(request.cli, policy) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, lead, squadRole, taskType)),
+      rolePrompt: workspaceNote(workspace.folders) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, lead, squadRole, taskType)),
       task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
     })
 
@@ -890,8 +1014,9 @@ export class OrbitCore {
         request: { ...request, title },
         squadRole: squadRole?.name ?? null,
         taskType: taskType?.name ?? null,
-        cwd: workspace.path,
+        cwd,
         launch,
+        branch,
         hookDriven: request.cli === 'claude',
         accountId: account?.id ?? null,
         env: {
@@ -929,8 +1054,11 @@ export class OrbitCore {
     if (!spec || (pane.cli === 'shell' && resume)) throw new Error(resume ? 'Não há conversa para retomar neste agente' : `#${paneId} foi aberto antes desta versão do Orbit; abra um novo`)
     if (resume && !pane.sessionId) throw new Error(`O ${CLI_LABEL[pane.cli]} ainda não informou a conversa de #${paneId}`)
     const sessionId = pane.sessionId
+    const git = this.store.mission(pane.missionId)?.git
+    const worktree = git && pane.branch ? { path: this.worktreeOf(pane, git), branch: pane.branch } : undefined
     this.closePane(paneId)
     this.spawn({ ...spec, title: pane.title }, {
+      worktree,
       resume: resume ? sessionId! : undefined,
       opened: (id) => (resume ? `#${id} retomou a conversa de #${paneId}` : `#${id} reabriu #${paneId}`),
     })
@@ -1006,6 +1134,29 @@ function validFolders(input: unknown): string[] {
     if (!folders.includes(path)) folders.push(path)
   }
   return folders
+}
+
+function safe<T>(fn: () => T, fallback: T): T {
+  try {
+    return fn()
+  } catch {
+    return fallback
+  }
+}
+
+/** `gh pr view --json number,url,state,isDraft,statusCheckRollup` → what the UI shows. */
+export function parsePrStatus(json: string): PrStatus {
+  const data = JSON.parse(json) as { number: number; url: string; state: PrStatus['state']; isDraft?: boolean; statusCheckRollup?: Array<Record<string, string>> }
+  const checks = (data.statusCheckRollup ?? []).map((c) => {
+    const name = c.name ?? c.context ?? 'check'
+    if (c.__typename === 'StatusContext') {
+      return { name, state: c.state === 'SUCCESS' ? 'ok' : c.state === 'PENDING' || c.state === 'EXPECTED' ? 'pending' : 'fail' } as const
+    }
+    if (c.status && c.status !== 'COMPLETED') return { name, state: 'pending' } as const
+    const conclusion = c.conclusion ?? ''
+    return { name, state: conclusion === 'SUCCESS' || conclusion === 'NEUTRAL' ? 'ok' : conclusion === 'SKIPPED' ? 'skip' : 'fail' } as const
+  })
+  return { number: data.number, url: data.url, state: data.state, draft: data.isDraft === true, checks, checkedAt: Date.now() }
 }
 
 function cardColumn(value: unknown): CardColumn {
