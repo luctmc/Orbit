@@ -155,16 +155,17 @@ test('helpers always report back: forced handoff, structured status, interrupt, 
     assert.match((await asLead('agent_interrupt', { agent: helperId, message: 'Pare e rode os testes' })).text, /reorientado/)
     await redirected
 
-    // Resume: same conversation, a new agent number, the message as its next turn.
+    // Resume: same conversation, same number, the message as its next turn; what it owes carries over.
     assert.match((await asLead('agent_resume', { agent: helperId })).text, /ainda não informou a conversa/)
     await hook(helperToken, { hook_event_name: 'SessionStart', session_id: SESSION })
     await ui.next('pane.updated', (m) => m.pane.id === helperId && m.pane.sessionId === SESSION && m.pane.status === 'idle')
     const resumed = await asLead('agent_resume', { agent: helperId, message: 'Continue com os testes' })
-    const newId = Number(/retomado como #(\d+)/.exec(resumed.text)![1])
+    assert.match(resumed.text, /retomado na mesma conversa/)
     const launch = launches.at(-1)!
     assert.equal(launch.resume, SESSION)
     assert.equal(readFileSync(launch.taskPath!, 'utf8'), 'Continue com os testes')
-    assert.deepEqual([pane(newId).assignedBy, pane(newId).handoffStatus, server.core.store.pane(helperId)], [lead.id, null, undefined])
+    assert.deepEqual([pane(helperId).assignedBy, pane(helperId).handoffStatus], [lead.id, null])
+    await ui.next('event.added', (m) => m.event.title === `#${helperId} retomou a conversa`)
   } finally {
     delete process.env.CODEX_HOME
     delete process.env.CLAUDE_CONFIG_DIR

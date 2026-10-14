@@ -185,6 +185,33 @@ export function codexLastTurn(text: string): CodexTurn | null {
   return null
 }
 
+/** The session file of a known Codex conversation (its name ends with the session id). */
+export function findCodexRolloutById(home: string, sessionId: string): string | null {
+  const root = join(home, 'sessions')
+  if (!existsSync(root) || !/^[\w-]{8,}$/.test(sessionId)) return null
+  const name = (readdirSync(root, { recursive: true }) as string[]).find((f) => f.endsWith(`${sessionId}.jsonl`))
+  return name ? join(root, name) : null
+}
+
+/** The Codex session file written last in a Codex home (looking back a week), with when. */
+export function latestCodexRollout(home: string, now = Date.now()): { path: string; mtime: number } | null {
+  const root = join(home, 'sessions')
+  if (!existsSync(root)) return null
+  let best: { path: string; mtime: number } | null = null
+  for (let back = 0; back < 7 && !best; back++) {
+    const d = new Date(now - back * 86_400_000)
+    const dir = join(root, String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0'))
+    if (!existsSync(dir)) continue
+    for (const name of readdirSync(dir)) {
+      if (!name.endsWith('.jsonl')) continue
+      const path = join(dir, name)
+      const mtime = statSync(path).mtimeMs
+      if (!best || mtime > best.mtime) best = { path, mtime }
+    }
+  }
+  return best
+}
+
 export function readTail(path: string, bytes = 256 * 1024): string {
   const size = statSync(path).size
   if (size <= bytes) return readFileSync(path, 'utf8')

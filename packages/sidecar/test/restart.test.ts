@@ -55,29 +55,42 @@ test('agents are renamed, duplicated, reopened, and resumed even after Orbit res
     assert.deepEqual([copy.role, copy.cli, copy.model, copy.effort], ['crew', 'claude', 'opus', 'high'])
     assert.equal(launches.at(-1)!.resume, undefined)
 
-    // Orbit restarts: processes are gone, the settings and the conversation id are not.
+    // Orbit restarts: the agent that was running comes back by itself, same number, same conversation.
+    ui.ws.close()
+    await server.close()
+    const before = launches.length
+    server = await start()
+    ui = connect(server.port)
+    await ui.opened
+    const { snapshot } = await ui.next('snapshot')
+    assert.equal(snapshot.settings.resumeOnStart, true)
+    const back = snapshot.panes.find((p) => p.id === lead.id)!
+    assert.deepEqual([back.status === 'exited', back.title, back.model, back.effort], [false, 'Arquiteto', 'opus', 'high'])
+    assert.equal(launches.length, before + 1, 'only the agent with a conversation comes back')
+    assert.equal(launches.at(-1)!.resume, SESSION)
+    assert.equal(launches.at(-1)!.taskPath, undefined)
+    assert.equal(snapshot.panes.find((p) => p.id === copy.id)!.status, 'exited')
+
+    // The copy has no conversation to resume; it can be reopened, keeping its number.
+    ui.send({ type: 'pane.restart', paneId: copy.id, resume: true })
+    assert.match((await ui.next('error')).message, /ainda não informou a conversa/)
+    ui.send({ type: 'pane.restart', paneId: copy.id, resume: false })
+    await ui.next('event.added', (m) => m.event.title === `#${copy.id} reaberto numa conversa nova`)
+    ui.send({ type: 'pane.rename', paneId: copy.id, title: '   ' })
+    assert.match((await ui.next('error', (m) => /nome/.test(m.message))).message, /Dê um nome/)
+
+    // With the option off, agents wait for the person; resuming by hand keeps the number too.
+    ui.send({ type: 'settings.save', settings: { resumeOnStart: false } })
+    await ui.next('settings.updated', (m) => m.settings.resumeOnStart === false)
     ui.ws.close()
     await server.close()
     server = await start()
     ui = connect(server.port)
     await ui.opened
-    const { snapshot } = await ui.next('snapshot')
-    assert.equal(snapshot.panes.find((p) => p.id === lead.id)!.status, 'exited')
-
+    assert.equal((await ui.next('snapshot')).snapshot.panes.find((p) => p.id === lead.id)!.status, 'exited')
     ui.send({ type: 'pane.restart', paneId: lead.id, resume: true })
-    const { pane: resumed } = await ui.next('pane.updated', (m) => m.pane.id > copy.id && m.pane.role === 'lead')
-    await ui.next('pane.removed', (m) => m.paneId === lead.id)
-    assert.deepEqual([resumed.title, resumed.model, resumed.effort], ['Arquiteto', 'opus', 'high'])
+    await ui.next('event.added', (m) => m.event.title === `#${lead.id} retomou a conversa`)
     assert.equal(launches.at(-1)!.resume, SESSION)
-    assert.equal(launches.at(-1)!.taskPath, undefined)
-    await ui.next('event.added', (m) => m.event.title === `#${resumed.id} retomou a conversa de #${lead.id}`)
-
-    ui.send({ type: 'pane.restart', paneId: copy.id, resume: true })
-    assert.match((await ui.next('error')).message, /ainda não informou a conversa/)
-    ui.send({ type: 'pane.restart', paneId: copy.id, resume: false })
-    await ui.next('event.added', (m) => /reabriu #/.test(m.event.title))
-    ui.send({ type: 'pane.rename', paneId: resumed.id, title: '   ' })
-    assert.match((await ui.next('error', (m) => /nome/.test(m.message))).message, /Dê um nome/)
   } finally {
     ui.ws.close()
     await server.close()

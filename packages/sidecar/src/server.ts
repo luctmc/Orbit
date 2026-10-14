@@ -123,6 +123,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   const address = http.address()
   port = typeof address === 'object' && address ? address.port : options.port
   core.setEndpoint(`http://127.0.0.1:${port}`)
+  core.resumeCrews()
   void core.refreshCatalog()
   void core.checkAccounts()
   void core.scanSkills().catch(() => {})

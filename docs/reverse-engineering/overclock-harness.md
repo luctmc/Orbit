@@ -359,14 +359,19 @@ Missão agêntica num Orbit separado. O usuário escolheu só o líder (Claude H
 - Item 23: `mission_ready` marca a missão como pronta (recusa com ajudantes devendo), aviso no macOS, selo na tela e resumo no relatório; trabalho novo tira o selo.
 - Teste ao vivo: líder Haiku; correção no Claude Sonnet (bug), revisão no Codex (revisão, esforço alto), os dois com evidência; o revisor confirmou que os testes novos falham no código antigo; o líder declarou a missão pronta.
 
+### Fase 3, qualidade e continuidade
+
+- Itens 6, 26, 27: "como fazer" por tipo de tarefa (de fábrica para os sete tipos, editável), entregue na primeira mensagem, então vale igual no Codex; tipos só leitura (o Claude tem as ferramentas de edição recusadas). A política "comece barato" já estava no prompt do líder.
+- Item 8: a folga das contas do Codex vem do último arquivo de sessão de cada conta, inclusive do uso fora do Orbit.
+- Item 17: critérios de aceite no `agent_spawn` (`accept`); `done` só passa respondendo a cada um em `criteria`, todos cumpridos.
+- Item 19: ajudante abre até 2 sub-ajudantes (que não abrem os seus); o retorno deles volta ao ajudante, que só fecha os próprios.
+- Item 22: `ask_user` com opções; o terminal fica "espera você" até a pessoa responder, mesmo que os hooks digam outra coisa, e as opções viram botões.
+- Item 12: `folder` no `agent_spawn` (só pastas do workspace): o ajudante nasce no repositório do trabalho, com as outras pastas via `--add-dir`.
+- Item 32: o recibo de cada abertura (tipo, troca de CLI, conta e folga) fica no fluxo da missão.
+- Item 33: retomar mantém o número do agente e o que ele deve; ao abrir o Orbit, os agentes que rodavam voltam na mesma conversa (opção ligada por padrão), e o Codex retomado volta a ser acompanhado pelo arquivo da sessão dele.
+
 ### Ainda abertos
 
-- Item 6, 26, 27: método por tipo de tarefa no prompt (vale para o Codex também) e política de tiers.
-- Item 8: folga de contas sem agente rodando.
-- Item 12: pasta por ajudante.
-- Item 17: contrato de entrega (critérios de aceite conferidos no submit).
-- Item 19: sub-ajudantes com teto.
-- Item 22: pergunta formal ao usuário.
-- Item 32: recibo no fluxo da missão.
-- Item 33: retomar a tripulação ao reabrir o Orbit.
-- Itens 31 e 34 (tabela editada por agente, decisor LLM): baixo impacto, fora por ora.
+- Item 31: tabela editada pelo agente com proposta. Baixo impacto.
+- Item 34: decisor LLM. A classificação por regra tem se mostrado suficiente nos testes ao vivo; fica para quando errar.
+- Folga das contas do Claude sem agente rodando: o Claude só informa os limites pela status line de uma sessão aberta.

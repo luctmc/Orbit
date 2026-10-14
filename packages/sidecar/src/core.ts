@@ -14,13 +14,13 @@ import { missionReport } from './report.ts'
 import { addWorktree, BRANCH, commitsAhead, dirtyFiles, filesChanged, hasRemote, pushBranch, removeWorktree, repoInfo } from './git.ts'
 import { slugify } from './squads.ts'
 import { normalizeRouting } from './routing.ts'
-import { codexHome, codexLastTurn, codexSessionId, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
+import { codexHome, codexLastTurn, findCodexRolloutById, latestCodexRollout, codexSessionId, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
 import { statusFromHook, type HookPayload } from './hooks.ts'
 import { PaneManager, type PaneSnapshot } from './panes.ts'
-import { crewRole, HANDOFF_NUDGE, instructionsNote, leadRole, MAESTRO_RULE, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
+import { acceptanceNote, crewRole, HANDOFF_NUDGE, instructionsNote, leadRole, MAESTRO_RULE, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
 import { normalizeSquad } from './squads.ts'
 import { Store } from './store.ts'
 
@@ -38,6 +38,10 @@ const HANDOFF_STATUSES: readonly HandoffStatus[] = ['done', 'blocked', 'progress
 const HANDOFF_LABEL: Record<HandoffStatus, string> = { done: 'concluído', blocked: 'bloqueado', progress: 'em andamento' }
 /** Messages typed into a terminal go as one line. */
 const oneLine = (text: string) => text.replace(/\s*\n\s*/g, ' / ').trim()
+/** Sub-helpers a helper may have open at once (they cannot open their own). */
+const MAX_CHILDREN = 2
+const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
+const RESUME_NOTE = 'O Orbit foi reaberto. Continue a tarefa de onde parou e, ao terminar, entregue com handoff_submit.'
 
 export type Broadcast = (message: ServerMessage) => void
 
@@ -72,6 +76,10 @@ export class OrbitCore {
   private readonly codexTurns = new Map<number, string>()
   /** Codex helpers already asked once to deliver since their last assignment. */
   private readonly nudged = new Set<number>()
+  /** Acceptance criteria each helper must answer when it delivers done. */
+  private readonly acceptance = new Map<number, string[]>()
+  /** Helpers whose task type only reads (Claude's edit tools are refused). */
+  private readonly readOnly = new Set<number>()
   private codexTimer: NodeJS.Timeout | null = null
   private readonly accountFiles: AccountFiles
   /** Login state per account, from the CLIs; kept in memory and asked again on start. */
@@ -616,8 +624,26 @@ export class OrbitCore {
       found = { loggedIn: null, message: error instanceof Error ? error.message : String(error) }
     }
     if (!this.store.account(accountId)) return // removed meanwhile
+    if (account.cli === 'codex') this.readCodexLimits(account)
     const loginPaneId = this.accountStatus.get(accountId)?.loginPaneId ?? null
     this.setAccountStatus(accountId, { ...found, checkedAt: Date.now(), busy: loginPaneId && this.panes.isAlive(loginPaneId) ? 'login' : null })
+  }
+
+  /**
+   * A Codex account's limits from its latest session file, so the maestro knows its room even
+   * when no agent of Orbit is running on it (Codex writes them with every turn).
+   */
+  private readCodexLimits(account: Account): void {
+    try {
+      const home = this.accountFiles.configDir(account) ?? codexHome()
+      const latest = latestCodexRollout(home)
+      const known = this.store.limits().find((l) => l.accountId === account.id)
+      if (!latest || (known && known.updatedAt >= latest.mtime)) return
+      const { limits } = fromCodexRollout(readTail(latest.path), latest.mtime)
+      if (limits) this.broadcast({ type: 'limits', limits: this.store.setLimits({ ...limits, accountId: account.id }) })
+    } catch {
+      // no readable session: the account stays "sem leitura"
+    }
   }
 
   async checkAccounts(): Promise<void> {
@@ -834,6 +860,9 @@ export class OrbitCore {
       case 'browser.close':
         void this.browser.close(message.missionId)
         return
+      case 'settings.save':
+        this.broadcast({ type: 'settings.updated', settings: this.store.saveSettings(message.settings) })
+        return
       case 'routing.reset':
         this.store.saveRouting(null)
         this.broadcast({ type: 'routing.updated', routing: this.store.routing() })
@@ -854,9 +883,11 @@ export class OrbitCore {
       case 'pane.attach':
         return // per-connection: handled by the server
       case 'pane.input':
+        if (typeof message.data === 'string' && message.data.includes('\r')) this.panes.answered(message.paneId)
         this.panes.write(message.paneId, message.data)
         return
       case 'pane.submit':
+        this.panes.answered(message.paneId)
         // Text and Enter in one write look like a paste to TUIs, which then keep the Enter as a newline.
         if (!this.panes.submit(message.paneId, message.text)) throw new Error(`#${message.paneId} não está rodando`)
         return
@@ -986,23 +1017,65 @@ export class OrbitCore {
    * A helper opened by an agent. In agentic missions an activity without a role, type or explicit
    * CLI is classified by the maestro; the receipt says what was chosen and why.
    */
-  spawnHelper(caller: Pane, input: { title: string; task: string; cli?: AgentCli; model: string | null; effort?: Effort | null; squadRoleId?: string | null; taskTypeId?: string | null }): { pane: Pane; receipt: string[] } {
+  spawnHelper(caller: Pane, input: { title: string; task: string; cli?: AgentCli; model: string | null; effort?: Effort | null; squadRoleId?: string | null; taskTypeId?: string | null; accept?: string[]; folder?: string | null }): { pane: Pane; receipt: string[] } {
     const receipt: string[] = []
     const mission = this.store.mission(caller.missionId)
+    if (caller.role === 'crew') {
+      const slots = this.childSlots(caller)
+      if (slots === 0) throw new Error(this.missionPanes(caller.missionId).some((p) => p.assignedBy === caller.id && this.panes.isAlive(p.id)) ? `Você já tem ${MAX_CHILDREN} sub-ajudantes abertos. Feche um que já entregou (agent_close) antes de abrir outro.` : 'Sub-ajudantes não podem abrir ajudantes.')
+    }
     let taskTypeId = input.taskTypeId ?? null
-    if (mission?.mode === 'agentica' && !taskTypeId && !input.squadRoleId && !input.cli && !input.model) {
+    if ((mission?.mode === 'agentica' || caller.role === 'crew') && !taskTypeId && !input.squadRoleId && !input.cli && !input.model) {
       const { type, via } = classifyTask(`${input.title}\n${input.task}`, this.store.routing().taskTypes)
       taskTypeId = type.id
       receipt.push(`tipo: ${type.name} (o maestro classificou; ${via})`)
     } else if (taskTypeId) {
       const type = this.store.routing().taskTypes.find((t) => t.id === taskTypeId)
-      if (type) receipt.push(`tipo: ${type.name} (escolhido pelo líder)`)
+      if (type) receipt.push(`tipo: ${type.name} (escolhido pelo ${caller.role === 'lead' ? 'líder' : `ajudante #${caller.id}`})`)
     }
-    const opened = this.spawn({ missionId: caller.missionId, role: 'crew', ...input, cli: input.cli ?? 'claude', taskTypeId }, { receipt })
+    const accept = (input.accept ?? []).map((c) => c.trim()).filter(Boolean).slice(0, 8)
+    if (accept.length) receipt.push(`critérios de aceite: ${accept.length}`)
+    if (input.folder) receipt.push(`pasta: ${input.folder}`)
+    const children = caller.role === 'lead' && (mission?.mode === 'agentica' || mission?.mode === 'squad') ? MAX_CHILDREN : 0
+    const { accept: _, ...request } = input
+    const opened = this.spawn({ missionId: caller.missionId, role: 'crew', ...request, task: input.task + acceptanceNote(accept), cli: input.cli ?? 'claude', taskTypeId }, { receipt, boss: caller, children })
+    if (accept.length) this.acceptance.set(opened.id, accept)
     this.assign(opened.id, caller.id)
     const pane = this.store.pane(opened.id) ?? opened
     receipt.push(`abriu: ${[CLI_LABEL[pane.cli], pane.model ?? 'modelo padrão', pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}`)
     return { pane, receipt }
+  }
+
+  /** How many more sub-helpers a helper may open now (only helpers the lead opened may). */
+  childSlots(caller: Pane): number {
+    if (caller.role !== 'crew' || caller.cli === 'shell' || caller.assignedBy === null) return 0
+    const mode = this.store.mission(caller.missionId)?.mode
+    if (this.store.pane(caller.assignedBy)?.role !== 'lead' || (mode !== 'agentica' && mode !== 'squad')) return 0
+    const open = this.missionPanes(caller.missionId).filter((p) => p.assignedBy === caller.id && this.panes.isAlive(p.id)).length
+    return Math.max(0, MAX_CHILDREN - open)
+  }
+
+  /** An agent asks the person: the pane waits, with the question and its choices, until answered. */
+  askUser(caller: Pane, question: string, choices: string[]): void {
+    const text = question.trim().slice(0, 600)
+    if (!text) throw new Error('Escreva a pergunta')
+    this.panes.ask(caller.id, text, choices.map((c) => c.trim().slice(0, 80)).filter(Boolean).slice(0, 6))
+  }
+
+  /** When Orbit opens: the agents that were running come back in their conversations. */
+  resumeCrews(): void {
+    if (!this.store.settings().resumeOnStart) return
+    const ids = this.store.wasRunning.splice(0)
+    const panes = ids.map((id) => this.store.pane(id)).filter((p): p is Pane => Boolean(p && p.cli !== 'shell' && p.sessionId && this.store.paneSpec(p.id) && this.store.mission(p.missionId)?.status === 'active'))
+    // Leads first, so helpers that deliver find them running.
+    panes.sort((a, b) => Number(b.role === 'lead') - Number(a.role === 'lead') || a.id - b.id)
+    for (const pane of panes) {
+      try {
+        this.restartPane(pane.id, true, this.owesHandoff(pane) ? RESUME_NOTE : undefined)
+      } catch (error) {
+        this.event(pane.missionId, 'pane.exited', `#${pane.id} não voltou`, error instanceof Error ? error.message : String(error), pane.id)
+      }
+    }
   }
 
   /** Sends text to another agent of the same mission, as if typed by a person. */
@@ -1099,6 +1172,7 @@ export class OrbitCore {
   /** The lead closes a helper of its own mission (kills the process, removes the pane). */
   closeHelper(caller: Pane, targetId: number, force = false): void {
     const target = this.sameMission(caller, targetId)
+    if (caller.role === 'crew' && target.assignedBy !== caller.id) throw new Error('Você só fecha os seus sub-ajudantes')
     if (!force && target.deliveredAt === null && target.assignedBy !== null && this.panes.isAlive(target.id) && target.cli !== 'shell') {
       throw new Error(`#${targetId} ainda não entregou o retorno. Espere: ele chega sozinho no seu terminal. Se o ajudante travou de verdade, confira com agent_read e feche com force: true.`)
     }
@@ -1116,13 +1190,23 @@ export class OrbitCore {
    * work (or `to`, another agent of the mission) and recorded in the flow. Progress is only recorded,
    * so the lead is not woken for it. Done needs evidence of how it was verified.
    */
-  handoff(caller: Pane, input: { summary: string; details?: string; status?: HandoffStatus; evidence?: string; to?: number | null }): { deliveredTo: number | null; status: HandoffStatus } {
+  handoff(caller: Pane, input: { summary: string; details?: string; status?: HandoffStatus; evidence?: string; to?: number | null; criteria?: Array<{ item: number; met: boolean; how: string }> }): { deliveredTo: number | null; status: HandoffStatus } {
     const status = input.status ?? 'done'
     if (!HANDOFF_STATUSES.includes(status)) throw new Error(`Status inválido: ${status}`)
     let text = input.summary.trim().slice(0, 2000)
     if (!text) throw new Error('O resumo do retorno está vazio')
     const evidence = (input.evidence ?? '').trim().slice(0, 4000)
     if (status === 'done' && !evidence) throw new Error('Diga em evidence como verificou: comandos rodados e o resultado, testes, arquivos conferidos. Se não deu para verificar, entregue com status blocked e explique o que falta.')
+    // The acceptance contract: done answers every criterion, and all of them hold.
+    const accept = this.acceptance.get(caller.id) ?? []
+    const answers = new Map((input.criteria ?? []).map((c) => [c.item, c]))
+    if (status === 'done' && accept.length) {
+      const missing = accept.map((_, i) => i + 1).filter((n) => !answers.has(n))
+      if (missing.length) throw new Error(`Responda em criteria a cada critério de aceite (falta${missing.length > 1 ? 'm' : ''} ${missing.join(', ')}): ${accept.map((c, i) => `${i + 1}. ${c}`).join('; ')}`)
+      const unmet = accept.map((_, i) => i + 1).filter((n) => !answers.get(n)!.met)
+      if (unmet.length) throw new Error(`O critério ${unmet.join(', ')} não foi cumprido. Termine antes de entregar done, ou entregue com status blocked dizendo o que impede.`)
+    }
+    const criteria = accept.length && answers.size ? accept.map((c, i) => `${answers.get(i + 1)?.met ? '✓' : '✗'} ${i + 1}. ${c}${answers.get(i + 1)?.how ? `: ${answers.get(i + 1)!.how.trim().slice(0, 300)}` : ''}`).join('\n') : ''
     const git = this.store.mission(caller.missionId)?.git
     if (git && caller.branch && caller.branch !== git.branch && status !== 'progress') {
       const dirty = safe(() => dirtyFiles(this.worktreeOf(caller, git)), [])
@@ -1139,12 +1223,13 @@ export class OrbitCore {
     if (target && !this.panes.isAlive(target.id)) throw new Error(`#${target.id} não está rodando`)
     const label = HANDOFF_LABEL[status]
     const details = (input.details ?? '').trim().slice(0, 20000)
-    const body = [text, evidence && `Evidência: ${evidence}`, details].filter(Boolean).join('\n\n')
+    const body = [text, evidence && `Evidência: ${evidence}`, criteria && `Critérios de aceite:\n${criteria}`, details].filter(Boolean).join('\n\n')
     this.event(caller.missionId, 'handoff', `Retorno de #${caller.id} (${label})${target ? ` para #${target.id}` : ''}`, body, caller.id)
     this.panes.setHandoff(caller.id, { status })
     if (status === 'progress' && !target) return { deliveredTo: null, status }
 
-    const line = `${oneLine(text)}${evidence ? ` · evidência: ${oneLine(evidence).slice(0, 600)}` : ''}${details ? ' (detalhes em handoff_list)' : ''}`
+    const met = accept.length && answers.size ? ` · critérios: ${accept.filter((_, i) => answers.get(i + 1)?.met).length}/${accept.length}` : ''
+    const line = `${oneLine(text)}${evidence ? ` · evidência: ${oneLine(evidence).slice(0, 600)}` : ''}${met}${details || criteria ? ' (detalhes em handoff_list)' : ''}`
     if (target) {
       this.panes.submit(target.id, `[Orbit] Retorno de #${caller.id} (${caller.title}) para você, ${label}: ${line}`)
       // Work handed on (to a reviewer, say) is owed back by that agent to whoever leads it.
@@ -1184,7 +1269,8 @@ export class OrbitCore {
         if (!file) {
           const account = pane.accountId ? this.store.account(pane.accountId) : undefined
           const home = (account && this.accountFiles.configDir(account)) ?? codexHome()
-          file = findCodexRollout(home, pane.cwd, pane.createdAt, new Set(this.codexRollouts.values())) ?? undefined
+          // A resumed conversation keeps writing to its own file, named after the session.
+          file = (pane.sessionId && findCodexRolloutById(home, pane.sessionId)) || findCodexRollout(home, pane.cwd, pane.createdAt, new Set(this.codexRollouts.values())) || undefined
           if (!file) continue
           this.codexRollouts.set(pane.id, file)
           const sessionId = codexSessionId(file)
@@ -1292,11 +1378,14 @@ export class OrbitCore {
     const pane = this.store.pane(paneId)
     if (pane) this.noteEdit(pane, payload)
     if (typeof payload.session_id === 'string' && SESSION_ID.test(payload.session_id)) this.panes.setSession(paneId, payload.session_id)
+    if (pane && this.readOnly.has(pane.id) && payload.hook_event_name === 'PreToolUse' && EDIT_TOOLS.includes(payload.tool_name ?? '')) {
+      return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'Esta tarefa é só de leitura: não edite arquivos. Aponte o que mudar na sua entrega.' } }
+    }
     // The lead of an agentic or squad mission orchestrates: reminded at every message, kept from editing.
     const mission = pane && pane.role === 'lead' ? this.store.mission(pane.missionId) : undefined
     if (mission && (mission.mode === 'agentica' || mission.mode === 'squad')) {
       if (payload.hook_event_name === 'UserPromptSubmit') return { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: MAESTRO_RULE } }
-      if (payload.hook_event_name === 'PreToolUse' && ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(payload.tool_name ?? '')) {
+      if (payload.hook_event_name === 'PreToolUse' && EDIT_TOOLS.includes(payload.tool_name ?? '')) {
         return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'Você é o maestro desta missão e não edita arquivos. Abra um ajudante com agent_spawn para essa mudança.' } }
       }
     }
@@ -1315,7 +1404,7 @@ export class OrbitCore {
   // ---- internals ----
 
   /** `resume` continues that conversation of the CLI; `opened` replaces the flow's "Agente #N aberto". */
-  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[] } = {}): Pane {
+  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number } = {}): Pane {
     const receipt = options.receipt ?? []
     const mission = this.store.mission(input.missionId)
     if (!mission || mission.status !== 'active') throw new Error('Missão inexistente ou arquivada')
@@ -1385,11 +1474,14 @@ export class OrbitCore {
     const roleSkills = squadRole ?? taskType
     const policy: SkillPolicy | undefined = roleSkills?.onlySkills ? { only: roleSkills.skills } : undefined
 
-    const id = this.store.allocatePaneId()
+    const id = options.id ?? this.store.allocatePaneId()
     // Worktree missions: the lead on the mission branch, each helper on its own branch cut from it.
-    let cwd = workspace.path
+    // A helper may start in another folder of the workspace; the worktree is only for the main one.
+    const folder = request.folder && request.folder !== workspace.path ? request.folder : null
+    if (folder && !workspace.folders.includes(folder)) throw new Error(`Essa pasta não faz parte do workspace: ${folder}`)
+    let cwd = folder ?? workspace.path
     let branch: string | null = null
-    if (mission.git) {
+    if (mission.git && !folder) {
       const git = mission.git
       // A plain terminal helper works in the lead's copy (to run tests, look around); agents get their own.
       const own = request.role === 'lead' || request.cli !== 'shell'
@@ -1414,8 +1506,8 @@ export class OrbitCore {
       hookCommand: hookCommand(process.execPath, HOOK_SCRIPT),
       statusCommand: hookCommand(process.execPath, STATUS_SCRIPT),
       apiKeyHelper: account ? this.accountFiles.apiKeyHelper(account) : undefined,
-      addDirs: workspace.folders.slice(1),
-      rolePrompt: workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, lead, squadRole, taskType)),
+      addDirs: folder ? workspace.folders.filter((f) => f !== folder && (!mission.git || f !== workspace.path)) : workspace.folders.slice(1),
+      rolePrompt: workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, { boss: options.boss ?? lead, children: options.children ?? 0 }, squadRole, taskType)),
       task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
     })
 
@@ -1453,15 +1545,21 @@ export class OrbitCore {
     // Enough to open it again later; the account is the one it really ran as (its conversations live there).
     this.store.setPaneSpec(id, { ...input, task: null, accountId: account?.id ?? null })
     if (policy) this.skillPolicies.set(id, policy)
+    if (taskType?.readOnly) this.readOnly.add(id)
     if (request.cli === 'codex') this.watchCodex()
     this.syncPane(pane)
     const seat = request.role === 'lead' ? 'líder' : squadRole?.name.toLowerCase() ?? taskType?.name.toLowerCase() ?? 'ajudante'
     const who = [CLI_LABEL[request.cli], account && !account.builtin && account.name, request.model, request.effort && `esforço ${EFFORT_LABEL[request.effort]}`, seat].filter(Boolean).join(' · ')
-    this.event(mission.id, 'pane.spawned', options.opened?.(id) ?? `Agente #${id} aberto`, `${title} — ${who}`, id)
+    // The receipt says why: task type, CLI change, account and its room.
+    const why = receipt.length ? `\n\n${receipt.map((line) => `▸ ${line}`).join('\n')}` : ''
+    this.event(mission.id, 'pane.spawned', options.opened?.(id) ?? `Agente #${id} aberto`, `${title} — ${who}${why}`, id)
     return pane
   }
 
-  /** Opens an agent again with its settings: a new conversation or, with `resume`, the same one. */
+  /**
+   * Opens an agent again with its settings, under the same number: a new conversation or, with
+   * `resume`, the same one (`message` is its next turn). What it owes and its criteria carry over.
+   */
   private restartPane(paneId: number, resume: boolean, message?: string): Pane {
     const pane = this.store.pane(paneId)
     if (!pane) throw new Error(`#${paneId} não existe`)
@@ -1471,12 +1569,19 @@ export class OrbitCore {
     const sessionId = pane.sessionId
     const git = this.store.mission(pane.missionId)?.git
     const worktree = git && pane.branch ? { path: this.worktreeOf(pane, git), branch: pane.branch } : undefined
+    const accept = this.acceptance.get(paneId)
     this.closePane(paneId)
-    return this.spawn({ ...spec, title: pane.title, ...(message ? { task: message } : {}) }, {
+    const opened = this.spawn({ ...spec, title: pane.title, ...(message ? { task: message } : {}) }, {
+      id: paneId,
       worktree,
       resume: resume ? sessionId! : undefined,
-      opened: (id) => (resume ? `#${id} retomou a conversa de #${paneId}` : `#${id} reabriu #${paneId}`),
+      opened: (id) => (resume ? `#${id} retomou a conversa` : `#${id} reaberto numa conversa nova`),
     })
+    if (accept) this.acceptance.set(opened.id, accept)
+    // Same conversation: known now, not only when the CLI reports it again.
+    if (resume && sessionId) this.panes.setSession(opened.id, sessionId)
+    if (pane.assignedBy !== null && pane.handoffStatus === null) this.panes.setHandoff(opened.id, { status: null, assignedBy: pane.assignedBy })
+    return this.store.pane(opened.id) ?? opened
   }
 
   private renamePane(paneId: number, raw: string): void {
@@ -1506,6 +1611,8 @@ export class OrbitCore {
     this.codexRollouts.delete(id)
     this.codexTurns.delete(id)
     this.nudged.delete(id)
+    this.acceptance.delete(id)
+    this.readOnly.delete(id)
     this.skillPolicies.delete(id)
     this.store.removePane(id)
     for (const [token, paneId] of this.paneTokens) if (paneId === id) this.paneTokens.delete(token)

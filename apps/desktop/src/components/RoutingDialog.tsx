@@ -11,7 +11,7 @@ import { CloseIcon, PlusIcon } from './icons.tsx'
 
 const CLIS: AgentCliForRole[] = ['claude', 'codex']
 
-const blankRow = (): TaskType => ({ id: '', name: '', description: '', cli: 'claude', model: null, effort: 'medium', skills: [], onlySkills: false })
+const blankRow = (): TaskType => ({ id: '', name: '', description: '', cli: 'claude', model: null, effort: 'medium', skills: [], onlySkills: false, method: '', readOnly: false })
 
 function validate(draft: Routing): string | null {
   if (draft.taskTypes.length === 0) return 'Inclua pelo menos um tipo de tarefa.'
@@ -117,6 +117,8 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
             </div>
           </fieldset>
 
+          <ResumeOnStart />
+
           <div className="routing__table-wrap">
             <table className="routing__table">
               <thead>
@@ -137,6 +139,15 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
                       <input id={`${uid}-n${i}`} className="routing__name" value={t.name} maxLength={ROUTING_LIMITS.name} placeholder="Revisão de PR" onChange={(e) => patchRow(i, { name: e.target.value })} />
                       <label className="sr-only" htmlFor={`${uid}-d${i}`}>Quando usar {t.name}</label>
                       <input id={`${uid}-d${i}`} className="routing__desc" value={t.description} maxLength={ROUTING_LIMITS.description} placeholder="Quando este tipo se aplica" onChange={(e) => patchRow(i, { description: e.target.value })} />
+                      <details className="routing__method">
+                        <summary>{t.method ? 'Como fazer' : 'Como fazer (vazio)'}{t.readOnly ? ' · só leitura' : ''}</summary>
+                        <label className="sr-only" htmlFor={`${uid}-h${i}`}>Como fazer {t.name}</label>
+                        <textarea id={`${uid}-h${i}`} rows={5} value={t.method} maxLength={ROUTING_LIMITS.method} placeholder="Passos que o ajudante segue neste tipo de tarefa (vale para Claude e Codex)" onChange={(e) => patchRow(i, { method: e.target.value })} />
+                        <label className="check">
+                          <input type="checkbox" checked={t.readOnly} onChange={(e) => patchRow(i, { readOnly: e.target.checked })} />
+                          <span>Só leitura: o ajudante não edita arquivos</span>
+                        </label>
+                      </details>
                     </td>
                     <td><CliToggle label={`Agente de ${t.name || `tipo ${i + 1}`}`} value={t.cli} onChange={(cli) => patchRow(i, { cli, model: null })} /></td>
                     <td><ModelInput id={`${uid}-m${i}`} className="routing__model" label={`Modelo de ${t.name || `tipo ${i + 1}`}`} cli={t.cli} value={t.model} onChange={(model) => patchRow(i, { model })} /></td>
@@ -175,5 +186,18 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
         </form>
       )}
     </dialog>
+  )
+}
+
+/** Saved on its own, apart from the table: bring the crews back when Orbit opens. */
+function ResumeOnStart() {
+  const client = useOrbitClient()
+  const { settings } = useOrbit()
+  if (!settings) return null
+  return (
+    <label className="check routing__resume">
+      <input type="checkbox" checked={settings.resumeOnStart} onChange={(e) => client.send({ type: 'settings.save', settings: { ...settings, resumeOnStart: e.target.checked } })} />
+      <span>Ao abrir o Orbit, retomar os agentes das missões em andamento na mesma conversa (quem estava devendo uma entrega recebe um aviso para continuar)</span>
+    </label>
   )
 }

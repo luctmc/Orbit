@@ -1,12 +1,13 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
+import { EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type OrbitSettings, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
 import { BUILTIN_ACCOUNTS, migrateLimits } from './accounts.ts'
-import { DEFAULT_ROUTING } from './routing.ts'
+import { DEFAULT_ROUTING, FACTORY_METHODS } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
 
 const EVENTS_PER_MISSION = 200
+const DEFAULT_SETTINGS: OrbitSettings = { resumeOnStart: true }
 
 interface PersistedState extends Omit<Snapshot, 'squads' | 'routing' | 'accounts'> {
   // usageDays and limits are persisted as they are sent.
@@ -30,6 +31,8 @@ interface PersistedState extends Omit<Snapshot, 'squads' | 'routing' | 'accounts
 export class Store {
   private state: PersistedState
   private readonly file: string
+  /** Agents that were running when Orbit last stopped (they can be brought back). */
+  readonly wasRunning: number[] = []
   private saveTimer: NodeJS.Timeout | null = null
 
   constructor(dataDir: string) {
@@ -40,7 +43,12 @@ export class Store {
     this.state.customSquads ??= []
     this.state.routing ??= null
     for (const squad of this.state.customSquads) for (const role of squad.roles) Object.assign(role, { skills: role.skills ?? [], onlySkills: role.onlySkills ?? false })
-    for (const row of this.state.routing?.taskTypes ?? []) row.onlySkills ??= false
+    for (const row of this.state.routing?.taskTypes ?? []) {
+      row.onlySkills ??= false
+      row.method ??= FACTORY_METHODS[row.id]?.method ?? ''
+      row.readOnly ??= FACTORY_METHODS[row.id]?.readOnly ?? false
+    }
+    this.state.settings ??= { ...DEFAULT_SETTINGS }
     this.state.disabledCatalog ??= []
     this.state.paneSpecs ??= {}
     this.state.cards ??= []
@@ -66,6 +74,7 @@ export class Store {
     // Processes do not survive a sidecar restart.
     for (const pane of this.state.panes) {
       pane.attention = null
+      pane.choices = null
       pane.deliveredAt ??= null
       pane.handoffStatus ??= pane.deliveredAt === null ? null : 'done'
       pane.assignedBy ??= null
@@ -77,13 +86,16 @@ export class Store {
       pane.branch ??= null
       pane.usage ??= null
       pane.contextPercent = null
-      if (pane.status !== 'exited') Object.assign(pane, { status: 'exited', pid: null })
+      if (pane.status !== 'exited') {
+        this.wasRunning.push(pane.id)
+        Object.assign(pane, { status: 'exited', pid: null })
+      }
     }
   }
 
   snapshot(): Snapshot {
     const { workspaces, missions, panes, events, usageDays, limits, cards, templates, schedules } = this.state
-    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing(), usageDays, limits, accounts: this.accounts(), cards, templates, schedules })
+    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing(), usageDays, limits, accounts: this.accounts(), cards, templates, schedules, settings: this.settings() })
   }
 
   /**
@@ -167,6 +179,16 @@ export class Store {
   }
 
   /** null restores the default table. */
+  settings(): OrbitSettings {
+    return { ...this.state.settings }
+  }
+
+  saveSettings(settings: OrbitSettings): OrbitSettings {
+    this.state.settings = { resumeOnStart: settings?.resumeOnStart === true }
+    this.save()
+    return this.settings()
+  }
+
   saveRouting(routing: Routing | null): void {
     this.state.routing = routing
     this.save()
@@ -430,7 +452,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
-    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [], paneSpecs: {}, cards: [], templates: [], schedules: [] }
+    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [], paneSpecs: {}, cards: [], templates: [], schedules: [], settings: { ...DEFAULT_SETTINGS } }
   }
 }
 

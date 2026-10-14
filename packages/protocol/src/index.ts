@@ -154,8 +154,10 @@ export interface Pane {
   title: string
   cwd: string
   status: PaneStatus
-  /** Why the agent needs a human, from its hook (e.g. a permission prompt). */
+  /** Why the agent needs a human, from its hook (e.g. a permission prompt) or its question. */
   attention: string | null
+  /** Answers the agent offered with its question (ask_user), shown as buttons. */
+  choices: string[] | null
   /** Last time this helper delivered its result (done, blocked, or Orbit delivering for it). */
   deliveredAt: number | null
   /** What its last handoff said; null while it owes one. */
@@ -306,6 +308,10 @@ export interface TaskType {
   skills: string[]
   /** Only `skills` may be used (Claude is blocked by hook; Codex is told). */
   onlySkills: boolean
+  /** How to do this kind of work, told to the helper whatever its CLI (e.g. "reproduce first"). */
+  method: string
+  /** Reads and reports, never edits files (Claude's edit tools are refused; Codex is told). */
+  readOnly: boolean
 }
 
 /** Agentic missions: the lead's default and the task table it routes helpers through. */
@@ -500,6 +506,13 @@ export interface Snapshot {
   cards: Card[]
   templates: MissionTemplate[]
   schedules: Schedule[]
+  settings: OrbitSettings
+}
+
+/** Choices that change how Orbit behaves, kept with its data. */
+export interface OrbitSettings {
+  /** When Orbit opens, bring back the agents of active missions in their conversations. */
+  resumeOnStart: boolean
 }
 
 export interface SpawnPaneRequest {
@@ -517,6 +530,8 @@ export interface SpawnPaneRequest {
   effort?: Effort | null
   /** Account to run as; omitted or null = the one with the most room left. */
   accountId?: string | null
+  /** One of the workspace's folders to start in (default: the main one). */
+  folder?: string | null
 }
 
 export type ClientMessage =
@@ -573,6 +588,7 @@ export type ClientMessage =
   | { type: 'cli.update'; cli: AgentCliForRole }
   /** Back to the table Orbit ships with. */
   | { type: 'routing.reset' }
+  | { type: 'settings.save'; settings: OrbitSettings }
   | { type: 'account.save'; account: AccountInput }
   | { type: 'account.delete'; accountId: string }
   /** Ask each CLI about its accounts' logins again. */
@@ -614,6 +630,7 @@ export type ServerMessage =
   | { type: 'squad.updated'; squad: Squad }
   | { type: 'squad.removed'; squadId: string }
   | { type: 'routing.updated'; routing: Routing }
+  | { type: 'settings.updated'; settings: OrbitSettings }
   | { type: 'catalog'; catalog: Catalog }
   | { type: 'usage.day'; day: UsageDay }
   | { type: 'limits'; limits: AccountLimits[] }
@@ -660,4 +677,4 @@ export const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/
 export const SQUAD_LIMITS = { name: 60, description: 280, playbook: 8000, brief: 4000, roles: 8 } as const
 export const WORKSPACE_LIMITS = { folders: 10, name: 60, instructions: 8000 } as const
 export const TEMPLATE_LIMITS = { templates: 50, name: 60, cards: 30 } as const
-export const ROUTING_LIMITS = { taskTypes: 16, name: 40, description: 200, skills: 6, skill: 40 } as const
+export const ROUTING_LIMITS = { taskTypes: 16, name: 40, description: 200, method: 1500, skills: 6, skill: 40 } as const

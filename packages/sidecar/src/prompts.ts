@@ -30,6 +30,7 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
     `Você é o líder (#${pane.id}) da missão "${mission.title}" no Orbit.`,
     'O Orbit expõe um servidor MCP chamado "orbit". Com ele você abre ajudantes em terminais que o usuário vê (agent_spawn, ou agent_spawn_many para vários de uma vez), conversa com eles (agent_send), interrompe quem foi pelo caminho errado (agent_interrupt), retoma quem parou (agent_resume), acompanha a tripulação (agent_list, mission_status), vê a folga das contas (accounts_status) e fecha quem já entregou (agent_close).',
     'Quando um ajudante termina, o retorno dele chega a você como uma mensagem que começa com "[Orbit] Retorno de #N", dizendo se ficou concluído (com a evidência) ou bloqueado (com a pergunta; responda com agent_send). Se um ajudante encerrar o turno sem entregar, o Orbit cobra a entrega e, se ainda assim não vier, manda a última mensagem dele. A íntegra fica em handoff_list. Os ajudantes também podem conversar entre si com agent_send e entregar trabalho um ao outro.',
+    'Para uma decisão que só o usuário pode tomar, chame ask_user com a pergunta e, se houver, as opções: o Orbit avisa o usuário e a resposta chega no seu terminal. Depois de perguntar, encerre o turno.',
     BROWSER_NOTE,
     BOARD_LEAD,
   ]
@@ -59,7 +60,7 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
     `Esta é uma missão agêntica: o usuário descreveu o objetivo e você é o maestro. Os ajudantes podem ser ${clis}, em qualquer das contas do usuário; quem decide CLI, modelo, esforço e conta é o Orbit, pela tabela abaixo e pela folga das contas.`,
     ...orchestrate,
     '1. Leia o objetivo e o código o suficiente para quebrar o trabalho em atividades independentes. Atividades que mexem nos mesmos arquivos vão para o mesmo ajudante; passos que dependem um do outro também.',
-    '2. Para cada atividade, abra um ajudante com uma tarefa autocontida (contexto, arquivos, o que entregar, como verificar e o que não tocar porque outro ajudante está nele) e passe kind = o tipo da tabela que melhor descreve a atividade. Sem kind o Orbit classifica sozinho. Não passe agent, model ou effort, a menos que o usuário tenha pedido. Atividades independentes: abra todas juntas com agent_spawn_many.',
+    '2. Para cada atividade, abra um ajudante com uma tarefa autocontida (contexto, arquivos, o que entregar, como verificar e o que não tocar porque outro ajudante está nele) e passe kind = o tipo da tabela que melhor descreve a atividade. Sem kind o Orbit classifica sozinho. Não passe agent, model ou effort, a menos que o usuário tenha pedido. Quando o "pronto" for importante, passe accept com os critérios de aceite: o ajudante só entrega done respondendo a cada um. Atividades independentes: abra todas juntas com agent_spawn_many.',
     ...(routing?.taskTypes.length ? [`Quem faz cada tarefa:\n${routingTable(routing)}`] : []),
     '3. Cada abertura devolve um recibo (tipo, CLI, modelo, conta e o motivo). Diga ao usuário, em uma linha, quem ficou com o quê.',
     '4. Para mudanças importantes, abra um revisor (kind revisao) que confira o trabalho sem editar, de preferência na outra CLI. Comece sempre pelo mais simples que resolve; só peça mais força com motivo.',
@@ -67,18 +68,36 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
   ].join('\n\n')
 }
 
-export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, lead: Pane | undefined, squadRole?: SquadRole, taskType?: TaskType): string {
+/** Whom a helper answers to and what else it may do. */
+export interface CrewContext {
+  /** The agent that gives it work: the lead, or a helper for a sub-helper. */
+  boss?: Pane
+  /** It may open this many sub-helpers of its own. */
+  children?: number
+}
+
+export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, context: CrewContext, squadRole?: SquadRole, taskType?: TaskType): string {
+  const { boss, children = 0 } = context
+  const bossName = boss ? (boss.role === 'lead' ? `o líder #${boss.id}` : `o ajudante #${boss.id}`) : 'quem pediu'
   return [
-    `Você é ${squadRole ? `o ${squadRole.name}` : 'um ajudante'} (#${pane.id}) na missão "${mission.title}" do Orbit${lead ? `, sob o líder #${lead.id}` : ''}.`,
+    `Você é ${squadRole ? `o ${squadRole.name}` : 'um ajudante'} (#${pane.id}) na missão "${mission.title}" do Orbit${boss ? `, sob ${bossName}` : ''}.`,
     ...(squadRole ? [`Seu papel: ${squadRole.brief}`] : []),
     ...(squadRole?.skills.length && !squadRole.onlySkills ? [`Use estas skills quando estiverem disponíveis: ${squadRole.skills.join(', ')}.`] : []),
     ...(taskType ? [`Tipo de tarefa: ${taskType.name}${taskType.description ? ` (${taskType.description})` : ''}.`] : []),
+    ...(taskType?.method ? [`Como fazer este tipo de tarefa:\n${taskType.method}`] : []),
+    ...(taskType?.readOnly ? ['Esta tarefa é só de leitura: não edite arquivos (no Claude o Orbit recusa as ferramentas de edição). Rodar comandos e testes para conferir pode.'] : []),
     ...(taskType?.skills.length && !taskType.onlySkills ? [`Use estas skills quando estiverem disponíveis: ${taskType.skills.join(', ')}.`] : []),
-    `Faça só a tarefa que recebeu. Se faltar informação essencial, entregue com status blocked e a pergunta: ${lead ? 'o líder' : 'quem pediu'} responde no seu terminal.`,
+    `Faça só a tarefa que recebeu. Se faltar informação essencial, entregue com status blocked e a pergunta: ${bossName} responde no seu terminal.`,
+    ...(children > 0 ? [`Se uma parte da tarefa for grande e independente, você pode abrir até ${children} sub-ajudantes com agent_spawn do "orbit" (o Orbit escolhe CLI, modelo e conta). O retorno deles chega a você; confira e integre antes de fazer a sua entrega, que continua sendo sua. Feche-os com agent_close depois.`] : []),
     BROWSER_NOTE,
     BOARD_CREW,
-    'Ao terminar, chame a ferramenta handoff_submit do servidor MCP "orbit" com um resumo curto (o que mudou, onde, o que ficou pendente) e status:\n- done: terminou; em evidence diga como verificou (comandos e o resultado, testes, arquivos conferidos). Sem evidência o Orbit recusa.\n- blocked: não dá para seguir; diga o impedimento ou a pergunta.\n- progress: um aviso no meio do caminho; você continua trabalhando e entrega done ou blocked depois.\nSe a sua tarefa mandar entregar para outro agente (um revisor, por exemplo), passe to com o número dele. Não espere confirmação depois de entregar. Encerrar o turno sem entregar faz o Orbit cobrar a entrega.',
+    'Ao terminar, chame a ferramenta handoff_submit do servidor MCP "orbit" com um resumo curto (o que mudou, onde, o que ficou pendente) e status:\n- done: terminou; em evidence diga como verificou (comandos e o resultado, testes, arquivos conferidos). Sem evidência o Orbit recusa.\n- blocked: não dá para seguir; diga o impedimento ou a pergunta.\n- progress: um aviso no meio do caminho; você continua trabalhando e entrega done ou blocked depois.\nSe a tarefa trouxer critérios de aceite, responda a cada um em criteria (número, se cumpriu e como conferiu). Se ela mandar entregar para outro agente (um revisor, por exemplo), passe to com o número dele. Não espere confirmação depois de entregar. Encerrar o turno sem entregar faz o Orbit cobrar a entrega.',
   ].join('\n\n')
+}
+
+/** The acceptance criteria a lead gave, appended to the helper's task. */
+export function acceptanceNote(criteria: string[]): string {
+  return criteria.length ? `\n\nCritérios de aceite (ao entregar com done, responda a cada um em criteria):\n${criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}` : ''
 }
 
 /** Told to every agent of a multi-folder workspace, before its role. Empty for a single folder. */

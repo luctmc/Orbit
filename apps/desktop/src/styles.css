@@ -139,6 +139,9 @@ h1, h2, p { margin: 0; }
 .pane--selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(197 224 75 / 0.12); }
 .pane--waiting { border-color: var(--wait); box-shadow: 0 0 0 3px rgb(255 159 67 / 0.14); }
 .attention { flex: none; padding: 8px 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid #5a3a17; background: #21170c; }
+.routing__method { margin-top: 6px; font-size: 12px; }
+.routing__method summary { cursor: pointer; color: var(--muted); }
+.routing__method textarea { width: 100%; margin: 6px 0; font-size: 12px; }
 .attention__text { flex: 1 1 200px; min-width: 0; color: var(--wait); font-size: 13px; }
 .btn--attention { background: var(--wait); color: #1a1006; font-weight: 600; }
 .chip--done { color: var(--text-2); border-color: var(--line-strong); }
