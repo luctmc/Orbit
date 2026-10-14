@@ -175,6 +175,13 @@ npm test
   as contas de uma CLI estão no limite, passa para a outra (se a missão permitir) e, sem nenhuma,
   recusa dizendo quando a primeira volta. Cada abertura devolve um recibo (tipo, troca de CLI,
   conta e motivo). O líder também tem `agent_spawn_many` e `accounts_status`.
+- **Apagar para sempre**: um agente (menu ⋯ do terminal), uma missão (lixeira no cabeçalho da
+  missão ou no cartão da Base) ou um workspace (Editar workspace › Apagar workspace, confirmando o
+  nome). Sai do Orbit tudo o que ele guardava: agentes, fluxo, quadro, notas, propostas, uso
+  registrado, cópias de trabalho, e, no workspace, a memória, os modelos e os agendamentos. Por
+  escolha, também as conversas dos agentes no Claude Code e no Codex e o que a missão deixou na
+  memória (marcadas), e os branches que ela criou (desmarcada). As pastas e os arquivos do projeto
+  nunca são tocados.
 - **Memória do projeto**: cada workspace lembra entre missões. Os líderes anotam com
   `project_note` decisões, fatos e lições que valem para as próximas missões; o resumo de cada
   missão pronta entra sozinho. Todo líder novo começa com essa memória (as fixadas primeiro), o

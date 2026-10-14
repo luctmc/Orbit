@@ -10,7 +10,7 @@ import type { AgentLaunch } from '../src/command.ts'
 import { decisionPrompt, decisionSchema, parseDecision } from '../src/decider.ts'
 import { DEFAULT_ROUTING } from '../src/routing.ts'
 import { startServer } from '../src/server.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 const textOf = (result: unknown) => ((result as { content: Array<{ text: string }> }).content[0]?.text ?? '')
 const types = DEFAULT_ROUTING.taskTypes
@@ -104,8 +104,8 @@ test('an unclear activity goes to the decider, and the lead proposes table chang
     assert.match((await ui.next('error')).message, /já foi decidida/)
     assert.equal(server.core.missionEvents(mission.id, 'proposal').at(-1)!.title, 'Proposta aceita: Testes')
   } finally {
-    delete process.env.CODEX_HOME
-    delete process.env.CLAUDE_CONFIG_DIR
+    process.env.CODEX_HOME = HOMES.codex
+    process.env.CLAUDE_CONFIG_DIR = HOMES.claude
     await mcp?.close()
     ui.ws.close()
     await server.close()

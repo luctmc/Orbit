@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, realpathSync } from 'node:fs'
+import { existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 
 /** git with an argument list (never a shell); throws with git's own message when it fails. */
@@ -65,6 +65,28 @@ export function removeWorktree(top: string, path: string): boolean {
   if (dirtyFiles(path).length) return false
   gitSync(top, ['worktree', 'remove', path])
   return true
+}
+
+/** Removes a worktree Orbit made, even with uncommitted changes (they were Orbit's copy). */
+export function forceRemoveWorktree(top: string, path: string): void {
+  if (!existsSync(path)) return
+  try {
+    gitSync(top, ['worktree', 'remove', '--force', path])
+  } catch {
+    rmSync(path, { recursive: true, force: true })
+    try {
+      gitSync(top, ['worktree', 'prune'])
+    } catch {
+      // the repository may be gone; the folder is
+    }
+  }
+}
+
+/** Deletes the mission's branch and every helper branch cut from it (`branch--N`). */
+export function deleteBranches(top: string, branch: string): string[] {
+  const list = gitSync(top, ['branch', '--list', branch, `${branch}--*`, '--format=%(refname:short)']).split('\n').map((b) => b.trim()).filter(Boolean)
+  for (const name of list) gitSync(top, ['branch', '-D', name])
+  return list
 }
 
 /** Commits on `branch` that `base` does not have, newest first. */

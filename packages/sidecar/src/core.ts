@@ -1,4 +1,4 @@
-import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,7 +11,7 @@ import { dueSchedules, nextRun, normalizeWhen } from './schedules.ts'
 import { fileDiff, folderStatus, folderTree, readFile } from './files.ts'
 import { Updates } from './updates.ts'
 import { missionReport } from './report.ts'
-import { addWorktree, BRANCH, commitsAhead, dirtyFiles, filesChanged, hasRemote, pushBranch, removeWorktree, repoInfo } from './git.ts'
+import { addWorktree, BRANCH, commitsAhead, deleteBranches, forceRemoveWorktree, dirtyFiles, filesChanged, hasRemote, pushBranch, removeWorktree, repoInfo } from './git.ts'
 import { slugify } from './squads.ts'
 import { normalizeRouting } from './routing.ts'
 import { decideTaskType } from './decider.ts'
@@ -20,7 +20,7 @@ import { codexHome, codexLastTurn, findCodexRolloutById, latestCodexRollout, cod
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
-import { claudeTranscript, claudeTurns, codexTurns, tailTurns, turnsMarkdown, type Turn } from './transcripts.ts'
+import { claudeTranscript, claudeTurns, codexTurns, deleteClaudeConversation, tailTurns, turnsMarkdown, type Turn } from './transcripts.ts'
 import { fromGeminiHook, statusFromHook, toGeminiHook, type HookPayload } from './hooks.ts'
 import { PaneManager, type PaneSnapshot } from './panes.ts'
 import { acceptanceNote, commandToolsNote, crewRole, projectMemoryNote, HANDOFF_NUDGE, instructionsNote, leadRole, MAESTRO_RULE, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
@@ -558,6 +558,66 @@ export class OrbitCore {
     let current = this.updateCard(card, { title: input.title, notes: input.notes, assignee: input.assignee === 'eu' ? caller.id : input.assignee })
     if (input.column && input.column !== current.column) current = this.moveCard(current, input.column)
     return cardView(current)
+  }
+
+  // ---- deleting for good ----
+
+  /** Deletes an agent's conversation from its CLI (Claude Code, Codex); the others keep theirs. */
+  private forgetConversation(pane: Pane): void {
+    if (!pane.sessionId) return
+    const account = pane.accountId ? this.store.account(pane.accountId) : undefined
+    const sessionId = pane.sessionId
+    const drop = () => {
+      if (pane.cli === 'claude') safe(() => deleteClaudeConversation((account && this.accountFiles.configDir(account)) ?? userConfigDir('claude'), sessionId), false)
+      if (pane.cli === 'codex') {
+        const file = this.codexRollouts.get(pane.id) ?? safe(() => findCodexRolloutById((account && this.accountFiles.configDir(account)) ?? codexHome(), sessionId), null)
+        if (file) safe(() => rmSync(file, { force: true }), undefined)
+      }
+    }
+    drop()
+    // A CLI that was just stopped may still flush its last lines: once more, a moment later.
+    setTimeout(drop, 1500).unref()
+  }
+
+  /** Deletes an agent for good: process, files, its lines in the flow and, if asked, its conversation. */
+  private deletePane(paneId: number, conversation: boolean): void {
+    const pane = this.store.pane(paneId)
+    if (!pane) throw new Error(`#${paneId} não existe`)
+    this.closePane(pane.id)
+    if (conversation) this.forgetConversation(pane)
+    this.store.forgetPane(pane.id)
+    this.broadcast({ type: 'snapshot', snapshot: this.store.snapshot() })
+  }
+
+  /**
+   * Deletes a mission for good: its agents, copies (worktrees), flow, board, proposals and usage
+   * lines; if asked, the agents' conversations, what it left in the project memory and its
+   * branches. The workspace's folders are never touched.
+   */
+  private deleteMission(missionId: string, options: { conversations: boolean; memory: boolean; branches: boolean }, quiet = false): void {
+    const mission = this.store.mission(missionId)
+    if (!mission) throw new Error('Missão não encontrada')
+    const panes = this.store.snapshot().panes.filter((p) => p.missionId === missionId)
+    for (const pane of panes) this.closePane(pane.id)
+    void this.browser.close(missionId)
+    if (mission.git) {
+      const root = join(this.dataDir, 'worktrees', missionId)
+      for (const entry of safe(() => readdirSync(root), [] as string[])) safe(() => forceRemoveWorktree(mission.git!.repo, join(root, entry)), undefined)
+      safe(() => rmSync(root, { recursive: true, force: true }), undefined)
+      if (options.branches) safe(() => deleteBranches(mission.git!.repo, mission.git!.branch), [])
+    }
+    if (options.conversations) for (const pane of panes) this.forgetConversation(pane)
+    this.store.forgetMission(missionId, options.memory)
+    if (options.memory) this.broadcast({ type: 'memory', workspaceId: mission.workspaceId, entries: this.store.memory(mission.workspaceId) })
+    if (!quiet) this.broadcast({ type: 'snapshot', snapshot: this.store.snapshot() })
+  }
+
+  /** Deletes a workspace from Orbit with all its missions, memory, templates and schedules. */
+  private deleteWorkspace(workspaceId: string, options: { conversations: boolean; branches: boolean }): void {
+    if (!this.store.workspace(workspaceId)) throw new Error('Workspace não encontrado')
+    for (const mission of this.store.snapshot().missions.filter((m) => m.workspaceId === workspaceId)) this.deleteMission(mission.id, { ...options, memory: false }, true)
+    this.store.forgetWorkspace(workspaceId)
+    this.broadcast({ type: 'snapshot', snapshot: this.store.snapshot() })
   }
 
   // ---- project memory: what a workspace remembers across missions ----
@@ -1099,6 +1159,15 @@ export class OrbitCore {
         return // per-connection: handled by the server
       case 'browser.close':
         void this.browser.close(message.missionId)
+        return
+      case 'pane.delete':
+        this.deletePane(message.paneId, message.conversation === true)
+        return
+      case 'mission.delete':
+        this.deleteMission(message.missionId, { conversations: message.conversations === true, memory: message.memory === true, branches: message.branches === true })
+        return
+      case 'workspace.delete':
+        this.deleteWorkspace(message.workspaceId, { conversations: message.conversations === true, branches: message.branches === true })
         return
       case 'memory.get':
         reply({ type: 'memory', workspaceId: message.workspaceId, entries: this.store.memory(message.workspaceId) })

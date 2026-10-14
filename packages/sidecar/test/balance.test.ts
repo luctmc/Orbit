@@ -11,7 +11,7 @@ import type { AgentLaunch } from '../src/command.ts'
 import { cliLoad, seatForDifficulty, type AccountRoom } from '../src/maestro.ts'
 import { DEFAULT_ROUTING } from '../src/routing.ts'
 import { startServer } from '../src/server.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 const textOf = (result: unknown) => ((result as { content: Array<{ text: string }> }).content[0]?.text ?? '')
 const claudeLevels = () => ['low', 'medium', 'high', 'xhigh', 'max'] as Effort[]
@@ -104,8 +104,8 @@ test('the maestro shares work across CLIs by load, uses the table\'s equivalent,
     assert.doesNotMatch(named, /dificuldade/)
     assert.equal(launches.at(-1)!.model, 'claude-sonnet-5-5')
   } finally {
-    delete process.env.CLAUDE_CONFIG_DIR
-    delete process.env.CODEX_HOME
+    process.env.CLAUDE_CONFIG_DIR = HOMES.claude
+    process.env.CODEX_HOME = HOMES.codex
     await mcp?.close()
     ui.ws.close()
     await server.close()

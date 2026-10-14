@@ -4,7 +4,8 @@ import { useOrbit } from '../orbit/context.tsx'
 import { CLI_LABEL, MODE_LABEL, STATUS, tokensText } from '../orbit/labels.ts'
 import { pathText } from '../orbit/labels.ts'
 import { dayKey, relativeTime, startOfDay } from '../orbit/time.ts'
-import { OrbitMark, PlusIcon, SearchIcon } from './icons.tsx'
+import { OrbitMark, PlusIcon, SearchIcon, TrashIcon } from './icons.tsx'
+import { DeleteMissionDialog } from './deletions.tsx'
 import { SchedulesSection } from './Schedules.tsx'
 
 type Filter = 'todas' | 'vivas' | 'encerradas'
@@ -28,6 +29,7 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
   onAddFolder: () => void
 }) {
   const { missions, panes, events, workspaces, squads, usageDays } = useOrbit()
+  const [deleting, setDeleting] = useState<Mission | null>(null)
   const [filter, setFilter] = useState<Filter>('todas')
   const [query, setQuery] = useState('')
   const search = useRef<HTMLInputElement>(null)
@@ -112,7 +114,7 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
               <ul className="plain-list home__missions">
                 {shown.map((s) => (
                   <li key={s.mission.id}>
-                    <MissionCard summary={s} squadName={squads.find((q) => q.id === s.mission.squadId)?.name} onOpen={() => onOpenMission(s.mission)} />
+                    <MissionCard summary={s} squadName={squads.find((q) => q.id === s.mission.squadId)?.name} onOpen={() => onOpenMission(s.mission)} onDelete={() => setDeleting(s.mission)} />
                   </li>
                 ))}
               </ul>
@@ -135,11 +137,12 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
           {quiet.length > 0 && <WorkspaceGroup label={busy.length ? 'Recentes' : 'Por último uso'} workspaces={quiet} live={liveByWorkspace} onOpen={onOpenWorkspace} />}
         </aside>
       </div>
+      {deleting && <DeleteMissionDialog mission={deleting} onClose={() => setDeleting(null)} />}
     </div>
   )
 }
 
-function MissionCard({ summary, squadName, onOpen }: { summary: MissionSummary; squadName: string | undefined; onOpen: () => void }) {
+function MissionCard({ summary, squadName, onOpen, onDelete }: { summary: MissionSummary; squadName: string | undefined; onOpen: () => void; onDelete: () => void }) {
   const { mission, workspace, crew, live, lastActivity } = summary
   const lead = crew.find((p) => p.role === 'lead')
   const meta = [workspace?.name, lead && [CLI_LABEL[lead.cli], lead.model].filter(Boolean).join(' '), mission.usage.total > 0 && `${tokensText(mission.usage.total)} tokens`, relativeTime(lastActivity)].filter(Boolean).join(' · ')
@@ -158,6 +161,7 @@ function MissionCard({ summary, squadName, onOpen }: { summary: MissionSummary; 
           <p className="muted">{meta}</p>
         </div>
         <button className="btn btn--ghost btn--sm" onClick={onOpen} aria-label={`Abrir missão ${mission.title}`}>Abrir</button>
+        <button className="icon-btn icon-btn--danger" onClick={onDelete} aria-label={`Apagar missão ${mission.title}`} title="Apagar para sempre"><TrashIcon size={15} /></button>
       </div>
       {crew.length > 0 && (
         <ul className="plain-list home-card__crew">

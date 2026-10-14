@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { readTail } from './usage.ts'
 
@@ -84,6 +84,15 @@ export function turnsMarkdown(turns: Turn[], budget = 12_000, perTurn = 1_500): 
     used += block.length
   }
   return out.join('\n\n')
+}
+
+/** Deletes a Claude Code conversation: its transcript and the folder of its subagents and tool output. */
+export function deleteClaudeConversation(configDir: string, sessionId: string): boolean {
+  const file = claudeTranscript(configDir, sessionId)
+  if (!file) return false
+  rmSync(file, { force: true })
+  rmSync(file.replace(/\.jsonl$/, ''), { recursive: true, force: true })
+  return true
 }
 
 /** The end of a session file, read from its tail (large files are not read whole). */

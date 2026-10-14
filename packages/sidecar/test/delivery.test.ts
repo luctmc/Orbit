@@ -9,7 +9,7 @@ import type { Run } from '../src/clis.ts'
 import type { AgentLaunch } from '../src/command.ts'
 import { startServer } from '../src/server.ts'
 import { codexLastTurn } from '../src/usage.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 const SESSION = '3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f'
 const textOf = (result: unknown) => ((result as { content: Array<{ text: string }> }).content[0]?.text ?? '')
@@ -169,8 +169,8 @@ test('helpers always report back: forced handoff, structured status, interrupt, 
     assert.deepEqual([pane(helperId).assignedBy, pane(helperId).handoffStatus], [lead.id, null])
     await ui.next('event.added', (m) => m.event.title === `#${helperId} retomou a conversa`)
   } finally {
-    delete process.env.CODEX_HOME
-    delete process.env.CLAUDE_CONFIG_DIR
+    process.env.CODEX_HOME = HOMES.codex
+    process.env.CLAUDE_CONFIG_DIR = HOMES.claude
     for (const client of clients) await client.close()
     ui.ws.close()
     await server.close()

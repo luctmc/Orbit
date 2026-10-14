@@ -8,7 +8,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { Run } from '../src/clis.ts'
 import type { AgentLaunch } from '../src/command.ts'
 import { startServer } from '../src/server.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 const textOf = (result: unknown) => ((result as { content: Array<{ text: string }> }).content[0]?.text ?? '')
 
@@ -86,8 +86,8 @@ test('a workspace remembers across missions: leads write to it, finished mission
     for (let i = 0; i < 100 && server.core.store.memory(workspace.id).some((e) => e.id === added.id); i++) await new Promise((r) => setTimeout(r, 20))
     assert.doesNotMatch(server.core.projectMemory(workspace.id), /dependências/)
   } finally {
-    delete process.env.CLAUDE_CONFIG_DIR
-    delete process.env.CODEX_HOME
+    process.env.CLAUDE_CONFIG_DIR = HOMES.claude
+    process.env.CODEX_HOME = HOMES.codex
     for (const client of clients) await client.close()
     ui.ws.close()
     await server.close()

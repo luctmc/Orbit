@@ -1,5 +1,21 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import WebSocket from 'ws'
 import type { ClientMessage, ServerMessage } from '@orbit/protocol'
+
+/**
+ * Every test runs with the CLIs pointed at empty folders, never at the person's real Claude,
+ * Codex or Gemini data (Orbit reads limits and conversations from there).
+ */
+export const HOMES = {
+  claude: mkdtempSync(join(tmpdir(), 'claude-home-')),
+  codex: mkdtempSync(join(tmpdir(), 'codex-home-')),
+  gemini: mkdtempSync(join(tmpdir(), 'gemini-home-')),
+}
+process.env.CLAUDE_CONFIG_DIR = HOMES.claude
+process.env.CODEX_HOME = HOMES.codex
+process.env.GEMINI_CLI_HOME = HOMES.gemini
 
 export const ORIGIN = 'http://localhost:5273'
 export const TOKEN = 'test-token-0123456789'
