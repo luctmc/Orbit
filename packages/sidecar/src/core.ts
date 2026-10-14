@@ -2,7 +2,7 @@ import { realpathSync, statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, EFFORT_LABEL, EFFORTS, SESSION_ID, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, CARD_COLUMNS, CARD_LIMITS, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
@@ -176,6 +176,72 @@ export class OrbitCore {
     const works = ok && found.installed && found.version !== null
     this.setCli(cli, { ...found, busy: null, ok: works, checkedAt: Date.now(), message: works ? `Atualizado para ${found.version}.` : output || 'A atualização falhou.' })
     if (cli === 'codex') await this.refreshCatalog()
+  }
+
+  // ---- the mission's board ----
+
+  private existingCard(id: string): Card {
+    const card = typeof id === 'string' ? this.store.card(id) : undefined
+    if (!card) throw new Error('Cartão não encontrado')
+    return card
+  }
+
+  /** The assignee must be an agent of the card's mission. */
+  private assignee(missionId: string, value: unknown): number | null {
+    if (value === null || value === undefined) return null
+    const pane = typeof value === 'number' ? this.store.pane(value) : undefined
+    if (!pane || pane.missionId !== missionId) throw new Error(`#${String(value)} não é um agente desta missão`)
+    return pane.id
+  }
+
+  private addCard(missionId: string, by: string, input: { title?: unknown; notes?: unknown; column?: unknown; assignee?: unknown }): Card {
+    this.activeMission(missionId)
+    if (this.store.cards(missionId).length >= CARD_LIMITS.perMission) throw new Error(`No máximo ${CARD_LIMITS.perMission} cartões por missão`)
+    const column = input.column === undefined ? 'afazer' : cardColumn(input.column)
+    const card = this.store.addCard({
+      missionId,
+      title: requireText(input.title, 'título do cartão', CARD_LIMITS.title),
+      notes: typeof input.notes === 'string' ? input.notes.trim().slice(0, CARD_LIMITS.notes) : '',
+      column,
+      assignee: this.assignee(missionId, input.assignee),
+      createdBy: by,
+    })
+    this.broadcast({ type: 'card.updated', card })
+    return card
+  }
+
+  private updateCard(card: Card, input: { title?: unknown; notes?: unknown; assignee?: unknown }): Card {
+    const patch: Partial<Pick<Card, 'title' | 'notes' | 'assignee'>> = {}
+    if (input.title !== undefined) patch.title = requireText(input.title, 'título do cartão', CARD_LIMITS.title)
+    if (input.notes !== undefined) patch.notes = typeof input.notes === 'string' ? input.notes.trim().slice(0, CARD_LIMITS.notes) : ''
+    if (input.assignee !== undefined) patch.assignee = this.assignee(card.missionId, input.assignee)
+    const updated = this.store.updateCard(card.id, patch)!
+    this.broadcast({ type: 'card.updated', card: updated })
+    return updated
+  }
+
+  private moveCard(card: Card, column: unknown, index?: unknown): Card {
+    const to = cardColumn(column)
+    for (const moved of this.store.moveCard(card.id, to, typeof index === 'number' && Number.isFinite(index) ? index : undefined)) this.broadcast({ type: 'card.updated', card: moved })
+    return this.store.card(card.id)!
+  }
+
+  /** What agents see of the board. */
+  boardList(caller: Pane) {
+    return this.store.cards(caller.missionId).map(cardView)
+  }
+
+  boardAdd(caller: Pane, input: { title: string; notes?: string; column?: CardColumn; assignee?: number | null }) {
+    return cardView(this.addCard(caller.missionId, `#${caller.id}`, input))
+  }
+
+  /** Change a card by its number (T3 = 3): text, assignee ("me" = the caller) and column. */
+  boardUpdate(caller: Pane, number: number, input: { title?: string; notes?: string; assignee?: number | 'eu' | null; column?: CardColumn }) {
+    const card = this.store.cardByNumber(caller.missionId, number)
+    if (!card) throw new Error(`Não há o cartão T${number} nesta missão`)
+    let current = this.updateCard(card, { title: input.title, notes: input.notes, assignee: input.assignee === 'eu' ? caller.id : input.assignee })
+    if (input.column && input.column !== current.column) current = this.moveCard(current, input.column)
+    return cardView(current)
   }
 
   // ---- updates ----
@@ -528,6 +594,18 @@ export class OrbitCore {
         return
       case 'pane.restart':
         this.restartPane(message.paneId, message.resume === true)
+        return
+      case 'card.add':
+        this.addCard(message.missionId, 'você', message)
+        return
+      case 'card.update':
+        this.updateCard(this.existingCard(message.cardId), message)
+        return
+      case 'card.move':
+        this.moveCard(this.existingCard(message.cardId), message.column, message.index)
+        return
+      case 'card.delete':
+        if (this.store.deleteCard(this.existingCard(message.cardId).id)) this.broadcast({ type: 'card.removed', cardId: message.cardId })
         return
       case 'pane.duplicate': {
         const pane = this.store.pane(message.paneId)
@@ -929,6 +1007,13 @@ function validFolders(input: unknown): string[] {
   }
   return folders
 }
+
+function cardColumn(value: unknown): CardColumn {
+  if (!CARD_COLUMNS.includes(value as CardColumn)) throw new Error(`Coluna inválida: ${String(value)}`)
+  return value as CardColumn
+}
+
+const cardView = (c: Card) => ({ card: `T${c.number}`, title: c.title, column: c.column, assignee: c.assignee === null ? null : `#${c.assignee}`, notes: c.notes || undefined, createdBy: c.createdBy })
 
 /** Symlinks resolved (/tmp vs /private/tmp), or the path as given when it is gone. */
 function realPath(path: string): string {

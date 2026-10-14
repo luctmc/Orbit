@@ -61,6 +61,10 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Quadro** (painel na missão): cartões em A fazer, Fazendo e Feito, com número (T1, T2…),
+  notas e responsável. Os agentes usam `board_list`, `board_add` e `board_update` (o líder é
+  instruído a planejar nele; os ajudantes movem os próprios cartões), e você cria, edita, atribui
+  e arrasta os mesmos cartões. Fica salvo com a missão.
 - **Agentes**: cada agente tem um menu (⋯) para renomear (ou clique duas vezes no nome), retomar
   a conversa, reabrir em conversa nova, duplicar e copiar o número. O Orbit guarda como cada
   agente foi aberto e o id da conversa (dos hooks do Claude e do arquivo de sessão do Codex),

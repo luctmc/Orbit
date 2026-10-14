@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
-import { BROWSER_KEYS, BROWSER_VIEWPORT, EFFORTS, MODEL_ID, type Effort, type Pane } from '@orbit/protocol'
+import { BROWSER_KEYS, BROWSER_VIEWPORT, CARD_COLUMNS, CARD_LIMITS, EFFORTS, MODEL_ID, type CardColumn, type Effort, type Pane } from '@orbit/protocol'
 import type { OrbitCore } from './core.ts'
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
@@ -124,6 +124,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
   }, guarded(({ agent, lines }: { agent: number; lines?: number }) => core.readScreen(caller, agent, lines ?? 60) || '(tela vazia)'))
 
   registerBrowserTools(server, core, caller)
+  registerBoardTools(server, core, caller)
 
   if (caller.role === 'crew') {
     server.registerTool('handoff_submit', {
@@ -139,6 +140,36 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
   }
 
   return server
+}
+
+/** The mission's board, shared with the person (who sees and moves the same cards). */
+function registerBoardTools(server: McpServer, core: OrbitCore, caller: Pane): void {
+  const column = z.enum(CARD_COLUMNS as [CardColumn, ...CardColumn[]])
+  server.registerTool('board_list', {
+    description: 'Cartões do quadro da missão (afazer, fazendo, feito), na ordem, com quem está em cada um. O usuário vê e mexe no mesmo quadro.',
+  }, guarded(() => core.boardList(caller)))
+
+  server.registerTool('board_add', {
+    description: 'Cria um cartão no quadro da missão. Use um por atividade; o número (T1, T2…) volta na resposta.',
+    inputSchema: {
+      title: z.string().min(1).max(CARD_LIMITS.title),
+      notes: z.string().max(CARD_LIMITS.notes).optional().describe('Detalhes: contexto, critério de pronto'),
+      column: column.optional().describe('Padrão: afazer'),
+      assignee: z.number().int().optional().describe('Número do agente responsável'),
+    },
+  }, guarded(({ title, notes, column: col, assignee }: { title: string; notes?: string; column?: CardColumn; assignee?: number }) => core.boardAdd(caller, { title, notes, column: col, assignee })))
+
+  server.registerTool('board_update', {
+    description: 'Atualiza um cartão pelo número: mova para fazendo ao começar e para feito ao terminar; assignee "eu" pega o cartão para você.',
+    inputSchema: {
+      card: z.union([z.number().int().min(1), z.string().regex(/^T?\d+$/i)]).describe('Número do cartão, ex.: 3 ou "T3"'),
+      column: column.optional(),
+      title: z.string().min(1).max(CARD_LIMITS.title).optional(),
+      notes: z.string().max(CARD_LIMITS.notes).optional(),
+      assignee: z.union([z.number().int(), z.literal('eu'), z.null()]).optional().describe('Número do agente, "eu" ou null para ninguém'),
+    },
+  }, guarded(({ card, column: col, title, notes, assignee }: { card: number | string; column?: CardColumn; title?: string; notes?: string; assignee?: number | 'eu' | null }) =>
+    core.boardUpdate(caller, typeof card === 'number' ? card : Number(String(card).replace(/^T/i, '')), { column: col, title, notes, assignee })))
 }
 
 /** The mission's browser: one page shared by its agents and shown to the person. */

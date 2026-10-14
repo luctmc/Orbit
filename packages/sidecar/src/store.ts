@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { EMPTY_USAGE, type Account, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
+import { EMPTY_USAGE, type Account, type Card, type CardColumn, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
 import { BUILTIN_ACCOUNTS, migrateLimits } from './accounts.ts'
 import { DEFAULT_ROUTING } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
@@ -43,6 +43,7 @@ export class Store {
     for (const row of this.state.routing?.taskTypes ?? []) row.onlySkills ??= false
     this.state.disabledCatalog ??= []
     this.state.paneSpecs ??= {}
+    this.state.cards ??= []
     this.state.usageDays ??= []
     this.state.limits = migrateLimits(this.state.limits ?? [])
     this.state.customAccounts ??= []
@@ -68,8 +69,8 @@ export class Store {
   }
 
   snapshot(): Snapshot {
-    const { workspaces, missions, panes, events, usageDays, limits } = this.state
-    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing(), usageDays, limits, accounts: this.accounts() })
+    const { workspaces, missions, panes, events, usageDays, limits, cards } = this.state
+    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing(), usageDays, limits, accounts: this.accounts(), cards })
   }
 
   /**
@@ -260,6 +261,71 @@ export class Store {
     this.save()
   }
 
+  /** A mission's cards, column by column in their order. */
+  cards(missionId: string): Card[] {
+    const rank = { afazer: 0, fazendo: 1, feito: 2 } as const
+    return this.state.cards.filter((c) => c.missionId === missionId).sort((a, b) => rank[a.column] - rank[b.column] || a.order - b.order).map((c) => ({ ...c }))
+  }
+
+  card(id: string): Card | undefined {
+    const card = this.state.cards.find((c) => c.id === id)
+    return card && { ...card }
+  }
+
+  cardByNumber(missionId: string, number: number): Card | undefined {
+    const card = this.state.cards.find((c) => c.missionId === missionId && c.number === number)
+    return card && { ...card }
+  }
+
+  addCard(input: Pick<Card, 'missionId' | 'title' | 'notes' | 'column' | 'assignee' | 'createdBy'>): Card {
+    const mine = this.state.cards.filter((c) => c.missionId === input.missionId)
+    const now = Date.now()
+    const card: Card = {
+      ...input,
+      id: randomUUID(),
+      number: Math.max(0, ...mine.map((c) => c.number)) + 1,
+      order: Math.max(-1, ...mine.filter((c) => c.column === input.column).map((c) => c.order)) + 1,
+      createdAt: now,
+      updatedAt: now,
+    }
+    this.state.cards.push(card)
+    this.save()
+    return { ...card }
+  }
+
+  updateCard(id: string, patch: Partial<Pick<Card, 'title' | 'notes' | 'assignee'>>): Card | undefined {
+    const card = this.state.cards.find((c) => c.id === id)
+    if (!card) return undefined
+    Object.assign(card, patch, { updatedAt: Date.now() })
+    this.save()
+    return { ...card }
+  }
+
+  /** Puts a card at `index` of `column` and renumbers that column; returns every card that moved. */
+  moveCard(id: string, column: CardColumn, index?: number): Card[] {
+    const card = this.state.cards.find((c) => c.id === id)
+    if (!card) return []
+    const others = this.state.cards.filter((c) => c.missionId === card.missionId && c.column === column && c.id !== id).sort((a, b) => a.order - b.order)
+    const at = index === undefined ? others.length : Math.max(0, Math.min(others.length, Math.floor(index)))
+    others.splice(at, 0, card)
+    card.column = column
+    card.updatedAt = Date.now()
+    const changed: Card[] = []
+    others.forEach((c, i) => {
+      if (c.order !== i || c === card) changed.push(c)
+      c.order = i
+    })
+    this.save()
+    return changed.map((c) => ({ ...c }))
+  }
+
+  deleteCard(id: string): boolean {
+    const before = this.state.cards.length
+    this.state.cards = this.state.cards.filter((c) => c.id !== id)
+    this.save()
+    return this.state.cards.length !== before
+  }
+
   setPaneSpec(id: number, spec: SpawnPaneRequest): void {
     this.state.paneSpecs[String(id)] = structuredClone(spec)
     this.save()
@@ -303,7 +369,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
-    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [], paneSpecs: {} }
+    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [], paneSpecs: {}, cards: [] }
   }
 }
 

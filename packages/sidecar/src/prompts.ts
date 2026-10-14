@@ -3,6 +3,10 @@ import { EFFORT_LABEL, type Mission, type Pane, type Routing, type Squad, type S
 /** Role instructions Orbit gives its agents. They only describe how to use Orbit's tools. */
 
 
+/** The board, for leads that plan and helpers that report progress. */
+const BOARD_LEAD = 'Mantenha o quadro da missão em dia (board_add, board_update, board_list): um cartão por atividade, com o responsável; o usuário acompanha e também mexe nele.'
+const BOARD_CREW = 'Se houver um cartão seu no quadro (board_list), mova para fazendo ao começar e para feito ao entregar (board_update).'
+
 /** Every agent shares the mission's browser. */
 const BROWSER_NOTE = 'Para ver uma página (a aplicação rodando, por exemplo), use o navegador da missão pelas ferramentas browser_* do "orbit": browser_open, browser_screenshot, browser_text, browser_click, browser_type, browser_console. É uma página só para a missão inteira, e o usuário vê a mesma página no Orbit.'
 
@@ -21,6 +25,7 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
     'O Orbit expõe um servidor MCP chamado "orbit". Com ele você abre ajudantes em terminais que o usuário vê (agent_spawn), conversa com eles (agent_send), lê a tela deles (agent_read), fecha os que terminaram (agent_close) e acompanha a tripulação (agent_list, mission_status).',
     'Quando um ajudante termina, o retorno dele chega a você como uma mensagem que começa com "[Orbit] Retorno de #N". A íntegra fica em handoff_list.',
     BROWSER_NOTE,
+    BOARD_LEAD,
   ]
 
   if (mission.mode === 'squad' && squad) {
@@ -55,6 +60,7 @@ export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, lead: Pane | 
     ...(taskType?.skills.length && !taskType.onlySkills ? [`Use estas skills quando estiverem disponíveis: ${taskType.skills.join(', ')}.`] : []),
     'Faça só a tarefa que recebeu. Se faltar informação essencial, pergunte ao usuário no próprio terminal.',
     BROWSER_NOTE,
+    BOARD_CREW,
     'Ao terminar, ou se ficar bloqueado, chame a ferramenta handoff_submit do servidor MCP "orbit" com um resumo curto: o que mudou, onde, como verificar e o que ficou pendente. Não espere confirmação depois de entregar.',
   ].join('\n\n')
 }
