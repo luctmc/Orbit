@@ -29,6 +29,7 @@ export const MoreIcon = (p: IconProps) => <svg {...stroke(p)}><circle cx="5" cy=
 export const BoardIcon = (p: IconProps) => <svg {...stroke(p)}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16M15 4v16" /></svg>
 export const BranchIcon = (p: IconProps) => <svg {...stroke(p)}><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="7" r="2" /><path d="M6 7v10M18 9c0 5-6 4-12 8" /></svg>
 export const BookmarkIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M6 4h12v16l-6-4-6 4z" /></svg>
+export const ReportIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5M10 13h6M10 17h6" /></svg>
 export const ArchiveIcon = (p: IconProps) => <svg {...stroke(p)}><path d="M4 7h16v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM3 4h18v3H3zM10 11h4" /></svg>
 
 export function MissionGlyph({ size = 26 }: { size?: number }) {

@@ -482,6 +482,10 @@ export type ClientMessage =
   | { type: 'workspace.update'; workspaceId: string; name?: string; folders?: string[]; instructions?: string }
   /** `isolation: 'worktrees'` gives every agent its own git worktree and branch. */
   | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'>; cards?: string[] }
+  /** The mission's report in Markdown (answered to this connection). */
+  | { type: 'report.get'; missionId: string }
+  /** Writes the report to a .md file the person picked. */
+  | { type: 'report.save'; missionId: string; path: string }
   /** Creates or replaces a mission template. */
   | { type: 'template.save'; template: MissionTemplateInput }
   | { type: 'template.delete'; templateId: string }
@@ -569,6 +573,8 @@ export type ServerMessage =
   | { type: 'account.status'; statuses: AccountStatus[] }
   | { type: 'files.status'; workspaceId: string; folders: FolderStatus[] }
   | { type: 'update.status'; status: UpdateStatus }
+  | { type: 'report'; missionId: string; markdown: string }
+  | { type: 'report.saved'; missionId: string; path: string }
   | { type: 'template.updated'; template: MissionTemplate }
   | { type: 'template.removed'; templateId: string }
   | { type: 'card.updated'; card: Card }

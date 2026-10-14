@@ -192,7 +192,7 @@ export class OrbitClient {
   }
 
   private receive(message: ServerMessage): void {
-    if (message.type.startsWith('files.') || message.type.startsWith('git.')) {
+    if (message.type.startsWith('files.') || message.type.startsWith('git.') || message.type.startsWith('report')) {
       for (const answer of [...this.answers]) answer(message)
       return
     }

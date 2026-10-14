@@ -61,6 +61,11 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Relatório da missão** (botão na missão): objetivo, números (agentes, tokens, custo, cartões,
+  retornos), cada agente (inclusive os já fechados, pelo fluxo), o quadro, os retornos dos
+  ajudantes, as mudanças no código (commits e arquivos do branch e o PR com o CI, ou o que mudou
+  nas pastas com quem editou) e a linha do tempo, em Markdown. Dá para copiar, salvar como `.md`
+  e usar como descrição do PR.
 - **Instruções do workspace** (Editar workspace): convenções, comandos e cuidados que todo agente
   daquele workspace recebe nas instruções.
 - **Modelos de missão**: "Salvar como modelo" (na missão) guarda título, objetivo, modo, squad,

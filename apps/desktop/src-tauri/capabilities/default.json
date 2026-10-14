@@ -11,6 +11,7 @@
     "dialog:allow-open",
     "notification:default",
     "core:window:allow-set-badge-count",
-    "opener:default"
+    "opener:default",
+    "dialog:allow-save"
   ]
 }
