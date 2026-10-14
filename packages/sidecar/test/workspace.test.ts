@@ -42,8 +42,8 @@ test('a workspace can hold several folders and every agent gets all of them', as
     assert.equal(pane.cwd, front, 'agents start in the main folder')
     await ui.next('pane.data', (m) => m.paneId === pane.id && m.data.includes(`FAKE dirs=${back}`))
     const role = readFileSync(join(dataDir, 'panes', String(pane.id), 'role.md'), 'utf8')
-    assert.match(role, /Este workspace tem 2 pastas/)
-    assert.ok(role.includes(`- ${front} (pasta principal`) && role.includes(`- ${back}`))
+    assert.match(role, /This workspace has 2 folders/)
+    assert.ok(role.includes(`- ${front} (main folder`) && role.includes(`- ${back}`))
 
     // Renaming and reordering: the first folder becomes the main one.
     ui.send({ type: 'workspace.update', workspaceId: workspace.id, name: 'Produto', folders: [back, front] })

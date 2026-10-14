@@ -1,4 +1,4 @@
-import { ACCOUNT_FULL_PERCENT, type Account, type AccountLimits, type AccountStatus, type AgentCliForRole, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_FULL_PERCENT, type Difficulty, type Effort, type Account, type AccountLimits, type AccountStatus, type AgentCliForRole, type TaskType } from '@orbit/protocol'
 
 /**
  * The maestro's decisions, kept apart from the core so they can be tested: which task type an
@@ -86,8 +86,45 @@ export function accountRooms(cli: AgentCliForRole, accounts: Account[], statuses
     })
 }
 
+/** Cheaper and stronger models of each CLI, where the CLI has a ladder Orbit knows. */
+const LADDER: Partial<Record<AgentCliForRole, { cheap: string; strong: string }>> = {
+  claude: { cheap: 'claude-haiku-5-5', strong: 'claude-opus-5-5' },
+  gemini: { cheap: 'flash', strong: 'pro' },
+}
+
+/**
+ * The seat for an activity's difficulty: simple goes to the CLI's cheaper model (or less effort),
+ * hard to its stronger model with more effort (or just more effort). `efforts` are the levels the
+ * resulting model takes, in order; an effort it does not take is dropped.
+ */
+export function seatForDifficulty(cli: AgentCliForRole, model: string | null, effort: Effort | null, difficulty: Difficulty, effortsOf: (model: string | null) => readonly Effort[]): { model: string | null; effort: Effort | null; changed: boolean } {
+  if (difficulty === 'normal') return { model, effort, changed: false }
+  const ladder = LADDER[cli]
+  const nextModel = ladder ? (difficulty === 'simples' ? ladder.cheap : ladder.strong) : model
+  const levels = effortsOf(nextModel)
+  const at = effort ? levels.indexOf(effort) : -1
+  let nextEffort: Effort | null = effort
+  if (levels.length) {
+    if (difficulty === 'simples') nextEffort = levels[0]!
+    else nextEffort = levels[Math.min(levels.length - 1, Math.max(at, levels.indexOf('medium')) + 1)] ?? effort
+  }
+  if (nextEffort && !levels.includes(nextEffort)) nextEffort = null
+  return { model: nextModel, effort: nextEffort, changed: nextModel !== model || nextEffort !== effort }
+}
+
 /** Each running agent weighs like this many points of use, so agents spread across accounts. */
 export const LIVE_WEIGHT = 15
+/** A CLI this many points busier than the other sends the work to the other's equivalent. */
+export const BALANCE_GAP = 30
+
+/**
+ * How busy a CLI is for the next agent: the best subscription's use plus its agents (points);
+ * null when every subscription is used up. API keys do not count: they are the last resort.
+ */
+export function cliLoad(rooms: AccountRoom[]): number | null {
+  const open = rooms.filter((r) => r.account.kind === 'assinatura' && !r.full).map((r) => (r.used ?? 0) + r.live * LIVE_WEIGHT)
+  return open.length ? Math.min(...open) : null
+}
 
 export interface AccountChoice {
   account: Account | null

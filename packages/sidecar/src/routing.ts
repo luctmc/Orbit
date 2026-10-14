@@ -1,4 +1,4 @@
-import { AGENT_CLIS, EFFORTS, MODEL_ID, ROUTING_LIMITS, SLUG, type AgentCliForRole, type Effort, type Routing, type TaskType } from '@orbit/protocol'
+import { AGENT_CLIS, EFFORTS, MODEL_ID, ROUTING_LIMITS, SLUG, type AgentCliForRole, type AgentSeat, type Effort, type Routing, type TaskType } from '@orbit/protocol'
 import { slugify } from './squads.ts'
 
 /**
@@ -6,17 +6,39 @@ import { slugify } from './squads.ts'
  * Codex as well as Claude (skills only reach whoever has them installed).
  */
 export const FACTORY_METHODS: Record<string, { method: string; readOnly: boolean }> = {
-  bug: { readOnly: false, method: '1. Reproduza antes de mexer (um teste ou comando que falha) e guarde a saída.\n2. Ache a causa raiz, não só o sintoma.\n3. Faça a menor mudança que corrige.\n4. Deixe um teste que falhava antes e passa agora; rode a suíte inteira.\n5. Entregue com o antes e o depois como evidência.' },
-  funcionalidade: { readOnly: false, method: '1. Leia o código vizinho e siga o estilo dele.\n2. Implemente o mínimo que cumpre o pedido, sem extras.\n3. Cubra o comportamento novo com testes e rode a suíte e o build.\n4. Entregue dizendo onde mudou e como usar.' },
-  refatoracao: { readOnly: false, method: '1. Rode os testes antes e guarde o resultado.\n2. Mude a estrutura sem mudar o comportamento, em passos pequenos.\n3. Rode os mesmos testes depois: o resultado tem de ser igual.\n4. Não misture correções nem funcionalidades; anote o que achar e conte na entrega.' },
-  testes: { readOnly: false, method: '1. Teste comportamento, não detalhes de implementação.\n2. Cubra o caminho feliz, as bordas e os erros.\n3. Confira que cada teste novo falharia sem o código que ele protege.\n4. Rode a suíte e entregue a saída (quantos passam e falham). Não mude código de produção sem dizer na entrega.' },
-  investigacao: { readOnly: true, method: '1. Não edite arquivos.\n2. Levante hipóteses e teste cada uma com evidência: comandos, medidas, logs.\n3. Cite arquivo:linha em cada afirmação.\n4. Entregue a causa provável, o grau de certeza e o próximo passo sugerido.' },
-  documentacao: { readOnly: false, method: '1. Escreva para quem chega agora: o que é, como instalar, como usar.\n2. Confira no repositório cada comando e caminho que citar.\n3. Seja curto e siga o tom dos documentos que já existem.' },
-  revisao: { readOnly: true, method: '1. Não edite arquivos.\n2. Leia o diff (git show, git diff) e o código em volta.\n3. Tente refutar: rode os testes, procure bordas, regressões e riscos de segurança.\n4. Confira que os testes novos falham sem a mudança.\n5. Entregue APROVADO ou A CORRIGIR, com arquivo:linha e o porquê de cada ponto.' },
+  bug: { readOnly: false, method: '1. Reproduce it before changing anything (a failing test or command) and keep the output.\n2. Find the root cause, not just the symptom.\n3. Make the smallest change that fixes it.\n4. Leave a test that failed before and passes now; run the whole suite.\n5. Deliver with the before and after as evidence.' },
+  funcionalidade: { readOnly: false, method: '1. Read the surrounding code and follow its style.\n2. Build the minimum that does what was asked, no extras.\n3. Cover the new behavior with tests and run the suite and the build.\n4. Deliver saying where it changed and how to use it.' },
+  refatoracao: { readOnly: false, method: '1. Run the tests first and keep the result.\n2. Change the structure without changing behavior, in small steps.\n3. Run the same tests after: the result must be the same.\n4. Do not mix in fixes or features; note what you find and mention it when delivering.' },
+  testes: { readOnly: false, method: '1. Test behavior, not implementation details.\n2. Cover the happy path, the edges and the errors.\n3. Check that each new test would fail without the code it protects.\n4. Run the suite and deliver its output (how many pass and fail). Do not change production code without saying so when delivering.' },
+  investigacao: { readOnly: true, method: '1. Do not edit files.\n2. Make hypotheses and test each one with evidence: commands, measurements, logs.\n3. Cite file:line for every claim.\n4. Deliver the likely cause, how sure you are and the suggested next step.' },
+  documentacao: { readOnly: false, method: '1. Write for someone new: what it is, how to install it, how to use it.\n2. Check every command and path you mention against the repository.\n3. Keep it short and match the tone of the existing docs.' },
+  revisao: { readOnly: true, method: '1. Do not edit files.\n2. Read the diff (git show, git diff) and the code around it.\n3. Try to refute it: run the tests, look for edge cases, regressions and security risks.\n4. Check that the new tests fail without the change.\n5. Deliver APPROVED or NEEDS CHANGES, with file:line and the why of each point.' },
+}
+
+/** Each built-in kind's equivalent on the other CLI, for the maestro to balance the load. */
+export const FACTORY_ALTS: Record<string, AgentSeat> = {
+  bug: { cli: 'codex', model: null, effort: 'medium' },
+  funcionalidade: { cli: 'codex', model: null, effort: 'medium' },
+  refatoracao: { cli: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' },
+  testes: { cli: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' },
+  investigacao: { cli: 'codex', model: null, effort: 'high' },
+  documentacao: { cli: 'codex', model: null, effort: 'low' },
+  revisao: { cli: 'claude', model: 'claude-opus-5-5', effort: 'high' },
+}
+
+/** How the factory methods began in Portuguese (v0.2.10–0.2.11), to move saved tables to English. */
+export const OLD_FACTORY_START: Record<string, string> = {
+  bug: '1. Reproduza antes de mexer',
+  funcionalidade: '1. Leia o código vizinho',
+  refatoracao: '1. Rode os testes antes',
+  testes: '1. Teste comportamento',
+  investigacao: '1. Não edite arquivos.\n2. Levante',
+  documentacao: '1. Escreva para quem chega',
+  revisao: '1. Não edite arquivos.\n2. Leia o diff',
 }
 
 const row = (id: string, name: string, description: string, model: string | null, effort: Effort, cli: AgentCliForRole = 'claude'): TaskType =>
-  ({ id, name, description, cli, model, effort, skills: [], onlySkills: false, method: FACTORY_METHODS[id]?.method ?? '', readOnly: FACTORY_METHODS[id]?.readOnly ?? false })
+  ({ id, name, description, cli, model, effort, skills: [], onlySkills: false, method: FACTORY_METHODS[id]?.method ?? '', readOnly: FACTORY_METHODS[id]?.readOnly ?? false, alt: FACTORY_ALTS[id] ?? null })
 
 /** The table Orbit ships with; the user edits a copy in Settings. */
 export const DEFAULT_ROUTING: Routing = {
@@ -65,7 +87,9 @@ export function normalizeRouting(input: Routing): Routing {
     const skills = skillList(t.skills, `Tabela (${name})`)
     const description = typeof t.description === 'string' ? t.description.trim().slice(0, ROUTING_LIMITS.description) : ''
     const method = typeof t.method === 'string' ? t.method.trim().slice(0, ROUTING_LIMITS.method) : ''
-    return { id, name, description, cli: cli(t.cli, name), model: model(t.model, name), effort: effort(t.effort, name), skills, onlySkills: t.onlySkills === true, method, readOnly: t.readOnly === true }
+    const rowCli = cli(t.cli, name)
+    const alt = t.alt && t.alt.cli !== rowCli ? { cli: cli(t.alt.cli, `${name} (equivalente)`), model: model(t.alt.model, `${name} (equivalente)`), effort: effort(t.alt.effort, `${name} (equivalente)`) } : null
+    return { id, name, description, cli: rowCli, model: model(t.model, name), effort: effort(t.effort, name), skills, onlySkills: t.onlySkills === true, method, readOnly: t.readOnly === true, alt }
   })
 
   return {

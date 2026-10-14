@@ -147,6 +147,8 @@ h1, h2, p { margin: 0; }
 .proposal__text { flex: 1 1 320px; min-width: 0; font-size: 13px; }
 .proposal__text .muted { display: block; font-size: 12px; }
 .routing__method { margin-top: 6px; font-size: 12px; }
+.alt-seat { display: grid; gap: 6px; margin-top: 8px; }
+.alt-seat label { font-size: 12px; }
 .routing__method summary { cursor: pointer; color: var(--muted); }
 .routing__method textarea { width: 100%; margin: 6px 0; font-size: 12px; }
 .attention__text { flex: 1 1 200px; min-width: 0; color: var(--wait); font-size: 13px; }

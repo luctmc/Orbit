@@ -175,6 +175,23 @@ npm test
   as contas de uma CLI estão no limite, passa para a outra (se a missão permitir) e, sem nenhuma,
   recusa dizendo quando a primeira volta. Cada abertura devolve um recibo (tipo, troca de CLI,
   conta e motivo). O líder também tem `agent_spawn_many` e `accounts_status`.
+- **Maestro 2**:
+  - **Codex líder de verdade**: roda no sandbox só leitura (qualquer edição pede a sua aprovação) e
+    recebe o lembrete do maestro junto de cada mensagem, já que o Codex não tem hooks.
+  - **Trocar o líder** (botão "Trocar líder" no cabeçalho): por um agente novo, de qualquer CLI,
+    modelo e esforço, ou promovendo um ajudante. O novo líder recebe o dossiê da missão (objetivo,
+    decisões anotadas com `mission_note`, quadro, ajudantes e o que cada um deve, retornos,
+    branches e o fim da conversa do líder anterior, lido dos arquivos do Claude e do Codex) e pode
+    relê-lo com `mission_briefing`. Quem devia ao líder antigo passa a dever ao novo.
+  - **Distribuição justa**: cada tipo de tarefa tem um equivalente em outra CLI; quando a CLI da
+    tabela está bem mais ocupada (uso da melhor conta + 15 pontos por agente rodando, 30 de
+    diferença), a tarefa vai para o equivalente, e o recibo diz por quê.
+  - **Modelo pela dificuldade**: o líder (ou o Haiku) diz se a tarefa é simples ou difícil;
+    simples desce para o modelo barato da CLI, difícil sobe para o forte ou para mais esforço.
+  - **Em inglês**: as instruções aos agentes são em inglês e, com a opção ligada (padrão), eles
+    trabalham e se falam em inglês; o que você lê (respostas, perguntas, resumo final) vem em
+    português.
+  - Um agente reaberto ou retomado mantém o agente, o modelo e o esforço que tinha.
 - **Entrega garantida**: o ajudante entrega com `handoff_submit` e um status (`done` com evidência,
   que o Orbit exige; `blocked` com a pergunta; `progress`, só registrado), para quem pediu ou para
   outro agente (`to`, um revisor, por exemplo, que passa a dever a entrega). Se ele encerrar o turno

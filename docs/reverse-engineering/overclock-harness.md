@@ -378,3 +378,11 @@ Missão agêntica num Orbit separado. O usuário escolheu só o líder (Claude H
 ### Ainda abertos
 
 - Folga das contas do Claude sem sessão aberta: o Claude só informa os limites pela status line de uma sessão. Ler a API de uso exigiria o token OAuth do usuário, o que o Orbit não faz.
+
+### Maestro 2 (além do Overclock)
+
+- O Overclock traduz para inglês o que é ditado por voz (ClockVoice) antes de mandar ao agente e responde em português. O Orbit vai além: as instruções de todos os agentes são em inglês, e eles trabalham e se falam em inglês com qualquer entrada (digitada ou ditada), respondendo ao usuário em português.
+- Codex líder com trava real (sandbox read-only) e lembrete do maestro a cada mensagem.
+- Troca de líder no meio da missão, inclusive entre CLIs, com dossiê completo e o fim da conversa do líder anterior; notas de decisão que passam de líder para líder.
+- Distribuição entre CLIs pela carga (uso + agentes rodando), com equivalente por tipo de tarefa; modelo pela dificuldade.
+- Teste ao vivo: líder Codex delegou a correção ao Claude Haiku (simples) e a revisão a um Codex só leitura; a liderança passou para o Claude Sonnet no meio da missão; um reinício do motor retomou líder e revisor nas mesmas conversas; o revisor entregou APPROVED ao novo líder, que declarou a missão pronta com o resumo em português.

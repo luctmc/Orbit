@@ -51,14 +51,16 @@ test('helpers always report back: forced handoff, structured status, interrupt, 
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
 
     const tokenOf = async (paneId: number) => {
-      ui.send({ type: 'pane.input', paneId, data: 'clear; echo "TOKEN:$ORBIT_PANE_TOKEN:"\r' })
+      // Let any message still being typed land, then start from an empty line (Ctrl-U).
+      await new Promise((r) => setTimeout(r, 300))
+      ui.send({ type: 'pane.input', paneId, data: '\x15clear; echo "TOKEN:$ORBIT_PANE_TOKEN:"\r' })
       const screen = server.core as unknown as { panes: { screenText: (id: number, lines: number) => string } }
       for (let i = 0; i < 100; i++) {
         const found = /TOKEN:([\w-]{20,}):/.exec(screen.panes.screenText(paneId, 200).replaceAll('\n', ''))
         if (found) return found[1]!
         await new Promise((r) => setTimeout(r, 30))
       }
-      throw new Error(`no token from #${paneId}`)
+      throw new Error(`no token from #${paneId}\n${screen.panes.screenText(paneId, 15)}`)
     }
     const mcpAs = async (token: string) => {
       const client = new Client({ name: 'test', version: '0' })
@@ -134,7 +136,7 @@ test('helpers always report back: forced handoff, structured status, interrupt, 
     // Codex has no hooks: its turn ends in the session file. First a nudge, then Orbit delivers.
     const core = server.core as unknown as { codexTurn: (pane: unknown, tail: string) => void }
     const at = new Date(Date.now() + 1000).toISOString()
-    const nudge = sees(reviewerId, 'o turno sem entregar. Chame agora handoff_submit')
+    const nudge = sees(reviewerId, 'You ended your turn without delivering. Call handoff_submit')
     core.codexTurn(pane(reviewerId), line('task_complete', { turn_id: 'a', last_agent_message: 'Li a tabela' }, at))
     await nudge
     core.codexTurn(pane(reviewerId), line('task_complete', { turn_id: 'a', last_agent_message: 'Li a tabela' }, at))

@@ -3,11 +3,11 @@ import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { AGENT_CLIS, EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type UsageEntry, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type OrbitSettings, type RoutingProposal, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
 import { BUILTIN_ACCOUNTS, migrateLimits } from './accounts.ts'
-import { DEFAULT_ROUTING, FACTORY_METHODS } from './routing.ts'
+import { DEFAULT_ROUTING, FACTORY_ALTS, FACTORY_METHODS, OLD_FACTORY_START } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
 
 const EVENTS_PER_MISSION = 200
-const DEFAULT_SETTINGS: OrbitSettings = { resumeOnStart: true, smartClassify: true }
+const DEFAULT_SETTINGS: OrbitSettings = { resumeOnStart: true, smartClassify: true, agentsInEnglish: true }
 const PROPOSALS_KEPT = 50
 
 interface PersistedState extends Omit<Snapshot, 'squads' | 'routing' | 'accounts'> {
@@ -49,7 +49,10 @@ export class Store {
     for (const row of this.state.routing?.taskTypes ?? []) {
       row.onlySkills ??= false
       row.method ??= FACTORY_METHODS[row.id]?.method ?? ''
+      // A factory method still in its old Portuguese text becomes the English one; edited ones stay.
+      if (OLD_FACTORY_START[row.id] && row.method.startsWith(OLD_FACTORY_START[row.id]!)) row.method = FACTORY_METHODS[row.id]!.method
       row.readOnly ??= FACTORY_METHODS[row.id]?.readOnly ?? false
+      row.alt ??= FACTORY_ALTS[row.id] && FACTORY_ALTS[row.id]!.cli !== row.cli ? FACTORY_ALTS[row.id]! : null
     }
     this.state.settings = { ...DEFAULT_SETTINGS, ...this.state.settings }
     this.state.proposals ??= []
@@ -76,6 +79,7 @@ export class Store {
       mission.scheduleId ??= null
       mission.allowedClis ??= ['claude', 'codex']
       mission.readyAt ??= null
+      mission.notes ??= []
       mission.readySummary ??= null
       mission.budget ??= null
     }
@@ -192,7 +196,7 @@ export class Store {
   }
 
   saveSettings(settings: OrbitSettings): OrbitSettings {
-    this.state.settings = { resumeOnStart: settings?.resumeOnStart === true, smartClassify: settings?.smartClassify === true }
+    this.state.settings = { resumeOnStart: settings?.resumeOnStart === true, smartClassify: settings?.smartClassify === true, agentsInEnglish: settings?.agentsInEnglish !== false }
     this.save()
     return this.settings()
   }
@@ -291,7 +295,7 @@ export class Store {
   createMission(input: { workspaceId: string; title: string; objective: string; mode: MissionMode; squadId: string | null; allowedClis?: Mission['allowedClis']; budget?: Mission['budget'] }, git: (id: string) => Mission['git'] = () => null, scheduleId: string | null = null): Mission {
     const now = Date.now()
     const id = randomUUID()
-    const mission: Mission = { id, status: 'active', createdAt: now, updatedAt: now, usage: { ...EMPTY_USAGE }, git: git(id), scheduleId, readyAt: null, readySummary: null, ...input, allowedClis: input.allowedClis?.length ? input.allowedClis : ['claude', 'codex'], budget: input.budget ?? null }
+    const mission: Mission = { id, status: 'active', createdAt: now, updatedAt: now, usage: { ...EMPTY_USAGE }, git: git(id), scheduleId, readyAt: null, readySummary: null, notes: [], ...input, allowedClis: input.allowedClis?.length ? input.allowedClis : ['claude', 'codex'], budget: input.budget ?? null }
     this.state.missions.push(mission)
     this.save()
     return { ...mission }
@@ -301,7 +305,7 @@ export class Store {
     return this.state.missions.find((m) => m.id === id)
   }
 
-  updateMission(id: string, patch: Partial<Pick<Mission, 'status' | 'title' | 'objective' | 'git' | 'readyAt' | 'readySummary' | 'budget'>>): Mission | undefined {
+  updateMission(id: string, patch: Partial<Pick<Mission, 'status' | 'title' | 'objective' | 'git' | 'readyAt' | 'readySummary' | 'budget' | 'notes'>>): Mission | undefined {
     const mission = this.mission(id)
     if (!mission) return undefined
     Object.assign(mission, patch, { updatedAt: Date.now() })

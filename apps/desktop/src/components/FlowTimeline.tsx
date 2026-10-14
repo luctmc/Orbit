@@ -5,6 +5,7 @@ const TONE: Record<MissionEventKind, string> = {
   'mission.created': 'neutral',
   'mission.ready': 'live',
   proposal: 'wait',
+  'lead.changed': 'live',
   'pane.spawned': 'live',
   'pane.exited': 'off',
   'pane.waiting': 'wait',

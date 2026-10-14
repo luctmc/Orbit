@@ -50,8 +50,8 @@ test('an agentic lead routes helpers through the table; the table is saved and r
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
     assert.equal(lead.effort, 'high')
     const leadRole = readFileSync(join(dataDir, 'panes', String(lead.id), 'role.md'), 'utf8')
-    assert.match(leadRole, /kind = o tipo da tabela/)
-    assert.match(leadRole, /kind "testes" \(Testes\).*Codex, gpt-6\.1, esforço alto/)
+    assert.match(leadRole, /pass kind = the table type/)
+    assert.match(leadRole, /kind "testes" \(Testes\).*Codex, gpt-6\.1, high effort/)
 
     ui.send({ type: 'pane.input', paneId: lead.id, data: 'echo "TOKEN:$ORBIT_PANE_TOKEN:"\r' })
     const token = /TOKEN:([\w-]{20,}):/.exec((await ui.next('pane.data', (m) => m.paneId === lead.id && /TOKEN:[\w-]{20,}:/.test(m.data))).data)![1]!
@@ -70,7 +70,7 @@ test('an agentic lead routes helpers through the table; the table is saved and r
     assert.deepEqual([helper.cli, helper.model, helper.effort], ['codex', 'gpt-6.1', 'high'])
     await ui.next('pane.data', (m) => m.paneId === helper.id && m.data.includes('FAKE codex gpt-6.1 high'))
     const crewRole = readFileSync(join(dataDir, 'panes', String(helper.id), 'role.md'), 'utf8')
-    assert.match(crewRole, /Tipo de tarefa: Testes/)
+    assert.match(crewRole, /Kind of work: Testes/)
     assert.match(crewRole, /skills .*: prova-antes/)
 
     ui.send({ type: 'routing.reset' })

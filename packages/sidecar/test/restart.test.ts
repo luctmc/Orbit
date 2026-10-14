@@ -80,7 +80,7 @@ test('agents are renamed, duplicated, reopened, and resumed even after Orbit res
     assert.match((await ui.next('error', (m) => /nome/.test(m.message))).message, /Dê um nome/)
 
     // With the option off, agents wait for the person; resuming by hand keeps the number too.
-    ui.send({ type: 'settings.save', settings: { resumeOnStart: false, smartClassify: true } })
+    ui.send({ type: 'settings.save', settings: { resumeOnStart: false, smartClassify: true, agentsInEnglish: true } })
     await ui.next('settings.updated', (m) => m.settings.resumeOnStart === false)
     ui.ws.close()
     await server.close()

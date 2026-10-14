@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { MODEL_ID, ROUTING_LIMITS, type AgentCliForRole, type Routing, type TaskType } from '@orbit/protocol'
+import { AGENT_CLIS, MODEL_ID, ROUTING_LIMITS, type AgentCliForRole, type AgentSeat, type Routing, type TaskType } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL } from '../orbit/labels.ts'
 import { CliSelect, EffortCycle, ModelSelect, SkillsField } from './agentPickers.tsx'
@@ -11,7 +11,7 @@ import { UsagePanel } from './UsagePanel.tsx'
 import { CloseIcon, PlusIcon } from './icons.tsx'
 
 
-const blankRow = (): TaskType => ({ id: '', name: '', description: '', cli: 'claude', model: null, effort: 'medium', skills: [], onlySkills: false, method: '', readOnly: false })
+const blankRow = (): TaskType => ({ id: '', name: '', description: '', cli: 'claude', model: null, effort: 'medium', skills: [], onlySkills: false, method: '', readOnly: false, alt: null })
 
 function validate(draft: Routing): string | null {
   if (draft.taskTypes.length === 0) return 'Inclua pelo menos um tipo de tarefa.'
@@ -137,13 +137,14 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
                       <label className="sr-only" htmlFor={`${uid}-d${i}`}>Quando usar {t.name}</label>
                       <input id={`${uid}-d${i}`} className="routing__desc" value={t.description} maxLength={ROUTING_LIMITS.description} placeholder="Quando este tipo se aplica" onChange={(e) => patchRow(i, { description: e.target.value })} />
                       <details className="routing__method">
-                        <summary>{t.method ? 'Como fazer' : 'Como fazer (vazio)'}{t.readOnly ? ' · só leitura' : ''}</summary>
+                        <summary>{t.method ? 'Como fazer' : 'Como fazer (vazio)'}{t.readOnly ? ' · só leitura' : ''}{t.alt ? ` · equivalente: ${CLI_LABEL[t.alt.cli]}` : ''}</summary>
                         <label className="sr-only" htmlFor={`${uid}-h${i}`}>Como fazer {t.name}</label>
                         <textarea id={`${uid}-h${i}`} rows={5} value={t.method} maxLength={ROUTING_LIMITS.method} placeholder="Passos que o ajudante segue neste tipo de tarefa (vale para Claude e Codex)" onChange={(e) => patchRow(i, { method: e.target.value })} />
                         <label className="check">
                           <input type="checkbox" checked={t.readOnly} onChange={(e) => patchRow(i, { readOnly: e.target.checked })} />
                           <span>Só leitura: o ajudante não edita arquivos</span>
                         </label>
+                        <AltSeat id={`${uid}-alt${i}`} name={t.name || `tipo ${i + 1}`} cli={t.cli} value={t.alt} onChange={(alt) => patchRow(i, { alt })} />
                       </details>
                     </td>
                     <td><CliSelect id={`${uid}-c${i}`} label={`Agente de ${t.name || `tipo ${i + 1}`}`} value={t.cli} onChange={(cli) => patchRow(i, { cli, model: null, effort: null })} /></td>
@@ -199,6 +200,10 @@ function ResumeOnStart() {
         <span>Quando nenhuma palavra diz o tipo da atividade, o Claude Haiku decide pela tabela (alguns segundos e uma fração de centavo; sem ele, vale o tipo padrão)</span>
       </label>
       <label className="check">
+        <input type="checkbox" checked={settings.agentsInEnglish} onChange={(e) => save({ agentsInEnglish: e.target.checked })} />
+        <span>Agentes trabalham em inglês entre si (tarefas, mensagens, entregas) e falam com você em português: gasta menos tokens e costuma render mais</span>
+      </label>
+      <label className="check">
         <input type="checkbox" checked={settings.resumeOnStart} onChange={(e) => save({ resumeOnStart: e.target.checked })} />
         <span>Ao abrir o Orbit, retomar os agentes das missões em andamento na mesma conversa (quem estava devendo uma entrega recebe um aviso para continuar)</span>
       </label>
@@ -240,5 +245,29 @@ function Proposals() {
         ))}
       </ul>
     </section>
+  )
+}
+
+/**
+ * The same kind of work on another CLI: the maestro sends it there when this row's CLI is much
+ * busier, or used up.
+ */
+function AltSeat({ id, name, cli, value, onChange }: { id: string; name: string; cli: AgentCliForRole; value: AgentSeat | null; onChange: (alt: AgentSeat | null) => void }) {
+  return (
+    <div className="alt-seat">
+      <label htmlFor={id}>Equivalente em outra CLI <span className="muted">(o maestro manda para lá quando a {CLI_LABEL[cli]} estiver bem mais ocupada ou no limite)</span></label>
+      <div className="squads__row">
+        <select id={id} className="cli-select" value={value?.cli ?? ''} onChange={(e) => onChange(e.target.value ? { cli: e.target.value as AgentCliForRole, model: null, effort: null } : null)}>
+          <option value="">Nenhum</option>
+          {AGENT_CLIS.filter((c) => c !== cli).map((c) => <option key={c} value={c}>{CLI_LABEL[c]}</option>)}
+        </select>
+        {value && (
+          <>
+            <ModelSelect id={`${id}-m`} compact label={`Modelo equivalente de ${name}`} cli={value.cli} value={value.model} onChange={(model) => onChange({ ...value, model })} />
+            <EffortCycle label={`Equivalente de ${name}`} cli={value.cli} model={value.model} value={value.effort} onChange={(effort) => onChange({ ...value, effort })} />
+          </>
+        )}
+      </div>
+    </div>
   )
 }

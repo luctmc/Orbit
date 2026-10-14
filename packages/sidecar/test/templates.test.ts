@@ -40,7 +40,7 @@ test('workspace instructions reach every agent, and templates start missions wit
     for (const title of template.cards) await ui.next('card.updated', (m) => m.card.missionId === mission.id && m.card.title === title && m.card.createdBy === 'modelo')
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
     const role = readFileSync(join(dataDir, 'panes', String(lead.id), 'role.md'), 'utf8')
-    assert.match(role, /Instruções deste workspace \(escritas pelo usuário; valem para todos os agentes\):\nRode npm test antes de entregar\.\nNunca mexa em migrations\//)
+    assert.match(role, /This workspace's instructions \(written by the user; they apply to every agent\):\nRode npm test antes de entregar\.\nNunca mexa em migrations\//)
 
     // Templates survive a restart, and can be deleted.
     ui.ws.close()

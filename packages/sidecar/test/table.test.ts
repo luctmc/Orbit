@@ -78,7 +78,7 @@ test('an unclear activity goes to the decider, and the lead proposes table chang
     await call('agent_spawn', { title: 'Testes', task: 'Escreva testes para o carrinho' })
     assert.equal(asked.length, 1)
     // Switched off: the default stands.
-    ui.send({ type: 'settings.save', settings: { resumeOnStart: true, smartClassify: false } })
+    ui.send({ type: 'settings.save', settings: { resumeOnStart: true, smartClassify: false, agentsInEnglish: true } })
     await ui.next('settings.updated')
     assert.match(await call('agent_spawn', { title: 'Lista', task: 'A lista de pedidos leva 8 segundos' }), /▸ tipo: Funcionalidade \(o maestro classificou; padrão\)/)
 

@@ -26,7 +26,7 @@ function describeSeat(cli: AgentCli, model: string | null, effort: Effort | null
   return [CLI_LABEL[cli], model, effort && `esforço ${EFFORT_LABEL[effort]}`].filter(Boolean).join(' · ')
 }
 
-function AgentFields({ value, onChange, label = 'Agente' }: { value: AgentChoice; onChange: (next: AgentChoice) => void; label?: string }) {
+function AgentFields({ value, onChange, label = 'Agente', shell = true }: { value: AgentChoice; onChange: (next: AgentChoice) => void; label?: string; shell?: boolean }) {
   const id = useId()
   const latest = useRef(value)
   latest.current = value
@@ -38,7 +38,7 @@ function AgentFields({ value, onChange, label = 'Agente' }: { value: AgentChoice
       <fieldset className="field">
         <legend>{label}</legend>
         {/* A different agent starts from its own default model, effort and account. */}
-        <AgentChooser label={label} shell value={value.cli} onChange={(cli) => onChange(cli === value.cli ? value : { cli, model: '', effort: null, accountId: null })} />
+        <AgentChooser label={label} shell={shell} value={value.cli} onChange={(cli) => onChange(cli === value.cli ? value : { cli, model: '', effort: null, accountId: null })} />
       </fieldset>
       {value.cli !== 'shell' && (
         <div className="field">
@@ -270,6 +270,58 @@ export function AddAgentDialog({ missionId, onClose }: { missionId: string; onCl
           <label htmlFor="a-task">Tarefa <span className="muted">(opcional; vira o primeiro pedido do agente)</span></label>
           <textarea id="a-task" rows={4} value={task} onChange={(e) => setTask(e.target.value)} placeholder="Mapeie onde o token de sessão é lido e devolva a lista de arquivos" />
         </div>
+      )}
+      {error && <p className="form-error" role="alert">{error}</p>}
+    </Dialog>
+  )
+}
+
+/**
+ * Hands the mission's lead to another agent: a new one (any CLI, model and effort) or a helper
+ * already in it. Nothing is lost: the new lead gets the mission's briefing.
+ */
+export function LeadChangeDialog({ mission, onClose }: { mission: { id: string; title: string; git: unknown }; onClose: () => void }) {
+  const client = useOrbitClient()
+  const { panes } = useOrbit()
+  const current = panes.find((p) => p.missionId === mission.id && p.role === 'lead')
+  const helpers = panes.filter((p) => p.missionId === mission.id && p.role === 'crew' && p.cli !== 'shell' && p.status !== 'exited')
+  const [kind, setKind] = useState<'new' | 'promote'>('new')
+  const [agent, setAgent] = useState<AgentChoice>({ cli: current?.cli === 'claude' ? 'codex' : 'claude', model: '', effort: null, accountId: null })
+  const [promote, setPromote] = useState<number | null>(helpers[0]?.id ?? null)
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <Dialog eyebrow={mission.title} title="Trocar o líder" submitLabel="Passar a liderança" onClose={onClose} onSubmit={() => {
+      if (kind === 'promote') {
+        if (promote === null) return setError('Escolha o ajudante.')
+        client.send({ type: 'mission.lead.change', missionId: mission.id, to: { kind: 'promote', paneId: promote } })
+      } else {
+        if (agent.cli === 'shell') return setError('O líder precisa ser um agente.')
+        if (invalidModel(agent)) return setError('Modelo inválido: use só letras, números, ponto, hífen, barra ou dois-pontos.')
+        client.send({ type: 'mission.lead.change', missionId: mission.id, to: { kind: 'new', cli: agent.cli, model: modelOrNull(agent), effort: agent.effort, accountId: agent.accountId } })
+      }
+      onClose()
+    }}>
+      <p className="muted">
+        {current ? <>Hoje lidera #{current.id} ({describeSeat(current.cli, current.model, current.effort)}). </> : 'A missão está sem líder. '}
+        O novo líder recebe o dossiê da missão: objetivo, decisões anotadas, quadro, ajudantes e o que cada um deve, retornos, branches e o fim da conversa do líder atual. Os ajudantes passam a entregar para ele, e o líder atual fecha (a conversa dele continua salva na CLI).
+      </p>
+      <div className="segmented" role="group" aria-label="Quem assume">
+        <button type="button" aria-pressed={kind === 'new'} onClick={() => setKind('new')}>Agente novo</button>
+        <button type="button" aria-pressed={kind === 'promote'} disabled={helpers.length === 0 || Boolean(mission.git)} title={mission.git ? 'Numa missão com um branch por agente, o líder precisa ser um agente novo' : helpers.length === 0 ? 'Nenhum ajudante rodando' : undefined} onClick={() => setKind('promote')}>Promover um ajudante</button>
+      </div>
+      {kind === 'new' ? (
+        <AgentFields value={agent} onChange={setAgent} label="Novo líder" shell={false} />
+      ) : (
+        <fieldset className="field">
+          <legend>Ajudante que assume</legend>
+          {helpers.map((p) => (
+            <label key={p.id} className="check">
+              <input type="radio" name="promote" checked={promote === p.id} onChange={() => setPromote(p.id)} />
+              <span>#{p.id} {p.title} <span className="muted">· {describeSeat(p.cli, p.model, p.effort)}</span></span>
+            </label>
+          ))}
+          <p className="note">Ele continua com a conversa dele, recebe o dossiê e passa a orquestrar.</p>
+        </fieldset>
       )}
       {error && <p className="form-error" role="alert">{error}</p>}
     </Dialog>

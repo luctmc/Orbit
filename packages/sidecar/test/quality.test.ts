@@ -19,16 +19,16 @@ const textOf = (result: unknown) => ((result as { content: Array<{ text: string 
 test('each kind of work carries its method to any CLI, and reading kinds are read-only', () => {
   const review = DEFAULT_ROUTING.taskTypes.find((t) => t.id === 'revisao')!
   assert.equal(review.readOnly, true)
-  assert.match(review.method, /Tente refutar/)
+  assert.match(review.method, /Try to refute it/)
   assert.equal(DEFAULT_ROUTING.taskTypes.find((t) => t.id === 'bug')!.readOnly, false)
   const saved = normalizeRouting({ ...DEFAULT_ROUTING, taskTypes: [{ ...review, method: '  1. Leia.  ', readOnly: true }] })
   assert.deepEqual([saved.taskTypes[0]!.method, saved.taskTypes[0]!.readOnly], ['1. Leia.', true])
   const mission = { title: 'M' } as Mission
   const role = crewRole(mission, { id: 3 }, { children: 2 }, undefined, review)
-  assert.match(role, /Como fazer este tipo de tarefa:\n1\. Não edite/)
-  assert.match(role, /só de leitura/)
-  assert.match(role, /até 2 sub-ajudantes/)
-  assert.doesNotMatch(crewRole(mission, { id: 4 }, {}, undefined, review), /sub-ajudantes/)
+  assert.match(role, /How to do this kind of work:\n1\. Do not edit files/)
+  assert.match(role, /This task is read-only/)
+  assert.match(role, /up to 2 sub-helpers/)
+  assert.doesNotMatch(crewRole(mission, { id: 4 }, {}, undefined, review), /sub-helpers/)
 })
 
 test('helpers answer acceptance criteria, open sub-helpers within a cap, and the lead asks the person', async () => {
