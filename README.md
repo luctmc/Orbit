@@ -61,6 +61,13 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Skills e MCP** (Ajustes › Skills e MCP): lista as skills, subagentes e servidores MCP que o
+  Claude Code e o Codex têm instalados (pessoais, de plugins e das pastas dos workspaces; dos
+  servidores MCP só o nome e o transporte, nunca env ou cabeçalhos). Desligar um item vale só para
+  os agentes do Orbit: o Claude é bloqueado pelo hook `PreToolUse` (a decisão volta pelo próprio
+  hook, então vale na hora, até para agentes já abertos), o Codex abre com
+  `mcp_servers.<nome>.enabled=false` e os dois são avisados nas instruções. Cada tipo de tarefa e
+  papel de squad pode marcar **só estas skills**, e o Claude daquele agente só usa as da lista.
 - **Ditado**: o microfone na barra de comando transcreve o que você fala para o agente selecionado
   (Web Speech do WebKit, no idioma do sistema; o texto aparece enquanto você fala e só vai quando
   você tecla Enter; Esc para). Na primeira vez o macOS pede permissão para o microfone e para o

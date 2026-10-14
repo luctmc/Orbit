@@ -2,9 +2,10 @@ import { statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, EFFORT_LABEL, EFFORTS, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, EFFORT_LABEL, EFFORTS, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
-import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, validKey } from './accounts.ts'
+import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
+import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
 import { normalizeRouting } from './routing.ts'
 import { codexHome, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
@@ -62,6 +63,12 @@ export class OrbitCore {
   private readonly loginPanes = new Map<number, string>()
   /** One headless page per mission, shared by its agents and the person. */
   readonly browser: BrowserHost
+  /** Installed skills, subagents and MCP servers; empty until the first scan. */
+  private catalogItems: CatalogItem[] = []
+  private catalogScannedAt: number | null = null
+  private scanning: Promise<void> | null = null
+  /** Agents limited to their role's skills. */
+  private readonly skillPolicies = new Map<number, SkillPolicy>()
 
   constructor({ dataDir, shell, broadcast, agentCommand, run, browser }: CoreOptions) {
     this.broadcast = broadcast
@@ -117,6 +124,7 @@ export class OrbitCore {
       { type: 'snapshot', snapshot: this.store.snapshot() },
       { type: 'cli.status', clis: [...this.clis.values()] },
       { type: 'account.status', statuses: this.statuses() },
+      this.skillsMessage(),
       { type: 'browser.engine', name: this.browser.engine?.name ?? null },
       ...this.browser.states().map((browser): ServerMessage => ({ type: 'browser.state', browser })),
     ]
@@ -160,6 +168,38 @@ export class OrbitCore {
     const works = ok && found.installed && found.version !== null
     this.setCli(cli, { ...found, busy: null, ok: works, checkedAt: Date.now(), message: works ? `Atualizado para ${found.version}.` : output || 'A atualização falhou.' })
     if (cli === 'codex') await this.refreshCatalog()
+  }
+
+  // ---- skills, subagents and MCP servers ----
+
+  private skillsMessage(): ServerMessage {
+    return { type: 'skills', items: this.catalogItems, disabled: this.store.disabledCatalog(), scannedAt: this.catalogScannedAt }
+  }
+
+  /** Reads what the CLIs have installed (personal, plugins and the workspaces' projects). */
+  scanSkills(): Promise<void> {
+    this.scanning ??= (async () => {
+      try {
+        const folders = [...new Set(this.store.snapshot().workspaces.flatMap((w) => w.folders))]
+        this.catalogItems = await scanCatalog({ claudeDir: userConfigDir('claude'), codexDir: userConfigDir('codex'), folders, run: this.run })
+        this.catalogScannedAt = Date.now()
+        this.broadcast(this.skillsMessage())
+      } finally {
+        this.scanning = null
+      }
+    })()
+    return this.scanning
+  }
+
+  /** What Orbit's agents are told about skills: what is switched off, and their role's own list. */
+  private skillNote(cli: AgentCli, policy: SkillPolicy | undefined): string {
+    if (cli === 'shell') return ''
+    const off = this.store.disabledCatalog().filter((id) => id.startsWith(`${cli}:skill:`) || id.startsWith(`${cli}:agent:`))
+    const names = off.map((id) => id.split(':').slice(2).join(':'))
+    const lines: string[] = []
+    if (policy?.only) lines.push(policy.only.length ? `Neste papel use só estas skills: ${policy.only.join(', ')}.` : 'Neste papel não use skills.')
+    if (names.length) lines.push(`Desligadas no Orbit (não use): ${names.slice(0, 40).join(', ')}${names.length > 40 ? '…' : ''}.`)
+    return lines.length ? `${lines.join('\n')}\n\n` : ''
   }
 
   // ---- accounts ----
@@ -362,6 +402,15 @@ export class OrbitCore {
       case 'account.login':
         this.startLogin(message.accountId)
         return
+      case 'catalog.scan':
+        void this.scanSkills().catch((error) => this.fail(error))
+        return
+      case 'catalog.toggle': {
+        if (typeof message.id !== 'string' || !/^(claude|codex):(skill|agent|mcp):[^\s]{1,160}$/.test(message.id)) throw new Error('Item desconhecido')
+        this.store.setCatalogItem(message.id, message.enabled === true)
+        this.broadcast(this.skillsMessage())
+        return
+      }
       case 'browser.navigate':
         this.activeMission(message.missionId)
         void this.browser.navigate(message.missionId, message.url, 'você').catch((error) => this.fail(error))
@@ -594,9 +643,12 @@ export class OrbitCore {
     return mission
   }
 
-  hookReport(paneId: number, payload: HookPayload): void {
+  /** Status from Claude's hooks; for PreToolUse, a refusal when the tool is switched off. */
+  hookReport(paneId: number, payload: HookPayload): object | null {
     const next = statusFromHook(payload)
     if (next) this.panes.report(paneId, next.status, next.attention)
+    const reason = gateTool(payload, new Set(this.store.disabledCatalog()), this.skillPolicies.get(paneId))
+    return reason ? { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } } : null
   }
 
   shutdown(): void {
@@ -643,6 +695,9 @@ export class OrbitCore {
     if (account && !request.model && account.model) request.model = account.model
     if (account) this.accountFiles.prepare(account)
 
+    const roleSkills = squadRole ?? taskType
+    const policy: SkillPolicy | undefined = roleSkills?.onlySkills ? { only: roleSkills.skills } : undefined
+
     const id = this.store.allocatePaneId()
     const title = request.title.trim().slice(0, 120) || squadRole?.name || taskType?.name || `${CLI_LABEL[request.cli]} #${id}`
     const token = randomBytes(24).toString('base64url')
@@ -658,9 +713,11 @@ export class OrbitCore {
       statusCommand: hookCommand(process.execPath, STATUS_SCRIPT),
       apiKeyHelper: account ? this.accountFiles.apiKeyHelper(account) : undefined,
       addDirs: workspace.folders.slice(1),
-      rolePrompt: workspaceNote(workspace.folders) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, lead, squadRole, taskType)),
+      rolePrompt: workspaceNote(workspace.folders) + this.skillNote(request.cli, policy) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, lead, squadRole, taskType)),
       task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
     })
+
+    if (request.cli === 'codex') launch.disabledMcp = codexDisabledMcp(this.store.disabledCatalog())
 
     let pane: Pane
     try {
@@ -689,6 +746,7 @@ export class OrbitCore {
       throw error
     }
     this.paneTokens.set(token, id)
+    if (policy) this.skillPolicies.set(id, policy)
     if (request.cli === 'codex') this.watchCodex()
     this.syncPane(pane)
     const seat = request.role === 'lead' ? 'líder' : squadRole?.name.toLowerCase() ?? taskType?.name.toLowerCase() ?? 'ajudante'
@@ -712,6 +770,7 @@ export class OrbitCore {
     if (!this.store.pane(id)) return
     this.panes.forget(id)
     this.codexRollouts.delete(id)
+    this.skillPolicies.delete(id)
     this.store.removePane(id)
     for (const [token, paneId] of this.paneTokens) if (paneId === id) this.paneTokens.delete(token)
     removeAgentFiles(this.paneDir(id))

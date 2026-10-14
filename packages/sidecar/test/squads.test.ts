@@ -17,7 +17,7 @@ const custom = (patch: Partial<SquadInput> = {}): SquadInput => ({
   description: 'Um revisor só',
   lead: { cli: 'claude', model: 'claude-sonnet-5-5' },
   playbook: '1. Abra o Revisor.',
-  roles: [{ id: 'revisor', name: 'Revisor', cli: 'claude', model: null, brief: 'Revise sem editar.' }],
+  roles: [{ id: 'revisor', name: 'Revisor', cli: 'claude', model: null, brief: 'Revise sem editar.', skills: [], onlySkills: false }],
   ...patch,
 })
 
@@ -33,9 +33,9 @@ test('squad validation rejects what would break a mission', () => {
   assert.throws(() => normalizeSquad(custom({ name: ' ' }), new Set()), /nome/)
   assert.throws(() => normalizeSquad(custom({ roles: [] }), new Set()), /pelo menos um papel/)
   assert.throws(() => normalizeSquad(custom({ playbook: '' }), new Set()), /roteiro/)
-  const bad = custom({ roles: [{ id: 'x', name: 'X', cli: 'claude', model: 'opus; rm -rf ~', brief: 'b' }] })
+  const bad = custom({ roles: [{ id: 'x', name: 'X', cli: 'claude', model: 'opus; rm -rf ~', brief: 'b', skills: [], onlySkills: false }] })
   assert.throws(() => normalizeSquad(bad, new Set()), /modelo inválido/)
-  const dup = custom({ roles: [{ id: 'a', name: 'A', cli: 'claude', model: null, brief: 'b' }, { id: 'a', name: 'B', cli: 'codex', model: null, brief: 'b' }] })
+  const dup = custom({ roles: [{ id: 'a', name: 'A', cli: 'claude', model: null, brief: 'b', skills: [], onlySkills: false }, { id: 'a', name: 'B', cli: 'codex', model: null, brief: 'b', skills: [], onlySkills: false }] })
   assert.throws(() => normalizeSquad(dup, new Set()), /mesmo identificador/)
 })
 

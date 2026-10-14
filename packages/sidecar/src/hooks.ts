@@ -5,6 +5,7 @@ export interface HookPayload {
   message?: string
   notification_type?: string
   tool_name?: string
+  tool_input?: unknown
 }
 
 export interface HookStatus {

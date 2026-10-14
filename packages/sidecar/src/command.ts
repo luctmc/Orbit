@@ -24,6 +24,8 @@ export interface AgentLaunch {
   taskPath?: string
   /** Runs the CLI's login instead of an agent (the account comes from the environment). */
   login?: boolean
+  /** Codex: MCP servers switched off in Orbit (plain names). */
+  disabledMcp?: string[]
 }
 
 export function shellQuote(value: string): string {
@@ -65,6 +67,9 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
       // Orbit's coordination tools are pre-approved, as for Claude; under a "never" approval
       // policy Codex would otherwise refuse every handoff.
       parts.push('-c', shellQuote('mcp_servers.orbit.default_tools_approval_mode="approve"'))
+    }
+    for (const name of launch.disabledMcp ?? []) {
+      if (/^[A-Za-z0-9_-]{1,64}$/.test(name) && name !== 'orbit') parts.push('-c', shellQuote(`mcp_servers.${name}.enabled=false`))
     }
     const prompt = [launch.rolePromptPath, launch.taskPath].filter((p): p is string => Boolean(p))
     if (prompt.length) parts.push('--', `"$(cat ${prompt.map(shellQuote).join(' ')})"`)

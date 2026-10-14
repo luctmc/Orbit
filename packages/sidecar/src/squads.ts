@@ -1,10 +1,11 @@
 import { randomBytes } from 'node:crypto'
 import { MODEL_ID, SLUG, SQUAD_LIMITS, type AgentCliForRole, type Squad, type SquadInput, type SquadRole } from '@orbit/protocol'
+import { skillList } from './routing.ts'
 
 const OPUS = 'claude-opus-5-5'
 const SONNET = 'claude-sonnet-5-5'
 
-const role = (id: string, name: string, model: string, brief: string): SquadRole => ({ id, name, cli: 'claude', model, brief })
+const role = (id: string, name: string, model: string, brief: string): SquadRole => ({ id, name, cli: 'claude', model, brief, skills: [], onlySkills: false })
 const steps = (...lines: string[]) => lines.map((line, i) => `${i + 1}. ${line}`).join('\n')
 
 /** Squads shipped with Orbit. Read-only; the UI offers "duplicate" to customize them. */
@@ -100,7 +101,15 @@ export function normalizeSquad(input: SquadInput, existingIds: ReadonlySet<strin
     const id = SLUG.test(r.id ?? '') ? r.id : slugify(roleName)
     if (roleIds.has(id)) throw new Error(`Squad: dois papéis com o mesmo identificador (${id})`)
     roleIds.add(id)
-    return { id, name: roleName, cli: cli(r.cli, roleName), model: model(r.model, roleName), brief: text(r.brief, `as instruções de ${roleName}`, SQUAD_LIMITS.brief) }
+    return {
+      id,
+      name: roleName,
+      cli: cli(r.cli, roleName),
+      model: model(r.model, roleName),
+      brief: text(r.brief, `as instruções de ${roleName}`, SQUAD_LIMITS.brief),
+      skills: skillList(r.skills, `Squad (${roleName})`),
+      onlySkills: r.onlySkills === true,
+    }
   })
 
   // Saving over an existing custom squad keeps its id; anything else (new, or a builtin being
