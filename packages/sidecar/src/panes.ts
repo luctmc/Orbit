@@ -260,6 +260,15 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     return { ...pane }
   }
 
+  /** A helper promoted to lead, or a lead handed to: its role and whom it answers to. */
+  setSeat(id: number, change: { role?: Pane['role']; assignedBy?: number | null }): void {
+    const pane = this.panes.get(id)
+    if (!pane) return
+    if (change.role) pane.role = change.role
+    if (change.assignedBy !== undefined) pane.assignedBy = change.assignedBy
+    this.emit('status', { ...pane }, pane.status)
+  }
+
   /**
    * Where the helper stands with its handoff: `assignedBy` gives it work (it owes a result again),
    * a status records what it reported; done, blocked and auto count as delivered.

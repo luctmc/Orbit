@@ -76,6 +76,7 @@ export class Store {
       mission.scheduleId ??= null
       mission.allowedClis ??= ['claude', 'codex']
       mission.readyAt ??= null
+      mission.notes ??= []
       mission.readySummary ??= null
       mission.budget ??= null
     }
@@ -291,7 +292,7 @@ export class Store {
   createMission(input: { workspaceId: string; title: string; objective: string; mode: MissionMode; squadId: string | null; allowedClis?: Mission['allowedClis']; budget?: Mission['budget'] }, git: (id: string) => Mission['git'] = () => null, scheduleId: string | null = null): Mission {
     const now = Date.now()
     const id = randomUUID()
-    const mission: Mission = { id, status: 'active', createdAt: now, updatedAt: now, usage: { ...EMPTY_USAGE }, git: git(id), scheduleId, readyAt: null, readySummary: null, ...input, allowedClis: input.allowedClis?.length ? input.allowedClis : ['claude', 'codex'], budget: input.budget ?? null }
+    const mission: Mission = { id, status: 'active', createdAt: now, updatedAt: now, usage: { ...EMPTY_USAGE }, git: git(id), scheduleId, readyAt: null, readySummary: null, notes: [], ...input, allowedClis: input.allowedClis?.length ? input.allowedClis : ['claude', 'codex'], budget: input.budget ?? null }
     this.state.missions.push(mission)
     this.save()
     return { ...mission }
@@ -301,7 +302,7 @@ export class Store {
     return this.state.missions.find((m) => m.id === id)
   }
 
-  updateMission(id: string, patch: Partial<Pick<Mission, 'status' | 'title' | 'objective' | 'git' | 'readyAt' | 'readySummary' | 'budget'>>): Mission | undefined {
+  updateMission(id: string, patch: Partial<Pick<Mission, 'status' | 'title' | 'objective' | 'git' | 'readyAt' | 'readySummary' | 'budget' | 'notes'>>): Mission | undefined {
     const mission = this.mission(id)
     if (!mission) return undefined
     Object.assign(mission, patch, { updatedAt: Date.now() })

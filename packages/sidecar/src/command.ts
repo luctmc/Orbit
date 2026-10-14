@@ -32,6 +32,8 @@ export interface AgentLaunch {
   systemSettingsPath?: string
   /** Folder with the `orbit` command, put first on the agent's PATH. */
   binDir?: string
+  /** Codex: sandbox policy for its commands and edits (read-only for orchestrating leads). */
+  sandbox?: 'read-only'
 }
 
 /** What each CLI runs to sign in an account. */
@@ -97,6 +99,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
   } else {
     parts.push('codex')
     if (resume) parts.push('resume')
+    if (launch.sandbox === 'read-only') parts.push('-s', 'read-only')
     if (model) parts.push('-m', model)
     if (effort) parts.push('-c', shellQuote(`model_reasoning_effort="${effort}"`))
     for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))

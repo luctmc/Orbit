@@ -179,6 +179,15 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       }))
     }
 
+    server.registerTool('mission_briefing', {
+      description: 'O dossiê da missão: objetivo, decisões anotadas, quadro, ajudantes e o que cada um deve, retornos, branches e o fluxo recente. Leia ao assumir a liderança e sempre que perder o fio (conversa compactada, retomada).',
+    }, guarded(() => core.missionBriefing(caller.missionId)))
+
+    server.registerTool('mission_note', {
+      description: 'Anota uma decisão ou um fato importante da missão (o que foi decidido e por quê, o que não fazer, onde está algo). As notas passam para qualquer líder que vier depois de você.',
+      inputSchema: { text: z.string().min(1).max(1000) },
+    }, guarded(({ text }: { text: string }) => `Anotado (${core.addNote(caller, text).length} notas na missão).`))
+
     server.registerTool('ask_user', {
       description: 'Pergunta ao usuário algo que só ele decide. O seu terminal fica marcado como "espera você" com a pergunta e as opções em botões, e o usuário recebe um aviso; a resposta chega digitada no seu terminal. Depois de perguntar, encerre o turno.',
       inputSchema: {

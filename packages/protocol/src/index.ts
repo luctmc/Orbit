@@ -143,6 +143,8 @@ export interface Mission {
   readyAt: number | null
   /** The lead's closing summary. */
   readySummary: string | null
+  /** Decisions the leads wrote down (mission_note); they pass from one lead to the next. */
+  notes: MissionNote[]
   /** Tokens/cost limit the person set; null = none. */
   budget: MissionBudget | null
   status: MissionStatus
@@ -151,6 +153,21 @@ export interface Mission {
 }
 
 export type AgentCli = 'claude' | 'codex' | 'gemini' | 'antigravity' | 'shell'
+
+/** A decision or fact a lead wrote down so it survives a change of lead. */
+export interface MissionNote {
+  at: number
+  /** The lead that wrote it. */
+  paneId: number
+  text: string
+}
+
+export const NOTE_LIMITS = { notes: 60, text: 1000 } as const
+
+/** Who leads next: a new agent, or a helper already in the mission. */
+export type LeadTarget =
+  | { kind: 'new'; cli: AgentCliForRole; model: string | null; effort: Effort | null; accountId: string | null }
+  | { kind: 'promote'; paneId: number }
 /** CLIs that can fill a squad role (a plain terminal cannot follow a brief). */
 export type AgentCliForRole = Exclude<AgentCli, 'shell'>
 
@@ -539,7 +556,7 @@ export interface Card {
   updatedAt: number
 }
 
-export type MissionEventKind = 'mission.created' | 'mission.ready' | 'proposal' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser' | 'budget'
+export type MissionEventKind = 'mission.created' | 'mission.ready' | 'proposal' | 'lead.changed' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser' | 'budget'
 
 export interface MissionEvent {
   id: string
@@ -635,6 +652,8 @@ export type ClientMessage =
   | { type: 'template.save'; template: MissionTemplateInput }
   | { type: 'template.delete'; templateId: string }
   | { type: 'mission.archive'; missionId: string }
+  /** Hands the mission's lead to another agent, with everything that happened so far. */
+  | { type: 'mission.lead.change'; missionId: string; to: LeadTarget }
   | { type: 'pane.spawn'; request: SpawnPaneRequest }
   /** A terminal view mounted: send me this pane's current screen, then its live output. */
   | { type: 'pane.attach'; paneId: number }

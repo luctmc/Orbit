@@ -30,6 +30,7 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
     `Você é o líder (#${pane.id}) da missão "${mission.title}" no Orbit.`,
     'O Orbit expõe um servidor MCP chamado "orbit". Com ele você abre ajudantes em terminais que o usuário vê (agent_spawn, ou agent_spawn_many para vários de uma vez), conversa com eles (agent_send), interrompe quem foi pelo caminho errado (agent_interrupt), retoma quem parou (agent_resume), acompanha a tripulação (agent_list, mission_status), vê a folga das contas (accounts_status) e fecha quem já entregou (agent_close).',
     'Quando um ajudante termina, o retorno dele chega a você como uma mensagem que começa com "[Orbit] Retorno de #N", dizendo se ficou concluído (com a evidência) ou bloqueado (com a pergunta; responda com agent_send). Se um ajudante encerrar o turno sem entregar, o Orbit cobra a entrega e, se ainda assim não vier, manda a última mensagem dele. A íntegra fica em handoff_list. Os ajudantes também podem conversar entre si com agent_send e entregar trabalho um ao outro.',
+    'Anote com mission_note cada decisão importante (o que foi decidido e por quê): a liderança pode passar para outro agente, e as notas vão junto. Se perder o fio da missão (conversa compactada, retomada), chame mission_briefing.',
     'Para uma decisão que só o usuário pode tomar, chame ask_user com a pergunta e, se houver, as opções: o Orbit avisa o usuário e a resposta chega no seu terminal. Depois de perguntar, encerre o turno.',
     BROWSER_NOTE,
     BOARD_LEAD,
