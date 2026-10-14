@@ -2,10 +2,11 @@ import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, TEMPLATE_LIMITS, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type MissionGit, type PrStatus, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
+import { dueSchedules, nextRun, normalizeWhen } from './schedules.ts'
 import { fileDiff, folderStatus, folderTree, readFile } from './files.ts'
 import { Updates } from './updates.ts'
 import { missionReport } from './report.ts'
@@ -248,6 +249,119 @@ export class OrbitCore {
       if (!safe(() => removeWorktree(git.repo, path), false)) kept.push(entry === 'lider' ? 'do líder' : `de #${entry}`)
     }
     if (kept.length) this.event(missionId, 'pane.exited', 'Cópias mantidas', `Ficaram mudanças sem commit nas cópias ${kept.join(', ')}, em ${root}. Os branches continuam no repositório.`, null)
+  }
+
+  // ---- missions ----
+
+  /** A new mission: its branch (if each agent gets one), the template's cards, and its lead at work. */
+  private startMission(message: Omit<Extract<ClientMessage, { type: 'mission.create' }>, 'type'>, schedule?: Schedule): Mission {
+    const startedBy = schedule?.name
+    if (!this.store.workspace(message.workspaceId)) throw new Error('Workspace desconhecido')
+    if (!MODES.includes(message.mode)) throw new Error(`Modo inválido: ${message.mode}`)
+    const title = requireText(message.title, 'título', 120)
+    const squad = message.mode === 'squad' ? this.store.squad(message.squadId ?? '') : undefined
+    if (message.mode === 'squad' && !squad) throw new Error('Escolha um squad para a missão')
+    const workspace = this.store.workspace(message.workspaceId)!
+    // Each agent in its own worktree: the mission branch starts from the main folder's branch.
+    let git: ((id: string) => MissionGit) | undefined
+    if (message.isolation === 'worktrees') {
+      const info = repoInfo(workspace.path)
+      if (!info.branch) throw new Error('A pasta principal está fora de um branch (HEAD solto); troque para um branch antes')
+      const branch = `orbit/${slugify(title).slice(0, 40)}-${randomBytes(2).toString('hex')}`
+      if (!BRANCH.test(branch)) throw new Error(`Não consegui montar um nome de branch para "${title}"`)
+      git = (id) => ({ repo: info.top, sub: info.sub, base: info.branch!, branch, leadPath: join(this.dataDir, 'worktrees', id, 'lider'), pr: null })
+    }
+    const mission = this.store.createMission({
+      workspaceId: message.workspaceId,
+      title,
+      objective: (message.objective ?? '').trim().slice(0, 4000),
+      mode: message.mode,
+      squadId: squad?.id ?? null,
+    }, git, schedule?.id ?? null)
+    this.broadcast({ type: 'mission.updated', mission })
+    const opening = squad ? `Squad ${squad.name}. ${mission.objective || 'Sem objetivo descrito.'}` : mission.objective || 'Sem objetivo descrito.'
+    this.event(mission.id, 'mission.created', startedBy ? `Missão agendada iniciada (${startedBy})` : 'Missão iniciada', opening, null)
+    // Cards from a template are on the board before the lead looks at it.
+    for (const card of templateCards(message.cards)) this.addCard(mission.id, 'modelo', { title: card })
+    // Agentic and squad leads start working on the objective right away.
+    const task = mission.mode !== 'livre' && mission.objective ? objectiveTask(mission) : null
+    this.spawn({ ...message.lead, missionId: mission.id, role: 'lead', task })
+    return mission
+  }
+
+  // ---- scheduled missions ----
+
+  private normalizeSchedule(input: ScheduleInput, now: number): Schedule {
+    const existing = typeof input?.id === 'string' ? this.store.schedule(input.id) : undefined
+    if (!existing && this.store.schedules().length >= SCHEDULE_LIMITS.schedules) throw new Error(`No máximo ${SCHEDULE_LIMITS.schedules} agendamentos`)
+    if (!this.store.template(input.templateId)) throw new Error('Escolha um modelo de missão que exista')
+    if (!this.store.workspace(input.workspaceId)) throw new Error('Escolha um workspace que exista')
+    const when = normalizeWhen(input.when, now)
+    const enabled = input.enabled !== false
+    return {
+      id: existing?.id ?? randomBytes(6).toString('hex'),
+      name: requireText(input.name, 'nome do agendamento', SCHEDULE_LIMITS.name),
+      templateId: input.templateId,
+      workspaceId: input.workspaceId,
+      when,
+      enabled,
+      skipIfRunning: input.skipIfRunning !== false,
+      nextRunAt: enabled ? nextRun(when, now) : null,
+      lastRunAt: existing?.lastRunAt ?? null,
+      lastMissionId: existing?.lastMissionId ?? null,
+      lastResult: existing?.lastResult ?? null,
+      createdAt: existing?.createdAt ?? now,
+    }
+  }
+
+  /** Starts a schedule's mission from its template; returns what happened. */
+  private runSchedule(schedule: Schedule, now: number, manual: boolean): Schedule {
+    let result: string
+    let missionId = schedule.lastMissionId
+    const previous = schedule.lastMissionId ? this.missionPanes(schedule.lastMissionId).filter((p) => this.panes.isAlive(p.id) && p.status !== 'idle') : []
+    const template = this.store.template(schedule.templateId)
+    if (!template) result = 'Não rodou: o modelo foi apagado'
+    else if (!manual && schedule.skipIfRunning && previous.length > 0) result = `Pulada: a missão anterior ainda tem ${previous.length} ${previous.length === 1 ? 'agente trabalhando' : 'agentes trabalhando'}`
+    else {
+      try {
+        const stamp = new Date(now).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        const mission = this.startMission({
+          workspaceId: schedule.workspaceId,
+          title: `${template.title} · ${stamp}`.slice(0, 120),
+          objective: template.objective,
+          mode: template.mode,
+          squadId: template.squadId,
+          isolation: template.isolation,
+          lead: { cli: template.lead.cli, model: template.lead.model, effort: template.lead.effort, title: '' },
+          cards: template.cards,
+        }, schedule)
+        missionId = mission.id
+        result = manual ? 'Missão iniciada (na mão)' : 'Missão iniciada'
+      } catch (error) {
+        result = `Não rodou: ${error instanceof Error ? error.message : String(error)}`
+      }
+    }
+    // A run Orbit missed while closed happens once; the schedule then moves on from now.
+    const next = manual ? schedule.nextRunAt : schedule.when.kind === 'once' ? null : nextRun(schedule.when, now)
+    const updated: Schedule = { ...schedule, lastRunAt: now, lastMissionId: missionId, lastResult: result, nextRunAt: next, enabled: next === null && schedule.when.kind === 'once' ? false : schedule.enabled }
+    this.store.saveSchedule(updated)
+    this.broadcast({ type: 'schedule.updated', schedule: updated })
+    return updated
+  }
+
+  private scheduleTimer: NodeJS.Timeout | null = null
+
+  /** Checks the schedules now (runs missed while Orbit was closed) and every 30 s from then on. */
+  startScheduler(): void {
+    if (this.scheduleTimer) return
+    this.tickSchedules()
+    this.scheduleTimer = setInterval(() => this.tickSchedules(), 30_000)
+    this.scheduleTimer.unref()
+  }
+
+  /** Runs every schedule that is due (tests pass their own clock). */
+  tickSchedules(now = Date.now()): void {
+    for (const schedule of dueSchedules(this.store.schedules(), now)) this.runSchedule(schedule, now, false)
   }
 
   // ---- mission report ----
@@ -611,39 +725,9 @@ export class OrbitCore {
         if (workspace) this.broadcast({ type: 'workspace.updated', workspace })
         return
       }
-      case 'mission.create': {
-        if (!this.store.workspace(message.workspaceId)) throw new Error('Workspace desconhecido')
-        if (!MODES.includes(message.mode)) throw new Error(`Modo inválido: ${message.mode}`)
-        const title = requireText(message.title, 'título', 120)
-        const squad = message.mode === 'squad' ? this.store.squad(message.squadId ?? '') : undefined
-        if (message.mode === 'squad' && !squad) throw new Error('Escolha um squad para a missão')
-        const workspace = this.store.workspace(message.workspaceId)!
-        // Each agent in its own worktree: the mission branch starts from the main folder's branch.
-        let git: ((id: string) => MissionGit) | undefined
-        if (message.isolation === 'worktrees') {
-          const info = repoInfo(workspace.path)
-          if (!info.branch) throw new Error('A pasta principal está fora de um branch (HEAD solto); troque para um branch antes')
-          const branch = `orbit/${slugify(title).slice(0, 40)}-${randomBytes(2).toString('hex')}`
-          if (!BRANCH.test(branch)) throw new Error(`Não consegui montar um nome de branch para "${title}"`)
-          git = (id) => ({ repo: info.top, sub: info.sub, base: info.branch!, branch, leadPath: join(this.dataDir, 'worktrees', id, 'lider'), pr: null })
-        }
-        const mission = this.store.createMission({
-          workspaceId: message.workspaceId,
-          title,
-          objective: message.objective.trim().slice(0, 4000),
-          mode: message.mode,
-          squadId: squad?.id ?? null,
-        }, git)
-        this.broadcast({ type: 'mission.updated', mission })
-        const opening = squad ? `Squad ${squad.name}. ${mission.objective || 'Sem objetivo descrito.'}` : mission.objective || 'Sem objetivo descrito.'
-        this.event(mission.id, 'mission.created', 'Missão iniciada', opening, null)
-        // Cards from a template are on the board before the lead looks at it.
-        for (const title of templateCards(message.cards)) this.addCard(mission.id, 'modelo', { title })
-        // Agentic and squad leads start working on the objective right away.
-        const task = mission.mode !== 'livre' && mission.objective ? objectiveTask(mission) : null
-        this.spawn({ ...message.lead, missionId: mission.id, role: 'lead', task })
+      case 'mission.create':
+        this.startMission(message)
         return
-      }
       case 'squad.save': {
         const squad = normalizeSquad(message.squad, this.store.customSquadIds())
         this.store.saveSquad(squad)
@@ -769,6 +853,21 @@ export class OrbitCore {
           })
           .catch((error) => reply({ type: 'files.error', message: error instanceof Error ? error.message : String(error) }))
         return
+      case 'schedule.save': {
+        const schedule = this.normalizeSchedule(message.schedule, Date.now())
+        this.store.saveSchedule(schedule)
+        this.broadcast({ type: 'schedule.updated', schedule })
+        return
+      }
+      case 'schedule.delete':
+        if (this.store.deleteSchedule(message.scheduleId)) this.broadcast({ type: 'schedule.removed', scheduleId: message.scheduleId })
+        return
+      case 'schedule.run': {
+        const schedule = this.store.schedule(message.scheduleId)
+        if (!schedule) throw new Error('Agendamento não encontrado')
+        this.runSchedule(schedule, Date.now(), true)
+        return
+      }
       case 'template.save': {
         const template = this.normalizeTemplate(message.template)
         this.store.saveTemplate(template)
@@ -1008,6 +1107,7 @@ export class OrbitCore {
 
   shutdown(): void {
     if (this.codexTimer) clearInterval(this.codexTimer)
+    if (this.scheduleTimer) clearInterval(this.scheduleTimer)
     this.browser.shutdown()
     this.panes.killAll()
     this.store.flush()

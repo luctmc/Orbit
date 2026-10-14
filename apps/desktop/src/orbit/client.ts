@@ -1,4 +1,4 @@
-import type { Account, AccountLimits, AccountStatus, Card, Catalog, CatalogItem, MissionTemplate, UpdateStatus, MissionBrowser, ClientMessage, CliStatus, Mission, MissionEvent, Pane, Routing, ServerMessage, Squad, UsageDay, Workspace } from '@orbit/protocol'
+import type { Account, AccountLimits, AccountStatus, Card, Catalog, CatalogItem, MissionTemplate, Schedule, UpdateStatus, MissionBrowser, ClientMessage, CliStatus, Mission, MissionEvent, Pane, Routing, ServerMessage, Squad, UsageDay, Workspace } from '@orbit/protocol'
 
 export interface OrbitState {
   connection: 'connecting' | 'open' | 'closed'
@@ -30,6 +30,7 @@ export interface OrbitState {
   /** Every mission's board cards. */
   cards: Card[]
   templates: MissionTemplate[]
+  schedules: Schedule[]
   lastError: string | null
 }
 
@@ -55,7 +56,7 @@ export interface PaneView {
  * (for useSyncExternalStore); terminal bytes bypass React through `attachPane`.
  */
 export class OrbitClient {
-  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, catalog: null, clis: [], usageDays: [], limits: [], accounts: [], accountStatuses: [], browserEngine: undefined, browsers: [], skillCatalog: { items: [], disabled: [], scannedAt: null }, updateStatus: null, cards: [], templates: [], lastError: null }
+  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, catalog: null, clis: [], usageDays: [], limits: [], accounts: [], accountStatuses: [], browserEngine: undefined, browsers: [], skillCatalog: { items: [], disabled: [], scannedAt: null }, updateStatus: null, cards: [], templates: [], schedules: [], lastError: null }
   private readonly listeners = new Set<() => void>()
   /** Views per pane; `ready` once the view applied its snapshot and can take live output. */
   private readonly views = new Map<number, Map<PaneView, { ready: boolean }>>()
@@ -265,6 +266,12 @@ export class OrbitClient {
         return
       case 'account.status':
         this.update({ accountStatuses: message.statuses })
+        return
+      case 'schedule.updated':
+        this.update({ schedules: upsert(this.state.schedules, message.schedule, (x) => x.id) })
+        return
+      case 'schedule.removed':
+        this.update({ schedules: this.state.schedules.filter((x) => x.id !== message.scheduleId) })
         return
       case 'template.updated':
         this.update({ templates: upsert(this.state.templates, message.template, (t) => t.id) })

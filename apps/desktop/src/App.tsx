@@ -59,9 +59,9 @@ export function App() {
   useEffect(() => remember('mission', mission?.id ?? null), [mission?.id])
   useEffect(() => remember('layout', layout), [layout])
 
-  // A mission created while the app is open becomes the active one.
+  // A mission created while the app is open becomes the active one (not the ones a schedule starts).
   const followed = useRef<string | null>(null)
-  const newest = state.missions.reduce<Mission | null>((a, m) => (!a || m.createdAt > a.createdAt ? m : a), null)
+  const newest = state.missions.filter((m) => !m.scheduleId).reduce<Mission | null>((a, m) => (!a || m.createdAt > a.createdAt ? m : a), null)
   useEffect(() => {
     if (!newest || newest.createdAt < BOOT_AT || followed.current === newest.id) return
     followed.current = newest.id

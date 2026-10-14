@@ -35,6 +35,34 @@ export interface MissionTemplate {
 
 export type MissionTemplateInput = Omit<MissionTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
 
+/** When a scheduled mission runs (local time). Days: 0 = domingo … 6 = sábado; none = every day. */
+export type ScheduleWhen =
+  | { kind: 'once'; at: number }
+  | { kind: 'daily'; time: string; days: number[] }
+  | { kind: 'interval'; hours: number }
+
+/** A template started by itself, while Orbit is open. */
+export interface Schedule {
+  id: string
+  name: string
+  templateId: string
+  workspaceId: string
+  when: ScheduleWhen
+  enabled: boolean
+  /** Skip a run while the previous mission of this schedule still has agents working. */
+  skipIfRunning: boolean
+  nextRunAt: number | null
+  lastRunAt: number | null
+  lastMissionId: string | null
+  /** What happened at the last run ("Missão iniciada", "Pulada: …", an error). */
+  lastResult: string | null
+  createdAt: number
+}
+
+export type ScheduleInput = Pick<Schedule, 'name' | 'templateId' | 'workspaceId' | 'when' | 'enabled' | 'skipIfRunning'> & { id?: string }
+
+export const SCHEDULE_LIMITS = { schedules: 30, name: 60, maxHours: 168 } as const
+
 /** A mission whose agents each work in their own git worktree and branch. */
 export interface MissionGit {
   /** Repository root of the workspace's main folder. */
@@ -82,6 +110,8 @@ export interface Mission {
   usage: TokenUsage
   /** Set when each agent works in its own branch (git worktree). */
   git: MissionGit | null
+  /** The schedule that started it by itself, if any. */
+  scheduleId: string | null
   status: MissionStatus
   createdAt: number
   updatedAt: number
@@ -455,6 +485,7 @@ export interface Snapshot {
   accounts: Account[]
   cards: Card[]
   templates: MissionTemplate[]
+  schedules: Schedule[]
 }
 
 export interface SpawnPaneRequest {
@@ -486,6 +517,10 @@ export type ClientMessage =
   | { type: 'report.get'; missionId: string }
   /** Writes the report to a .md file the person picked. */
   | { type: 'report.save'; missionId: string; path: string }
+  | { type: 'schedule.save'; schedule: ScheduleInput }
+  | { type: 'schedule.delete'; scheduleId: string }
+  /** Starts the scheduled mission now (the schedule keeps its next run). */
+  | { type: 'schedule.run'; scheduleId: string }
   /** Creates or replaces a mission template. */
   | { type: 'template.save'; template: MissionTemplateInput }
   | { type: 'template.delete'; templateId: string }
@@ -575,6 +610,8 @@ export type ServerMessage =
   | { type: 'update.status'; status: UpdateStatus }
   | { type: 'report'; missionId: string; markdown: string }
   | { type: 'report.saved'; missionId: string; path: string }
+  | { type: 'schedule.updated'; schedule: Schedule }
+  | { type: 'schedule.removed'; scheduleId: string }
   | { type: 'template.updated'; template: MissionTemplate }
   | { type: 'template.removed'; templateId: string }
   | { type: 'card.updated'; card: Card }
