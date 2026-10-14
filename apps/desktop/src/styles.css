@@ -498,3 +498,16 @@ h1, h2, p { margin: 0; }
 .brand__version--new { color: var(--accent); background: var(--accent-soft); }
 .progress { height: 4px; border-radius: 2px; background: var(--line-2); overflow: hidden; }
 .progress span { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
+
+/* Settings › Avisos */
+.notices { gap: 16px; }
+.notices__intro { font-size: 13px; max-width: 640px; line-height: 1.5; }
+.notices__group { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 4px; }
+.notices__group legend { margin-bottom: 8px; }
+.notices__row { display: flex; gap: 12px; align-items: flex-start; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+.notices__row:hover { background: var(--surface-2); }
+.notices__row input { margin-top: 3px; accent-color: var(--accent); }
+.notices__row > span { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.notices__row strong { font-weight: 500; }
+.notices__row .muted { font-size: 12.5px; }
+.notices__test { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12.5px; }

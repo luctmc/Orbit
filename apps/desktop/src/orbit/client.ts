@@ -58,6 +58,8 @@ export class OrbitClient {
   private readonly views = new Map<number, Map<PaneView, { ready: boolean }>>()
   private readonly attaching = new Set<number>()
   private readonly frameViews = new Map<string, Set<BrowserFrameView>>()
+  /** Live-message listeners (notifications); they see every message after the state is updated. */
+  private readonly messageListeners = new Set<(message: ServerMessage) => void>()
   /** One-off answers (files.*) go to whoever asked, not into the shared state. */
   private readonly answers = new Set<(message: ServerMessage) => void>()
   private ws: WebSocket | null = null
@@ -71,6 +73,12 @@ export class OrbitClient {
   }
 
   getState = (): OrbitState => this.state
+
+  /** Every message the sidecar sends, as it arrives (after the state took it in). */
+  listen(listener: (message: ServerMessage) => void): () => void {
+    this.messageListeners.add(listener)
+    return () => this.messageListeners.delete(listener)
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
@@ -164,7 +172,11 @@ export class OrbitClient {
       this.retryMs = 500
       this.update({ connection: 'open', lastError: null })
     }
-    ws.onmessage = (event) => this.receive(JSON.parse(String(event.data)) as ServerMessage)
+    ws.onmessage = (event) => {
+      const message = JSON.parse(String(event.data)) as ServerMessage
+      this.receive(message)
+      for (const listener of this.messageListeners) listener(message)
+    }
     ws.onclose = () => {
       this.update({ connection: 'closed' })
       this.retryLater()

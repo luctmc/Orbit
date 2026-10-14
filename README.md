@@ -61,6 +61,10 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Avisos** (Ajustes › Avisos): notificação do macOS quando um agente espera você, quando um
+  ajudante entrega o retorno, quando um agente do Claude termina um turno de mais de 30 s e,
+  se quiser, quando um agente encerra; por padrão só com o Orbit em segundo plano. Voltar ao
+  Orbit pelo aviso abre o agente certo, e o ícone no Dock mostra quantos agentes esperam você.
 - **Atualizações**: o app procura uma versão nova ao abrir e a cada 6 h (a versão na barra de
   título vira "0.1.0 → 0.2.0"; o cartão Orbit em Ajustes › Agentes e CLIs instala e reinicia). As
   releases ficam no repositório privado; o sidecar as lê com o seu `gh` e entrega ao plugin de
