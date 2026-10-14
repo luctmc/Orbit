@@ -61,6 +61,13 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Agentes**: cada agente tem um menu (⋯) para renomear (ou clique duas vezes no nome), retomar
+  a conversa, reabrir em conversa nova, duplicar e copiar o número. O Orbit guarda como cada
+  agente foi aberto e o id da conversa (dos hooks do Claude e do arquivo de sessão do Codex),
+  então mesmo depois de reiniciar o Orbit, inclusive numa atualização, dá para **retomar a
+  conversa** (`claude --resume`, `codex resume`). Na grade dá para fixar 1, 2 ou 3 colunas;
+  ⌘1–9 escolhe o agente, ⌘[ e ⌘] passam para o anterior e o próximo, e ⌘J vai para a barra de
+  comando.
 - **Avisos** (Ajustes › Avisos): notificação do macOS quando um agente espera você, quando um
   ajudante entrega o retorno, quando um agente do Claude termina um turno de mais de 30 s e,
   se quiser, quando um agente encerra; por padrão só com o Orbit em segundo plano. Voltar ao

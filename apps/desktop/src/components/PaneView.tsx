@@ -1,14 +1,67 @@
+import { useEffect, useRef, useState } from 'react'
 import type { Pane } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, costText, EFFORT_LABEL, pathText, STATUS, tokensText } from '../orbit/labels.ts'
-import { CloseIcon } from './icons.tsx'
+import { CloseIcon, MoreIcon } from './icons.tsx'
 import { Terminal } from './Terminal.tsx'
+
+/** The agent's ⋯ menu: rename, resume or reopen, duplicate, copy its number, close. */
+function PaneMenu({ pane, onRename, onClose }: { pane: Pane; onRename: () => void; onClose: () => void }) {
+  const client = useOrbitClient()
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) onClose() }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', away)
+    document.addEventListener('keydown', esc)
+    box.current?.querySelector('button')?.focus()
+    return () => {
+      document.removeEventListener('mousedown', away)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [onClose])
+  const act = (fn: () => void) => () => { fn(); onClose() }
+  const alive = pane.status !== 'exited'
+  const canResume = pane.cli !== 'shell' && pane.sessionId !== null
+  return (
+    <div ref={box} className="menu" role="menu" aria-label={`Ações de #${pane.id}`}>
+      <button type="button" role="menuitem" onClick={act(onRename)}>Renomear</button>
+      {canResume && <button type="button" role="menuitem" onClick={act(() => client.send({ type: 'pane.restart', paneId: pane.id, resume: true }))}>{alive ? 'Reiniciar na mesma conversa' : 'Retomar conversa'}</button>}
+      {pane.cli !== 'shell' && <button type="button" role="menuitem" onClick={act(() => client.send({ type: 'pane.restart', paneId: pane.id, resume: false }))}>{alive ? 'Reiniciar em conversa nova' : 'Reabrir em conversa nova'}</button>}
+      <button type="button" role="menuitem" onClick={act(() => client.send({ type: 'pane.duplicate', paneId: pane.id }))}>Duplicar</button>
+      <button type="button" role="menuitem" onClick={act(() => void navigator.clipboard?.writeText(`#${pane.id}`))}>Copiar o número (#{pane.id})</button>
+      <hr />
+      <button type="button" role="menuitem" className="menu__danger" onClick={act(() => client.send({ type: 'pane.close', paneId: pane.id }))}>{alive ? 'Encerrar' : 'Fechar'}</button>
+    </div>
+  )
+}
+
+/** The title, editable in place (double-click or Renomear). */
+function PaneTitle({ pane, editing, onEditing, onSelect }: { pane: Pane; editing: boolean; onEditing: (on: boolean) => void; onSelect: () => void }) {
+  const client = useOrbitClient()
+  const [draft, setDraft] = useState(pane.title)
+  useEffect(() => { if (editing) setDraft(pane.title) }, [editing, pane.title])
+  if (!editing) {
+    return <button type="button" className="pane__title" onClick={onSelect} onDoubleClick={() => onEditing(true)} title="Clique duas vezes para renomear">{pane.title}</button>
+  }
+  const save = () => {
+    const title = draft.trim()
+    if (title && title !== pane.title) client.send({ type: 'pane.rename', paneId: pane.id, title })
+    onEditing(false)
+  }
+  return (
+    <input className="pane__title-input" value={draft} maxLength={120} autoFocus aria-label={`Novo nome de #${pane.id}`} onChange={(e) => setDraft(e.target.value)} onBlur={save}
+      onKeyDown={(e) => { if (e.key === 'Enter') save(); else if (e.key === 'Escape') onEditing(false) }} />
+  )
+}
 
 export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: boolean; onSelect: () => void }) {
   const client = useOrbitClient()
   const account = useOrbit().accounts.find((a) => a.id === pane.accountId)
   const status = STATUS[pane.status]
   const alive = pane.status !== 'exited'
+  const [menu, setMenu] = useState(false)
+  const [renaming, setRenaming] = useState(false)
 
   return (
     <section className={`pane${selected ? ' pane--selected' : ''}${pane.status === 'waiting' ? ' pane--waiting' : ''}`} aria-label={`Agente ${pane.id}: ${pane.title}`}>
@@ -16,9 +69,15 @@ export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: b
         <span className={`dot dot--${status.tone}`} title={status.label} />
         <span className={`role role--${pane.role}`}>{pane.role === 'lead' ? 'Líder' : pane.squadRole ?? pane.taskType ?? 'Ajudante'}</span>
         <span className="pane__id">#{pane.id}</span>
-        <button type="button" className="pane__title" onClick={onSelect}>{pane.title}</button>
+        <PaneTitle pane={pane} editing={renaming} onEditing={setRenaming} onSelect={onSelect} />
         {pane.deliveredAt !== null && <span className="chip chip--done">entregue</span>}
         <span className="chip">{[CLI_LABEL[pane.cli], account && !account.builtin && account.name, pane.model, pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}</span>
+        <div className="menu-anchor">
+          <button type="button" className="icon-btn" aria-label={`Ações de #${pane.id}`} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>
+            <MoreIcon size={15} />
+          </button>
+          {menu && <PaneMenu pane={pane} onRename={() => setRenaming(true)} onClose={() => setMenu(false)} />}
+        </div>
         <button type="button" className="icon-btn" aria-label={alive ? `Encerrar agente ${pane.id}` : `Fechar agente ${pane.id}`} onClick={() => client.send({ type: 'pane.close', paneId: pane.id })}>
           <CloseIcon size={14} />
         </button>
@@ -26,6 +85,13 @@ export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: b
       <div className="pane__body">
         <Terminal paneId={pane.id} interactive={alive} onFocus={onSelect} />
       </div>
+      {!alive && pane.cli !== 'shell' && (
+        <div className="ended" role="status">
+          <span className="ended__text">{pane.sessionId ? 'O agente encerrou. A conversa continua salva na CLI.' : 'O agente encerrou.'}</span>
+          {pane.sessionId && <button type="button" className="btn btn--sm btn--primary" onClick={() => client.send({ type: 'pane.restart', paneId: pane.id, resume: true })}>Retomar conversa</button>}
+          <button type="button" className="btn btn--sm btn--ghost" onClick={() => client.send({ type: 'pane.restart', paneId: pane.id, resume: false })}>Conversa nova</button>
+        </div>
+      )}
       {pane.status === 'waiting' && (
         <div className="attention" role="status">
           <span className="attention__text">Precisa de você: {pane.attention ?? 'o agente está esperando'}</span>

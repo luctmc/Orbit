@@ -161,3 +161,13 @@ export function readTail(path: string, bytes = 256 * 1024): string {
   }
 }
 
+
+/** The conversation id in a Codex session file's first line (`session_meta`). */
+export function codexSessionId(path: string): string | null {
+  try {
+    const meta = JSON.parse(firstLine(path)) as { type?: string; payload?: { id?: unknown } }
+    return meta.type === 'session_meta' && typeof meta.payload?.id === 'string' ? meta.payload.id : null
+  } catch {
+    return null
+  }
+}

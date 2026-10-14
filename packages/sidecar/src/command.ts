@@ -1,4 +1,4 @@
-import { EFFORTS, MODEL_ID, type AgentCli, type Effort } from '@orbit/protocol'
+import { EFFORTS, MODEL_ID, SESSION_ID, type AgentCli, type Effort } from '@orbit/protocol'
 
 export interface PaneCommand {
   file: string
@@ -26,6 +26,8 @@ export interface AgentLaunch {
   login?: boolean
   /** Codex: MCP servers switched off in Orbit (plain names). */
   disabledMcp?: string[]
+  /** Continue this conversation of the CLI instead of starting one (no first prompt then). */
+  resume?: string
 }
 
 export function shellQuote(value: string): string {
@@ -42,22 +44,25 @@ const fromFile = (path: string) => `"$(cat ${shellQuote(path)})"`
 export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
   if (launch.cli === 'shell') return { file: shell, args: ['-l'] }
   if (launch.login) return { file: shell, args: ['-l', '-c', launch.cli === 'claude' ? 'claude auth login' : 'codex login'] }
-  const { model, effort } = launch
+  const { model, effort, resume } = launch
   if (model !== null && !MODEL_ID.test(model)) throw new Error(`Modelo inválido: ${model}`)
+  if (resume !== undefined && !SESSION_ID.test(resume)) throw new Error('Conversa inválida para retomar')
   if (effort && !EFFORTS.includes(effort)) throw new Error(`Esforço inválido: ${effort}`)
 
   const parts: string[] = []
   if (launch.cli === 'claude') {
     parts.push('claude')
+    if (resume) parts.push('--resume', resume)
     if (model) parts.push('--model', model)
     if (effort) parts.push('--effort', effort)
     for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
     if (launch.mcpConfigPath) parts.push('--mcp-config', shellQuote(launch.mcpConfigPath))
     if (launch.settingsPath) parts.push('--settings', shellQuote(launch.settingsPath))
     if (launch.rolePromptPath) parts.push('--append-system-prompt', fromFile(launch.rolePromptPath))
-    if (launch.taskPath) parts.push('--', fromFile(launch.taskPath))
+    if (launch.taskPath && !resume) parts.push('--', fromFile(launch.taskPath))
   } else {
     parts.push('codex')
+    if (resume) parts.push('resume')
     if (model) parts.push('-m', model)
     if (effort) parts.push('-c', shellQuote(`model_reasoning_effort="${effort}"`))
     for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
@@ -71,8 +76,13 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
     for (const name of launch.disabledMcp ?? []) {
       if (/^[A-Za-z0-9_-]{1,64}$/.test(name) && name !== 'orbit') parts.push('-c', shellQuote(`mcp_servers.${name}.enabled=false`))
     }
-    const prompt = [launch.rolePromptPath, launch.taskPath].filter((p): p is string => Boolean(p))
-    if (prompt.length) parts.push('--', `"$(cat ${prompt.map(shellQuote).join(' ')})"`)
+    if (resume) {
+      // The conversation already carries its role; the id goes last, as `codex resume` expects.
+      parts.push('--', resume)
+    } else {
+      const prompt = [launch.rolePromptPath, launch.taskPath].filter((p): p is string => Boolean(p))
+      if (prompt.length) parts.push('--', `"$(cat ${prompt.map(shellQuote).join(' ')})"`)
+    }
   }
   return { file: shell, args: ['-l', '-c', `${parts.join(' ')}; exec ${shellQuote(shell)} -l`] }
 }

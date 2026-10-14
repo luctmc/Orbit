@@ -2,14 +2,14 @@ import { realpathSync, statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, EFFORT_LABEL, EFFORTS, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, EFFORT_LABEL, EFFORTS, SESSION_ID, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
 import { fileDiff, folderStatus, folderTree, readFile } from './files.ts'
 import { Updates } from './updates.ts'
 import { normalizeRouting } from './routing.ts'
-import { codexHome, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
+import { codexHome, codexSessionId, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import type { AgentLaunch, PaneCommand } from './command.ts'
@@ -523,6 +523,19 @@ export class OrbitCore {
       case 'pane.close':
         this.closePane(message.paneId)
         return
+      case 'pane.rename':
+        this.renamePane(message.paneId, message.title)
+        return
+      case 'pane.restart':
+        this.restartPane(message.paneId, message.resume === true)
+        return
+      case 'pane.duplicate': {
+        const pane = this.store.pane(message.paneId)
+        const spec = pane && this.store.paneSpec(message.paneId)
+        if (!pane || !spec) throw new Error(`#${message.paneId} foi aberto antes desta versão do Orbit; abra um novo`)
+        this.spawn({ ...spec, role: 'crew', title: `${pane.title} (cópia)`.slice(0, 120) }, { opened: (id) => `#${id} é uma cópia de #${pane.id}` })
+        return
+      }
     }
   }
 
@@ -632,6 +645,8 @@ export class OrbitCore {
           file = findCodexRollout(home, pane.cwd, pane.createdAt, new Set(this.codexRollouts.values())) ?? undefined
           if (!file) continue
           this.codexRollouts.set(pane.id, file)
+          const sessionId = codexSessionId(file)
+          if (sessionId) this.panes.setSession(pane.id, sessionId)
         }
         this.applyReport(pane.id, fromCodexRollout(readTail(file)))
       } catch {
@@ -715,6 +730,7 @@ export class OrbitCore {
     if (next) this.panes.report(paneId, next.status, next.attention)
     const pane = this.store.pane(paneId)
     if (pane) this.noteEdit(pane, payload)
+    if (typeof payload.session_id === 'string' && SESSION_ID.test(payload.session_id)) this.panes.setSession(paneId, payload.session_id)
     const reason = gateTool(payload, new Set(this.store.disabledCatalog()), this.skillPolicies.get(paneId))
     return reason ? { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } } : null
   }
@@ -728,7 +744,8 @@ export class OrbitCore {
 
   // ---- internals ----
 
-  private spawn(input: SpawnPaneRequest): Pane {
+  /** `resume` continues that conversation of the CLI; `opened` replaces the flow's "Agente #N aberto". */
+  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string } = {}): Pane {
     const mission = this.store.mission(input.missionId)
     if (!mission || mission.status !== 'active') throw new Error('Missão inexistente ou arquivada')
     const workspace = this.store.workspace(mission.workspaceId)
@@ -786,6 +803,7 @@ export class OrbitCore {
     })
 
     if (request.cli === 'codex') launch.disabledMcp = codexDisabledMcp(this.store.disabledCatalog())
+    if (options.resume) launch.resume = options.resume
 
     let pane: Pane
     try {
@@ -814,13 +832,40 @@ export class OrbitCore {
       throw error
     }
     this.paneTokens.set(token, id)
+    // Enough to open it again later; the account is the one it really ran as (its conversations live there).
+    this.store.setPaneSpec(id, { ...input, task: null, accountId: account?.id ?? null })
     if (policy) this.skillPolicies.set(id, policy)
     if (request.cli === 'codex') this.watchCodex()
     this.syncPane(pane)
     const seat = request.role === 'lead' ? 'líder' : squadRole?.name.toLowerCase() ?? taskType?.name.toLowerCase() ?? 'ajudante'
     const who = [CLI_LABEL[request.cli], account && !account.builtin && account.name, request.model, request.effort && `esforço ${EFFORT_LABEL[request.effort]}`, seat].filter(Boolean).join(' · ')
-    this.event(mission.id, 'pane.spawned', `Agente #${id} aberto`, `${title} — ${who}`, id)
+    this.event(mission.id, 'pane.spawned', options.opened?.(id) ?? `Agente #${id} aberto`, `${title} — ${who}`, id)
     return pane
+  }
+
+  /** Opens an agent again with its settings: a new conversation or, with `resume`, the same one. */
+  private restartPane(paneId: number, resume: boolean): void {
+    const pane = this.store.pane(paneId)
+    if (!pane) throw new Error(`#${paneId} não existe`)
+    const spec = this.store.paneSpec(paneId)
+    if (!spec || (pane.cli === 'shell' && resume)) throw new Error(resume ? 'Não há conversa para retomar neste agente' : `#${paneId} foi aberto antes desta versão do Orbit; abra um novo`)
+    if (resume && !pane.sessionId) throw new Error(`O ${CLI_LABEL[pane.cli]} ainda não informou a conversa de #${paneId}`)
+    const sessionId = pane.sessionId
+    this.closePane(paneId)
+    this.spawn({ ...spec, title: pane.title }, {
+      resume: resume ? sessionId! : undefined,
+      opened: (id) => (resume ? `#${id} retomou a conversa de #${paneId}` : `#${id} reabriu #${paneId}`),
+    })
+  }
+
+  private renamePane(paneId: number, raw: string): void {
+    const title = typeof raw === 'string' ? raw.trim().slice(0, 120) : ''
+    if (!title) throw new Error('Dê um nome ao agente')
+    const live = this.panes.rename(paneId, title)
+    if (live) return // synced through the status event
+    const stored = this.store.pane(paneId)
+    if (!stored) throw new Error(`#${paneId} não existe`)
+    this.syncPane({ ...stored, title })
   }
 
   private closePane(id: number): void {
