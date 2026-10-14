@@ -510,6 +510,46 @@ export class Store {
     return spec && structuredClone(spec)
   }
 
+  // ---- deleting for good ----
+
+  /** Forgets an agent: its record, how it was opened, and its lines in the mission flow. */
+  forgetPane(id: number): void {
+    this.state.panes = this.state.panes.filter((p) => p.id !== id)
+    delete this.state.paneSpecs[String(id)]
+    this.state.events = this.state.events.filter((e) => e.paneId !== id)
+    this.save()
+  }
+
+  /**
+   * Forgets a mission and everything Orbit kept about it: agents, flow, board, proposals, usage
+   * lines and, with `memory`, what it left in the project memory. Schedules forget their link to it.
+   */
+  forgetMission(id: string, memory: boolean): void {
+    const mission = this.mission(id)
+    if (!mission) return
+    const panes = new Set(this.state.panes.filter((p) => p.missionId === id).map((p) => String(p.id)))
+    this.state.panes = this.state.panes.filter((p) => p.missionId !== id)
+    for (const key of panes) delete this.state.paneSpecs[key]
+    this.state.events = this.state.events.filter((e) => e.missionId !== id)
+    this.state.cards = this.state.cards.filter((c) => c.missionId !== id)
+    this.state.proposals = this.state.proposals.filter((p) => p.missionId !== id)
+    this.state.usageLog = this.state.usageLog.filter((e) => e.missionId !== id)
+    for (const schedule of this.state.schedules) if (schedule.lastMissionId === id) schedule.lastMissionId = null
+    if (memory && this.memories[mission.workspaceId]) this.memories[mission.workspaceId] = this.memories[mission.workspaceId]!.filter((e) => e.source?.missionId !== id)
+    this.state.missions = this.state.missions.filter((m) => m.id !== id)
+    this.save()
+  }
+
+  /** Forgets a workspace: its missions, memory, templates and schedules. Its folders are not touched. */
+  forgetWorkspace(id: string): void {
+    for (const mission of this.state.missions.filter((m) => m.workspaceId === id)) this.forgetMission(mission.id, false)
+    delete this.memories[id]
+    this.state.templates = this.state.templates.filter((t) => t.workspaceId !== id)
+    this.state.schedules = this.state.schedules.filter((s) => s.workspaceId !== id)
+    this.state.workspaces = this.state.workspaces.filter((w) => w.id !== id)
+    this.save()
+  }
+
   addEvent(input: Omit<MissionEvent, 'id' | 'at'>): MissionEvent {
     const event: MissionEvent = { id: randomUUID(), at: Date.now(), ...input }
     this.state.events.push(event)

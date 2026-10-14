@@ -8,7 +8,7 @@ import { BUILTIN_ACCOUNTS, normalizeAccount, pickAccount } from '../src/accounts
 import type { Run } from '../src/clis.ts'
 import type { AgentLaunch } from '../src/command.ts'
 import { startServer } from '../src/server.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 const account = (patch: Partial<Account>): Account => ({ id: 'x', cli: 'claude', name: 'x', kind: 'assinatura', builtin: false, baseUrl: null, model: null, keyHint: null, auto: true, createdAt: 1, ...patch })
 const limits = (accountId: string, usedPercent: number): AccountLimits => ({ accountId, cli: 'claude', fiveHour: { usedPercent, resetsAt: Date.now() + 3_600_000, windowMinutes: 300 }, weekly: null, plan: null, updatedAt: 1 })
@@ -133,8 +133,8 @@ test('accounts: each runs in its own folder, keys stay in the sidecar, logins op
     ui.send({ type: 'account.delete', accountId: 'claude' })
     assert.match((await ui.next('error')).message, /não podem ser removidas/)
   } finally {
-    delete process.env.CLAUDE_CONFIG_DIR
-    delete process.env.CODEX_HOME
+    process.env.CLAUDE_CONFIG_DIR = HOMES.claude
+    process.env.CODEX_HOME = HOMES.codex
     ui.ws.close()
     await server.close()
   }

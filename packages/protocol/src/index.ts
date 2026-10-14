@@ -689,6 +689,12 @@ export type ClientMessage =
   | { type: 'template.save'; template: MissionTemplateInput }
   | { type: 'template.delete'; templateId: string }
   | { type: 'mission.archive'; missionId: string }
+  /** Deletes an agent for good: its terminal, its lines in the flow and, with `conversation`, its CLI conversation. */
+  | { type: 'pane.delete'; paneId: number; conversation: boolean }
+  /** Deletes a mission and everything Orbit kept about it; options reach the CLIs' conversations, the project memory and the git branches. */
+  | { type: 'mission.delete'; missionId: string; conversations: boolean; memory: boolean; branches: boolean }
+  /** Deletes a workspace from Orbit with all its missions, memory, templates and schedules. Its folders stay. */
+  | { type: 'workspace.delete'; workspaceId: string; conversations: boolean; branches: boolean }
   /** Hands the mission's lead to another agent, with everything that happened so far. */
   | { type: 'mission.lead.change'; missionId: string; to: LeadTarget }
   /** A workspace's memory (answered to this connection). */

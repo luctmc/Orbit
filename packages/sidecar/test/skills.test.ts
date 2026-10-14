@@ -9,7 +9,7 @@ import { buildCommand, type AgentLaunch } from '../src/command.ts'
 import type { Run } from '../src/clis.ts'
 import { frontMatter, gateTool, scanCatalog } from '../src/skills.ts'
 import { startServer } from '../src/server.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 const HOOK = fileURLToPath(new URL('../hooks/report.mjs', import.meta.url))
 
@@ -162,8 +162,8 @@ test('switching items off reaches running Claude agents through their hook, and 
     assert.match((await ui.next('error')).message, /Item desconhecido/)
     void root
   } finally {
-    delete process.env.CLAUDE_CONFIG_DIR
-    delete process.env.CODEX_HOME
+    process.env.CLAUDE_CONFIG_DIR = HOMES.claude
+    process.env.CODEX_HOME = HOMES.codex
     ui.ws.close()
     await server.close()
   }

@@ -704,3 +704,13 @@ h1, h2, p { margin: 0; }
 .memory__edit textarea { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); }
 .memory__edit-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .link-btn--danger { color: var(--danger); }
+
+/* Deleting for good */
+.btn--danger-solid { background: var(--danger); color: #fff; border: 1px solid var(--danger); }
+.btn--danger-solid:disabled { opacity: 0.45; cursor: not-allowed; }
+.delete__warn { margin: 0; color: var(--danger); font-weight: 600; }
+.delete__lists { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.delete__lists ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; display: grid; gap: 3px; }
+@media (max-width: 640px) { .delete__lists { grid-template-columns: 1fr; } }
+.icon-btn--danger:hover { color: var(--danger); }
+.workspace__danger { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 12px; font-size: 12px; }

@@ -4,6 +4,7 @@ import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, costText, EFFORT_LABEL, pathText, STATUS, tokensText } from '../orbit/labels.ts'
 import { CloseIcon, MoreIcon } from './icons.tsx'
 import { Terminal } from './Terminal.tsx'
+import { DeleteAgentDialog } from './deletions.tsx'
 
 /** What a helper's last handoff said. */
 const HANDOFF_CHIP: Record<PaneHandoff, { label: string; tone: string; title: string }> = {
@@ -14,7 +15,7 @@ const HANDOFF_CHIP: Record<PaneHandoff, { label: string; tone: string; title: st
 }
 
 /** The agent's ⋯ menu: rename, resume or reopen, duplicate, copy its number, close. */
-function PaneMenu({ pane, onRename, onClose }: { pane: Pane; onRename: () => void; onClose: () => void }) {
+function PaneMenu({ pane, onRename, onDelete, onClose }: { pane: Pane; onRename: () => void; onDelete: () => void; onClose: () => void }) {
   const client = useOrbitClient()
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -40,6 +41,7 @@ function PaneMenu({ pane, onRename, onClose }: { pane: Pane; onRename: () => voi
       <button type="button" role="menuitem" onClick={act(() => void navigator.clipboard?.writeText(`#${pane.id}`))}>Copiar o número (#{pane.id})</button>
       <hr />
       <button type="button" role="menuitem" className="menu__danger" onClick={act(() => client.send({ type: 'pane.close', paneId: pane.id }))}>{alive ? 'Encerrar' : 'Fechar'}</button>
+      <button type="button" role="menuitem" className="menu__danger" onClick={act(onDelete)}>Apagar para sempre…</button>
     </div>
   )
 }
@@ -70,6 +72,7 @@ export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: b
   const alive = pane.status !== 'exited'
   const [menu, setMenu] = useState(false)
   const [renaming, setRenaming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   return (
     <section className={`pane${selected ? ' pane--selected' : ''}${pane.status === 'waiting' ? ' pane--waiting' : ''}`} aria-label={`Agente ${pane.id}: ${pane.title}`}>
@@ -84,7 +87,7 @@ export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: b
           <button type="button" className="icon-btn" aria-label={`Ações de #${pane.id}`} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>
             <MoreIcon size={15} />
           </button>
-          {menu && <PaneMenu pane={pane} onRename={() => setRenaming(true)} onClose={() => setMenu(false)} />}
+          {menu && <PaneMenu pane={pane} onRename={() => setRenaming(true)} onDelete={() => setDeleting(true)} onClose={() => setMenu(false)} />}
         </div>
         <button type="button" className="icon-btn" aria-label={alive ? `Encerrar agente ${pane.id}` : `Fechar agente ${pane.id}`} onClick={() => client.send({ type: 'pane.close', paneId: pane.id })}>
           <CloseIcon size={14} />
@@ -116,6 +119,7 @@ export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: b
         {pane.exitCode !== null && <><span aria-hidden="true">·</span><span>código {pane.exitCode}</span></>}
         <PaneUsage pane={pane} />
       </footer>
+      {deleting && <DeleteAgentDialog pane={pane} onClose={() => setDeleting(false)} />}
     </section>
   )
 }

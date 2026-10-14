@@ -12,7 +12,7 @@ import { crewRole } from '../src/prompts.ts'
 import { DEFAULT_ROUTING, normalizeRouting } from '../src/routing.ts'
 import { startServer } from '../src/server.ts'
 import { findCodexRolloutById } from '../src/usage.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 const textOf = (result: unknown) => ((result as { content: Array<{ text: string }> }).content[0]?.text ?? '')
 
@@ -150,8 +150,8 @@ test('helpers answer acceptance criteria, open sub-helpers within a cap, and the
     const answered = (await ui.next('pane.updated', (m) => m.pane.id === lead.id && m.pane.status !== 'waiting')).pane
     assert.deepEqual([answered.attention, answered.choices], [null, null])
   } finally {
-    delete process.env.CODEX_HOME
-    delete process.env.CLAUDE_CONFIG_DIR
+    process.env.CODEX_HOME = HOMES.codex
+    process.env.CLAUDE_CONFIG_DIR = HOMES.claude
     for (const client of clients) await client.close()
     ui.ws.close()
     await server.close()

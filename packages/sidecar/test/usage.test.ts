@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { findCodexRollout, fromClaudeStatus, fromCodexRollout, usageDelta } from '../src/usage.ts'
 import { startServer } from '../src/server.ts'
 import type { AgentLaunch } from '../src/command.ts'
-import { connect, offline, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, offline, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 // Shapes captured from Claude Code 2.1 and Codex 0.160 (values made up).
 const CLAUDE_STATUS = {
@@ -114,7 +114,7 @@ test('agents report usage: missions and days add up, account limits reach the UI
     await ui.next('limits', (m) => m.limits.some((l) => l.cli === 'codex' && l.fiveHour?.usedPercent === 3 && l.plan === 'plus'))
     await ui.next('mission.updated', (m) => m.mission.usage.total === 57004)
   } finally {
-    delete process.env.CODEX_HOME
+    process.env.CODEX_HOME = HOMES.codex
     ui.ws.close()
     await server.close()
   }

@@ -12,7 +12,7 @@ import { buildCommand, type AgentLaunch } from '../src/command.ts'
 import { writeAgentFiles } from '../src/agentFiles.ts'
 import { fromGeminiHook, toGeminiHook } from '../src/hooks.ts'
 import { startServer } from '../src/server.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 const SESSION = '3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f'
 const ORBIT_CLI = fileURLToPath(new URL('../hooks/orbit-cli.mjs', import.meta.url))
@@ -125,9 +125,9 @@ test('Gemini agents run with a known conversation and Orbit rules through their 
     assert.equal(await hook({ hook_event_name: 'AfterAgent', prompt_response: 'Feito', stop_hook_active: false }), null)
     await ui.next('pane.updated', (m) => m.pane.id === helper.id && m.pane.status === 'idle')
   } finally {
-    delete process.env.GEMINI_CLI_HOME
-    delete process.env.CLAUDE_CONFIG_DIR
-    delete process.env.CODEX_HOME
+    process.env.GEMINI_CLI_HOME = HOMES.gemini
+    process.env.CLAUDE_CONFIG_DIR = HOMES.claude
+    process.env.CODEX_HOME = HOMES.codex
     ui.ws.close()
     await server.close()
   }

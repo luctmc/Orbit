@@ -2,13 +2,16 @@ import { useEffect, useRef, type FormEvent, type ReactNode } from 'react'
 import { CloseIcon } from './icons.tsx'
 
 /** Native modal <dialog>: focus trap, Esc and backdrop come from the platform. */
-export function Dialog({ title, eyebrow, onClose, onSubmit, submitLabel, children }: {
+export function Dialog({ title, eyebrow, onClose, onSubmit, submitLabel, children, danger = false, submitDisabled = false }: {
   title: string
   eyebrow?: string
   onClose: () => void
   onSubmit: () => void
   submitLabel: string
   children: ReactNode
+  /** The action cannot be undone: the button says so in color. */
+  danger?: boolean
+  submitDisabled?: boolean
 }) {
   const ref = useRef<HTMLDialogElement>(null)
 
@@ -36,7 +39,7 @@ export function Dialog({ title, eyebrow, onClose, onSubmit, submitLabel, childre
         <div className="dialog__body">{children}</div>
         <footer className="dialog__foot">
           <button type="button" className="btn btn--ghost" onClick={onClose}>Cancelar</button>
-          <button type="submit" className="btn btn--primary">{submitLabel}</button>
+          <button type="submit" className={danger ? 'btn btn--danger-solid' : 'btn btn--primary'} disabled={submitDisabled}>{submitLabel}</button>
         </footer>
       </form>
     </dialog>

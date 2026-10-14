@@ -1,9 +1,10 @@
 import { useId, useState } from 'react'
 import { WORKSPACE_LIMITS, type Workspace } from '@orbit/protocol'
-import { isTauri, useOrbitClient } from '../orbit/context.tsx'
+import { isTauri, useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { pathText } from '../orbit/labels.ts'
 import { Dialog } from './Dialog.tsx'
 import { MemoryPanel } from './MemoryPanel.tsx'
+import { DeleteWorkspaceDialog } from './deletions.tsx'
 import { CloseIcon, FolderIcon, PlusIcon } from './icons.tsx'
 
 /** Native macOS folder picker in the app; null when cancelled or outside Tauri. */
@@ -73,6 +74,8 @@ export function WorkspaceDialog({ workspace, onClose }: { workspace?: Workspace;
   const [folders, setFolders] = useState<string[]>(workspace?.folders ?? [])
   const [instructions, setInstructions] = useState(workspace?.instructions ?? '')
   const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const { missions } = useOrbit()
   const editing = Boolean(workspace)
   const suggested = folders.length ? `${baseName(folders[0]!)}${folders.length > 1 ? ` + ${folders.length - 1}` : ''}` : 'meu-projeto'
 
@@ -98,6 +101,13 @@ export function WorkspaceDialog({ workspace, onClose }: { workspace?: Workspace;
       )}
       {editing && <p className="note">Agentes já abertos continuam com as pastas e instruções que tinham; os próximos recebem estas.</p>}
       {workspace && <MemoryPanel workspaceId={workspace.id} />}
+      {workspace && (
+        <div className="workspace__danger">
+          <button type="button" className="btn btn--ghost btn--sm btn--danger" onClick={() => setDeleting(true)}>Apagar workspace…</button>
+          <span className="muted">Tira do Orbit as missões, a memória, os modelos e os agendamentos dele. As pastas no seu Mac ficam.</span>
+        </div>
+      )}
+      {workspace && deleting && <DeleteWorkspaceDialog workspace={workspace} missions={missions.filter((m) => m.workspaceId === workspace.id).length} onClose={() => setDeleting(false)} onDeleted={onClose} />}
       {error && <p className="form-error" role="alert">{error}</p>}
     </Dialog>
   )

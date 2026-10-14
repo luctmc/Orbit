@@ -42,7 +42,7 @@ test('with no Claude agent open, Orbit still knows each subscription\'s room fro
   const { tmpdir } = await import('node:os')
   const { join } = await import('node:path')
   const { startServer } = await import('../src/server.ts')
-  const { connect, ORIGIN, TOKEN } = await import('./helpers.ts')
+  const { connect, ORIGIN, TOKEN, HOMES } = await import('./helpers.ts')
   const asked: string[] = []
   const run = async (command: string) => {
     if (command.endsWith('claude auth status')) return { code: 0, stdout: JSON.stringify({ loggedIn: true, authMethod: 'claude.ai' }), stderr: '' }
@@ -65,8 +65,8 @@ test('with no Claude agent open, Orbit still knows each subscription\'s room fro
     // No hooks, MCP servers or saved session for this probe; it never reaches a model.
     assert.match(asked[0]!, /claude -p "\/usage" --settings '\{"disableAllHooks":true\}' --strict-mcp-config --no-session-persistence/)
   } finally {
-    delete process.env.CLAUDE_CONFIG_DIR
-    delete process.env.CODEX_HOME
+    process.env.CLAUDE_CONFIG_DIR = HOMES.claude
+    process.env.CODEX_HOME = HOMES.codex
     ui.ws.close()
     await server.close()
   }
