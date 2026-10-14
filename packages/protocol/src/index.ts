@@ -111,6 +111,10 @@ export interface SquadRole {
   model: string | null
   /** Instructions appended to the helper's role prompt. */
   brief: string
+  /** Skills this role uses, by name. */
+  skills: string[]
+  /** Only `skills` may be used (Claude is blocked by hook; Codex is told). */
+  onlySkills: boolean
 }
 
 /** A team with a script (roteiro) the lead follows. */
@@ -193,6 +197,8 @@ export interface TaskType {
   effort: Effort | null
   /** Skills the helper is told to use, by name. */
   skills: string[]
+  /** Only `skills` may be used (Claude is blocked by hook; Codex is told). */
+  onlySkills: boolean
 }
 
 /** Agentic missions: the lead's default and the task table it routes helpers through. */
@@ -281,6 +287,25 @@ export type BrowserInput =
 /** Keys the person (and agents) can press in the page besides typing text. */
 export const BROWSER_KEYS = ['Enter', 'Tab', 'Backspace', 'Delete', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'] as const
 
+/** What the CLIs have installed that agents can call. */
+export type CatalogKind = 'skill' | 'agent' | 'mcp'
+
+export interface CatalogItem {
+  /** `cli:kind:name` */
+  id: string
+  cli: AgentCliForRole
+  kind: CatalogKind
+  /** As the agent calls it: `oc-route`, `plugin:skill`, an MCP server name. */
+  name: string
+  description: string
+  /** Where it comes from: "pessoal", "sistema", "plugin x", "projeto app". */
+  source: string
+  /** The CLI's own config already turns it off. */
+  offInCli: boolean
+}
+
+export const catalogId = (cli: AgentCliForRole, kind: CatalogKind, name: string) => `${cli}:${kind}:${name}`
+
 export type MissionEventKind = 'mission.created' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser'
 
 export interface MissionEvent {
@@ -355,6 +380,10 @@ export type ClientMessage =
   | { type: 'account.check' }
   /** Opens a terminal running the CLI's login for this account. */
   | { type: 'account.login'; accountId: string }
+  /** Read the installed skills, agents and MCP servers again. */
+  | { type: 'catalog.scan' }
+  /** Lets Orbit's agents use an item, or not. */
+  | { type: 'catalog.toggle'; id: string; enabled: boolean }
   /** Opens (or moves) the mission's browser. */
   | { type: 'browser.navigate'; missionId: string; url: string }
   | { type: 'browser.history'; missionId: string; action: 'back' | 'forward' | 'reload' }
@@ -387,6 +416,8 @@ export type ServerMessage =
   | { type: 'cli.status'; clis: CliStatus[] }
   | { type: 'accounts'; accounts: Account[] }
   | { type: 'account.status'; statuses: AccountStatus[] }
+  /** Installed skills, agents and MCP servers, and which ones Orbit's agents may not use. */
+  | { type: 'skills'; items: CatalogItem[]; disabled: string[]; scannedAt: number | null }
   /** Which installed Chromium browser Orbit drives; null = none found. */
   | { type: 'browser.engine'; name: string | null }
   | { type: 'browser.state'; browser: MissionBrowser }

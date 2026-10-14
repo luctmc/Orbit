@@ -2,12 +2,12 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { MODEL_ID, SQUAD_LIMITS, type AgentCliForRole, type Squad, type SquadInput, type SquadRole } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL } from '../orbit/labels.ts'
-import { ModelInput } from './agentPickers.tsx'
+import { ModelInput, SkillsField } from './agentPickers.tsx'
 import { CloseIcon, PlusIcon } from './icons.tsx'
 
 const ROLE_CLIS: AgentCliForRole[] = ['claude', 'codex']
 
-const blankRole = (): SquadRole => ({ id: '', name: '', cli: 'claude', model: null, brief: '' })
+const blankRole = (): SquadRole => ({ id: '', name: '', cli: 'claude', model: null, brief: '', skills: [], onlySkills: false })
 const blankSquad = (): SquadInput => ({ id: '', name: '', description: '', lead: { cli: 'claude', model: null }, playbook: '', roles: [blankRole()] })
 const toInput = ({ builtin: _b, updatedAt: _u, ...squad }: Squad): SquadInput => structuredClone(squad)
 
@@ -163,6 +163,11 @@ export function SquadsDialog({ onClose }: { onClose: () => void }) {
                     </div>
                     <label className="sr-only" htmlFor={`${uid}-r${i}-brief`}>Instruções de {r.name || `papel ${i + 1}`}</label>
                     <textarea id={`${uid}-r${i}-brief`} rows={3} value={r.brief} maxLength={SQUAD_LIMITS.brief} placeholder="O que este papel faz, o que não faz e o que entrega." onChange={(e) => patchRole(i, { brief: e.target.value })} disabled={readOnly} />
+                    <div className="role-card__skills">
+                      <span className="muted">Skills</span>
+                      <SkillsField id={`${uid}-r${i}-skills`} cli={r.cli} skills={r.skills} only={r.onlySkills} label={`Skills de ${r.name || `papel ${i + 1}`}`} disabled={readOnly}
+                        onChange={(skills, onlySkills) => patchRole(i, { skills, onlySkills })} />
+                    </div>
                   </li>
                 ))}
               </ol>

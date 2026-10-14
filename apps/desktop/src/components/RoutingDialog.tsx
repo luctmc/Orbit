@@ -2,14 +2,15 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { MODEL_ID, ROUTING_LIMITS, type AgentCliForRole, type Routing, type TaskType } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL } from '../orbit/labels.ts'
-import { EffortCycle, ModelInput } from './agentPickers.tsx'
+import { EffortCycle, ModelInput, SkillsField } from './agentPickers.tsx'
 import { AccountsPanel } from './AccountsPanel.tsx'
 import { ClisPanel } from './ClisPanel.tsx'
+import { SkillsPanel } from './SkillsPanel.tsx'
 import { CloseIcon, PlusIcon } from './icons.tsx'
 
 const CLIS: AgentCliForRole[] = ['claude', 'codex']
 
-const blankRow = (): TaskType => ({ id: '', name: '', description: '', cli: 'claude', model: null, effort: 'medium', skills: [] })
+const blankRow = (): TaskType => ({ id: '', name: '', description: '', cli: 'claude', model: null, effort: 'medium', skills: [], onlySkills: false })
 
 function validate(draft: Routing): string | null {
   if (draft.taskTypes.length === 0) return 'Inclua pelo menos um tipo de tarefa.'
@@ -31,8 +32,8 @@ function CliToggle({ value, onChange, label }: { value: AgentCliForRole; onChang
 }
 
 /** Settings › "Quem faz cada tarefa": the table an agentic lead uses to staff its helpers. */
-type SettingsTab = 'routing' | 'contas' | 'clis'
-const TAB_TITLE: Record<SettingsTab, string> = { routing: 'Quem faz cada tarefa', contas: 'Contas', clis: 'Agentes e CLIs' }
+type SettingsTab = 'routing' | 'skills' | 'contas' | 'clis'
+const TAB_TITLE: Record<SettingsTab, string> = { routing: 'Quem faz cada tarefa', skills: 'Skills e MCP', contas: 'Contas', clis: 'Agentes e CLIs' }
 
 export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: () => void; initialTab?: SettingsTab }) {
   const [tab, setTab] = useState<SettingsTab>(initialTab)
@@ -82,6 +83,7 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
         </div>
         <div className="segmented settings-tabs" role="group" aria-label="Seção dos ajustes">
           <button type="button" aria-pressed={tab === 'routing'} onClick={() => setTab('routing')}>Quem faz cada tarefa</button>
+          <button type="button" aria-pressed={tab === 'skills'} onClick={() => setTab('skills')}>Skills e MCP</button>
           <button type="button" aria-pressed={tab === 'contas'} onClick={() => setTab('contas')}>Contas</button>
           <button type="button" aria-pressed={tab === 'clis'} onClick={() => setTab('clis')}>Agentes e CLIs</button>
         </div>
@@ -92,6 +94,8 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
         <ClisPanel />
       ) : tab === 'contas' ? (
         <AccountsPanel />
+      ) : tab === 'skills' ? (
+        <SkillsPanel />
       ) : !draft ? (
         <div className="dialog__body"><p className="muted">Carregando a tabela…</p></div>
       ) : (
@@ -134,9 +138,8 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
                     <td><ModelInput id={`${uid}-m${i}`} className="routing__model" label={`Modelo de ${t.name || `tipo ${i + 1}`}`} cli={t.cli} value={t.model} onChange={(model) => patchRow(i, { model })} /></td>
                     <td><EffortCycle label={t.name || `Tipo ${i + 1}`} cli={t.cli} model={t.model} value={t.effort} onChange={(effort) => patchRow(i, { effort })} /></td>
                     <td>
-                      <label className="sr-only" htmlFor={`${uid}-s${i}`}>Skills de {t.name}, separadas por vírgula</label>
-                      <input id={`${uid}-s${i}`} className="routing__skills" value={t.skills.join(', ')} placeholder="nenhuma"
-                        onChange={(e) => patchRow(i, { skills: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} spellCheck={false} />
+                      <SkillsField id={`${uid}-s${i}`} cli={t.cli} skills={t.skills} only={t.onlySkills} label={`Skills de ${t.name || `tipo ${i + 1}`}`}
+                        onChange={(skills, onlySkills) => patchRow(i, { skills, onlySkills })} />
                     </td>
                     <td>
                       {draft.taskTypes.length > 1 && (

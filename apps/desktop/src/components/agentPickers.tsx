@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { effortsFor, type AgentCli, type AgentCliForRole, type Effort } from '@orbit/protocol'
 import { useOrbit } from '../orbit/context.tsx'
 import { accountLabel, CLI_LABEL, EFFORT_LABEL, modelOptions } from '../orbit/labels.ts'
@@ -94,6 +94,48 @@ export function AccountSelect({ id, cli, value, onChange }: { id: string; cli: A
         <option value="">Automática (a com mais folga)</option>
         {mine.map((a) => <option key={a.id} value={a.id}>{accountLabel(a, a.cli)}{a.builtin ? ' (deste Mac)' : a.kind === 'api' ? ' (chave de API)' : ''}{describe(a.id)}</option>)}
       </select>
+    </div>
+  )
+}
+
+const splitSkills = (text: string) => [...new Set(text.split(',').map((s) => s.trim()).filter(Boolean))]
+
+/**
+ * Skills of a task type or squad role, typed as a comma list, and whether the agent may use only
+ * those. Names the CLI does not have installed are pointed out (they may come from elsewhere).
+ */
+export function SkillsField({ id, cli, skills, only, onChange, label, disabled }: {
+  id: string
+  cli: AgentCliForRole
+  skills: string[]
+  only: boolean
+  onChange: (skills: string[], only: boolean) => void
+  label: string
+  disabled?: boolean
+}) {
+  const { skillCatalog } = useOrbit()
+  const [text, setText] = useState(skills.join(', '))
+  // Follow outside changes (another row, a reset) without fighting the person's typing.
+  useEffect(() => {
+    if (splitSkills(text).join(',') !== skills.join(',')) setText(skills.join(', '))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skills])
+  const known = new Set(skillCatalog.items.filter((i) => i.cli === cli && i.kind === 'skill').map((i) => i.name))
+  const missing = skillCatalog.scannedAt ? skills.filter((name) => !known.has(name) && ![...known].some((k) => k.endsWith(`:${name}`))) : []
+  return (
+    <div className="skills-field">
+      <label className="sr-only" htmlFor={id}>{label}, separadas por vírgula</label>
+      <input id={id} className="routing__skills" value={text} placeholder="nenhuma" spellCheck={false} disabled={disabled} list={`${id}-list`}
+        onChange={(e) => {
+          setText(e.target.value)
+          onChange(splitSkills(e.target.value), only)
+        }} />
+      <datalist id={`${id}-list`}>{[...known].map((name) => <option key={name} value={text.includes(',') ? `${text.slice(0, text.lastIndexOf(',') + 1)} ${name}` : name} />)}</datalist>
+      <label className="check check--small">
+        <input type="checkbox" checked={only} disabled={disabled} onChange={(e) => onChange(skills, e.target.checked)} />
+        <span>só estas</span>
+      </label>
+      {missing.length > 0 && <span className="skills-field__warn">não instalada{missing.length > 1 ? 's' : ''} no {CLI_LABEL[cli]}: {missing.join(', ')}</span>}
     </div>
   )
 }

@@ -121,6 +121,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   core.setEndpoint(`http://127.0.0.1:${port}`)
   void core.refreshCatalog()
   void core.checkAccounts()
+  void core.scanSkills().catch(() => {})
 
   return {
     port,
@@ -149,8 +150,9 @@ async function handleAgentRequest(core: OrbitCore, port: number, req: IncomingMe
   const body = await readJson(req)
 
   if (path === '/hooks') {
-    core.hookReport(caller.id, (body ?? {}) as HookPayload)
-    return void res.writeHead(204).end()
+    const decision = core.hookReport(caller.id, (body ?? {}) as HookPayload)
+    if (!decision) return void res.writeHead(204).end()
+    return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(decision))
   }
   if (path === '/status') {
     core.statusReport(caller.id, body)

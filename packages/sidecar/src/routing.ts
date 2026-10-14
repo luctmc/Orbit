@@ -2,7 +2,7 @@ import { EFFORTS, MODEL_ID, ROUTING_LIMITS, SLUG, type AgentCliForRole, type Eff
 import { slugify } from './squads.ts'
 
 const row = (id: string, name: string, description: string, model: string, effort: Effort, skills: string[] = []): TaskType =>
-  ({ id, name, description, cli: 'claude', model, effort, skills })
+  ({ id, name, description, cli: 'claude', model, effort, skills, onlySkills: false })
 
 /** The table Orbit ships with; the user edits a copy in Settings. */
 export const DEFAULT_ROUTING: Routing = {
@@ -47,17 +47,21 @@ export function normalizeRouting(input: Routing): Routing {
     const id = SLUG.test(t.id ?? '') ? t.id : slugify(name)
     if (ids.has(id)) throw new Error(`Tabela: dois tipos com o mesmo identificador (${id})`)
     ids.add(id)
-    const skills = (Array.isArray(t.skills) ? t.skills : [])
-      .map((s) => String(s).trim())
-      .filter(Boolean)
-    if (skills.length > ROUTING_LIMITS.skills) throw new Error(`Tabela: no máximo ${ROUTING_LIMITS.skills} skills em ${name}`)
-    if (skills.some((s) => s.length > ROUTING_LIMITS.skill)) throw new Error(`Tabela: nome de skill longo demais em ${name}`)
+    const skills = skillList(t.skills, `Tabela (${name})`)
     const description = typeof t.description === 'string' ? t.description.trim().slice(0, ROUTING_LIMITS.description) : ''
-    return { id, name, description, cli: cli(t.cli, name), model: model(t.model, name), effort: effort(t.effort, name), skills }
+    return { id, name, description, cli: cli(t.cli, name), model: model(t.model, name), effort: effort(t.effort, name), skills, onlySkills: t.onlySkills === true }
   })
 
   return {
     lead: { cli: cli(input.lead?.cli, 'líder'), model: model(input.lead?.model, 'líder'), effort: effort(input.lead?.effort, 'líder') },
     taskTypes,
   }
+}
+
+/** Skill names for a task type or squad role: trimmed, distinct, within the limits. */
+export function skillList(input: unknown, where: string): string[] {
+  const skills = [...new Set((Array.isArray(input) ? input : []).map((s) => String(s).trim()).filter(Boolean))]
+  if (skills.length > ROUTING_LIMITS.skills) throw new Error(`${where}: no máximo ${ROUTING_LIMITS.skills} skills`)
+  if (skills.some((s) => s.length > ROUTING_LIMITS.skill || /\s/.test(s))) throw new Error(`${where}: nome de skill inválido`)
+  return skills
 }

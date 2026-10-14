@@ -50,8 +50,9 @@ export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, lead: Pane | 
   return [
     `Você é ${squadRole ? `o ${squadRole.name}` : 'um ajudante'} (#${pane.id}) na missão "${mission.title}" do Orbit${lead ? `, sob o líder #${lead.id}` : ''}.`,
     ...(squadRole ? [`Seu papel: ${squadRole.brief}`] : []),
+    ...(squadRole?.skills.length && !squadRole.onlySkills ? [`Use estas skills quando estiverem disponíveis: ${squadRole.skills.join(', ')}.`] : []),
     ...(taskType ? [`Tipo de tarefa: ${taskType.name}${taskType.description ? ` (${taskType.description})` : ''}.`] : []),
-    ...(taskType?.skills.length ? [`Use estas skills quando estiverem disponíveis: ${taskType.skills.join(', ')}.`] : []),
+    ...(taskType?.skills.length && !taskType.onlySkills ? [`Use estas skills quando estiverem disponíveis: ${taskType.skills.join(', ')}.`] : []),
     'Faça só a tarefa que recebeu. Se faltar informação essencial, pergunte ao usuário no próprio terminal.',
     BROWSER_NOTE,
     'Ao terminar, ou se ficar bloqueado, chame a ferramenta handoff_submit do servidor MCP "orbit" com um resumo curto: o que mudou, onde, como verificar e o que ficou pendente. Não espere confirmação depois de entregar.',

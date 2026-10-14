@@ -20,6 +20,8 @@ interface PersistedState extends Omit<Snapshot, 'squads' | 'routing' | 'accounts
   customAccounts: Account[]
   /** Whether Orbit may pick each built-in account by itself (default: yes). */
   builtinAuto: Record<string, boolean>
+  /** Catalog items (skills, agents, MCP servers) Orbit's agents may not use. */
+  disabledCatalog: string[]
 }
 
 /** Durable state in `<dataDir>/state.json`. Writes are debounced and atomic (tmp + rename). */
@@ -35,6 +37,9 @@ export class Store {
     // Older state files predate some fields.
     this.state.customSquads ??= []
     this.state.routing ??= null
+    for (const squad of this.state.customSquads) for (const role of squad.roles) Object.assign(role, { skills: role.skills ?? [], onlySkills: role.onlySkills ?? false })
+    for (const row of this.state.routing?.taskTypes ?? []) row.onlySkills ??= false
+    this.state.disabledCatalog ??= []
     this.state.usageDays ??= []
     this.state.limits = migrateLimits(this.state.limits ?? [])
     this.state.customAccounts ??= []
@@ -89,6 +94,19 @@ export class Store {
     this.state.limits = [...this.state.limits.filter((l) => l.accountId !== limits.accountId), limits]
     this.save()
     return this.limits()
+  }
+
+  disabledCatalog(): string[] {
+    return [...this.state.disabledCatalog]
+  }
+
+  setCatalogItem(id: string, enabled: boolean): string[] {
+    const set = new Set(this.state.disabledCatalog)
+    if (enabled) set.delete(id)
+    else set.add(id)
+    this.state.disabledCatalog = [...set].sort()
+    this.save()
+    return this.disabledCatalog()
   }
 
   limits(): AccountLimits[] {
@@ -270,7 +288,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
-    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {} }
+    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [] }
   }
 }
 
