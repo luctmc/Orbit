@@ -9,6 +9,7 @@ import { FilesPanel } from './FilesPanel.tsx'
 import { PrDialog } from './PrDialog.tsx'
 import { SaveTemplateDialog } from './SaveTemplateDialog.tsx'
 import { ReportDialog } from './ReportDialog.tsx'
+import { BudgetChip, BudgetDialog } from './Budget.tsx'
 import { ArchiveIcon, BoardIcon, BookmarkIcon, BranchIcon, ReportIcon, FolderIcon, GlobeIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
 import { PaneView } from './PaneView.tsx'
 
@@ -45,6 +46,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   const [prOpen, setPrOpen] = useState(false)
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
+  const [budgetOpen, setBudgetOpen] = useState(false)
   type Side = 'quadro' | 'arquivos' | 'navegador'
   const [side, setSide] = useState<Side | null>(null)
   const browserOpen = side === 'navegador'
@@ -160,6 +162,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
             title={page ? `Página aberta: ${page.title || page.url}` : 'Navegador da missão'}>
             <GlobeIcon size={14} />Navegador{page && !browserOpen && <span className="dot dot--live" aria-label="(página aberta)" />}
           </button>
+          {!archived && <BudgetChip mission={mission} onEdit={() => setBudgetOpen(true)} />}
           <button className="icon-btn" aria-label="Relatório da missão" title="Relatório da missão" onClick={() => setReportOpen(true)}><ReportIcon /></button>
           {!archived && (
             <>
@@ -218,6 +221,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
           <button type="submit" className="icon-btn icon-btn--boxed" aria-label="Enviar"><SendIcon /></button>
         </form>
       )}
+      {budgetOpen && <BudgetDialog mission={mission} onClose={() => setBudgetOpen(false)} />}
       {reportOpen && <ReportDialog mission={mission} onClose={() => setReportOpen(false)} />}
       {savingTemplate && <SaveTemplateDialog mission={mission} lead={panes.find((p) => p.role === 'lead')} onClose={() => setSavingTemplate(false)} />}
       {prOpen && mission.git && <PrDialog mission={mission} onClose={() => setPrOpen(false)} />}

@@ -33,6 +33,7 @@ export function SaveTemplateDialog({ mission, lead, onClose }: { mission: Missio
           isolation: mission.git ? 'worktrees' : null,
           lead: { cli: lead?.cli ?? 'claude', model: lead?.model ?? null, effort: lead?.effort ?? null },
           cards: withCards ? cards.slice(0, TEMPLATE_LIMITS.cards) : [],
+          budget: mission.budget ? { tokens: mission.budget.tokens, costUsd: mission.budget.costUsd } : null,
         },
       })
       onClose()
@@ -45,6 +46,7 @@ export function SaveTemplateDialog({ mission, lead, onClose }: { mission: Missio
         <div><dt>Modo</dt><dd>{MODE_LABEL[mission.mode]}{squad ? ` · ${squad.name}` : ''}</dd></div>
         <div><dt>Líder</dt><dd>{leadText}</dd></div>
         <div><dt>Branch por agente</dt><dd>{mission.git ? 'sim' : 'não'}</dd></div>
+        <div><dt>Orçamento</dt><dd>{mission.budget ? [mission.budget.tokens && `${mission.budget.tokens / 1000} mil tokens`, mission.budget.costUsd && `US$ ${mission.budget.costUsd}`].filter(Boolean).join(' ou ') : 'sem limite'}</dd></div>
         <div className="template-facts__wide"><dt>Objetivo</dt><dd>{mission.objective || 'sem objetivo'}</dd></div>
       </dl>
       {cards.length > 0 && (

@@ -186,6 +186,12 @@ npm test
   centavo; dá para desligar). O líder pode propor mudanças na tabela (`routing_propose`, com o
   motivo); você aceita ou recusa em Ajustes, que mostra um selo com as pendentes, e a resposta
   chega no terminal dele.
+- **Orçamento e uso**: cada missão pode ter um limite de tokens e/ou de custo (o custo conta só o
+  Claude; o Codex não informa), ao criar, num modelo ou pelo botão Orçamento no cabeçalho. Aos 80%
+  o Orbit avisa; no limite, interrompe os agentes, recusa as próximas ferramentas do Claude e não
+  abre agentes novos até você aumentar. Ajustes › Uso mostra o mês: tokens por dia (Claude e
+  Codex), por missão, workspace, CLI e modelo ou conta, os orçamentos em andamento e um CSV para
+  copiar.
 - **Continuidade**: retomar um agente mantém o número dele; ao abrir o Orbit, os agentes que
   estavam rodando voltam na mesma conversa, e quem devia uma entrega recebe um aviso para
   continuar (dá para desligar em Ajustes › Quem faz cada tarefa). A folga das contas do Codex é
