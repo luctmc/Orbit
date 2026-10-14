@@ -335,6 +335,15 @@ export interface FolderStatus {
 
 export const FILES_LIMITS = { tree: 5000, read: 512 * 1024, diff: 400 * 1024 } as const
 
+/** What the last look for a new Orbit release found. */
+export interface UpdateStatus {
+  repo: string
+  checkedAt: number | null
+  /** Tag of the latest release, if any. */
+  latest: string | null
+  error: string | null
+}
+
 export type MissionEventKind = 'mission.created' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser'
 
 export interface MissionEvent {
@@ -451,6 +460,7 @@ export type ServerMessage =
   | { type: 'accounts'; accounts: Account[] }
   | { type: 'account.status'; statuses: AccountStatus[] }
   | { type: 'files.status'; workspaceId: string; folders: FolderStatus[] }
+  | { type: 'update.status'; status: UpdateStatus }
   /** A files.* question failed (answered to the asking connection). */
   | { type: 'files.error'; message: string }
   /** Files of a folder (tracked and new, without what .gitignore hides). */

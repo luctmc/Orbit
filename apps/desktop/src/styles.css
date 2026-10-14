@@ -491,3 +491,10 @@ h1, h2, p { margin: 0; }
 .tree__dir[aria-expanded='true'] svg { transform: rotate(90deg); }
 .tree__file { padding-left: 30px; }
 .tree__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Orbit version and updates */
+.brand__version { border: 0; background: transparent; padding: 1px 6px; border-radius: 6px; cursor: pointer; }
+.brand__version:hover { background: var(--surface-2); }
+.brand__version--new { color: var(--accent); background: var(--accent-soft); }
+.progress { height: 4px; border-radius: 2px; background: var(--line-2); overflow: hidden; }
+.progress span { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }

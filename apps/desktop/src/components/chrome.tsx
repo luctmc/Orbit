@@ -2,6 +2,7 @@ import type { Account, AccountLimits, RateWindow, Workspace } from '@orbit/proto
 import type { OrbitState } from '../orbit/client.ts'
 import { accountLabel } from '../orbit/labels.ts'
 import { untilTime } from '../orbit/time.ts'
+import { useAppUpdater } from '../orbit/updater.ts'
 import { HomeIcon, OrbitMark, PlusIcon } from './icons.tsx'
 
 const CONNECTION_LABEL: Record<OrbitState['connection'], string> = {
@@ -10,14 +11,18 @@ const CONNECTION_LABEL: Record<OrbitState['connection'], string> = {
   closed: 'Motor fora do ar',
 }
 
-export function TitleBar({ connection, liveAgents, limits, accounts }: { connection: OrbitState['connection']; liveAgents: number; limits: AccountLimits[]; accounts: Account[] }) {
+export function TitleBar({ connection, liveAgents, limits, accounts, onAbout }: { connection: OrbitState['connection']; liveAgents: number; limits: AccountLimits[]; accounts: Account[]; onAbout: () => void }) {
+  const updater = useAppUpdater()
   return (
     // data-tauri-drag-region only applies to the element itself, so every non-interactive piece carries it.
     <header className="titlebar" data-tauri-drag-region>
       <div className="brand" data-tauri-drag-region>
         <OrbitMark />
         <span className="brand__name" data-tauri-drag-region>Orbit</span>
-        <span className="brand__version" data-tauri-drag-region>0.1.0</span>
+        <button type="button" className={`brand__version${updater.available ? ' brand__version--new' : ''}`} onClick={onAbout}
+          title={updater.available ? `Versão ${updater.available.version} disponível` : 'Versão do Orbit e atualizações'}>
+          {updater.current ?? '0.1.0'}{updater.available && <span> → {updater.available.version}</span>}
+        </button>
       </div>
       <div className="titlebar__drag" data-tauri-drag-region />
       <div className="titlebar__status">

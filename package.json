@@ -15,7 +15,8 @@
     "app:build": "npm run tauri -w @orbit/desktop -- build",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "postinstall": "node scripts/fix-node-pty.mjs"
+    "postinstall": "node scripts/fix-node-pty.mjs",
+    "release": "node scripts/release.mjs"
   },
   "allowScripts": {
     "node-pty": true,

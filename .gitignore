@@ -5,3 +5,4 @@ dist/
 .vite/
 apps/desktop/src-tauri/target/
 apps/desktop/build/
+dist-release/

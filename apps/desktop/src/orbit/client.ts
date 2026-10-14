@@ -1,4 +1,4 @@
-import type { Account, AccountLimits, AccountStatus, Catalog, CatalogItem, MissionBrowser, ClientMessage, CliStatus, Mission, MissionEvent, Pane, Routing, ServerMessage, Squad, UsageDay, Workspace } from '@orbit/protocol'
+import type { Account, AccountLimits, AccountStatus, Catalog, CatalogItem, UpdateStatus, MissionBrowser, ClientMessage, CliStatus, Mission, MissionEvent, Pane, Routing, ServerMessage, Squad, UsageDay, Workspace } from '@orbit/protocol'
 
 export interface OrbitState {
   connection: 'connecting' | 'open' | 'closed'
@@ -25,6 +25,8 @@ export interface OrbitState {
   browsers: MissionBrowser[]
   /** Installed skills, subagents and MCP servers, and the ids Orbit's agents may not use. */
   skillCatalog: { items: CatalogItem[]; disabled: string[]; scannedAt: number | null }
+  /** The sidecar's last look for a new Orbit release (gh). */
+  updateStatus: UpdateStatus | null
   lastError: string | null
 }
 
@@ -50,7 +52,7 @@ export interface PaneView {
  * (for useSyncExternalStore); terminal bytes bypass React through `attachPane`.
  */
 export class OrbitClient {
-  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, catalog: null, clis: [], usageDays: [], limits: [], accounts: [], accountStatuses: [], browserEngine: undefined, browsers: [], skillCatalog: { items: [], disabled: [], scannedAt: null }, lastError: null }
+  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, catalog: null, clis: [], usageDays: [], limits: [], accounts: [], accountStatuses: [], browserEngine: undefined, browsers: [], skillCatalog: { items: [], disabled: [], scannedAt: null }, updateStatus: null, lastError: null }
   private readonly listeners = new Set<() => void>()
   /** Views per pane; `ready` once the view applied its snapshot and can take live output. */
   private readonly views = new Map<number, Map<PaneView, { ready: boolean }>>()
@@ -248,6 +250,9 @@ export class OrbitClient {
         return
       case 'account.status':
         this.update({ accountStatuses: message.statuses })
+        return
+      case 'update.status':
+        this.update({ updateStatus: message.status })
         return
       case 'skills':
         this.update({ skillCatalog: { items: message.items, disabled: message.disabled, scannedAt: message.scannedAt } })

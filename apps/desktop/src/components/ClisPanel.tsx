@@ -3,6 +3,7 @@ import { EFFORT_LABEL, type CliStatus } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, pathText } from '../orbit/labels.ts'
 import { relativeTime } from '../orbit/time.ts'
+import { useAppUpdater } from '../orbit/updater.ts'
 
 const METHOD_LABEL: Record<CliStatus['method'], string> = {
   npm: 'instalado pelo npm',
@@ -66,6 +67,43 @@ function CliCard({ status, liveAgents }: { status: CliStatus; liveAgents: number
   )
 }
 
+/** Orbit itself: its version, the latest release and the update, when the desktop app runs. */
+function OrbitCard() {
+  const updater = useAppUpdater()
+  const { updateStatus } = useOrbit()
+  const error = updater.error ?? updateStatus?.error ?? null
+  return (
+    <article className="cli-card orbit-card" aria-labelledby="cli-orbit">
+      <div className="cli-card__head">
+        <div className="cli-card__title">
+          <h3 id="cli-orbit">Orbit</h3>
+          {updater.checking ? <span className="chip" role="status">Verificando…</span>
+            : updater.available ? <span className="chip chip--warn">{updater.available.version} disponível</span>
+            : updateStatus?.checkedAt && !error ? <span className="chip chip--main">atualizado</span> : null}
+        </div>
+        <div className="cli-card__actions">
+          {updater.supported && !updater.available && <button className="btn btn--ghost btn--sm" disabled={updater.checking} onClick={() => void updater.check()}>Verificar agora</button>}
+          {updater.available && (
+            <button className="btn btn--primary btn--sm" disabled={updater.installing} onClick={() => void updater.install()}>
+              {updater.installing ? (updater.progress !== null ? `Baixando ${Math.round(updater.progress * 100)}%` : 'Instalando…') : `Instalar ${updater.available.version} e reiniciar`}
+            </button>
+          )}
+        </div>
+      </div>
+      <dl className="cli-card__facts">
+        <div><dt>Versão</dt><dd>{updater.current ?? '—'}</dd></div>
+        <div><dt>Mais recente</dt><dd>{updateStatus?.latest ?? (updateStatus?.checkedAt ? 'nenhuma publicada' : '—')}</dd></div>
+        <div><dt>Releases</dt><dd title={updateStatus?.repo}>{updateStatus?.repo ?? '—'}</dd></div>
+      </dl>
+      {!updater.supported && <p className="note">As atualizações são instaladas pelo app do Orbit; no navegador elas não aparecem.</p>}
+      {updater.available?.notes && <pre className="cli-card__message">{updater.available.notes}</pre>}
+      {updater.installing && updater.progress !== null && <div className="progress" role="progressbar" aria-valuenow={Math.round(updater.progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${updater.progress * 100}%` }} /></div>}
+      {error && <pre className="cli-card__message cli-card__message--error">{error}</pre>}
+      <p className="note">O Orbit busca as versões com o seu GitHub CLI (gh) e só instala o que estiver assinado com a chave do projeto.</p>
+    </article>
+  )
+}
+
 /** Settings › Agentes e CLIs: versions, updates and the models (with their effort levels) each CLI offers. */
 export function ClisPanel() {
   const client = useOrbitClient()
@@ -92,6 +130,7 @@ export function ClisPanel() {
       </div>
 
       <div className="clis__cards">
+        <OrbitCard />
         {clis.map((status) => (
           <CliCard key={status.cli} status={status} liveAgents={panes.filter((p) => p.cli === status.cli && p.status !== 'exited').length} />
         ))}

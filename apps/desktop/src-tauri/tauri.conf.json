@@ -44,5 +44,12 @@
       "../build/sidecar/": "sidecar/",
       "../build/node/": "node/"
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENBMEQ3M0U2QTlBNUE0Q0UKUldUT3BLV3A1bk1OeWlDMFdXbERqWE54ZnRwQUtFVEZDMU9sTnBMSEcrVzd1N1BTc01ndVBRZXoK",
+      "endpoints": [],
+      "dangerousInsecureTransportProtocol": true
+    }
   }
 }
