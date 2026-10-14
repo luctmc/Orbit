@@ -127,6 +127,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   void core.refreshCatalog()
   void core.checkAccounts()
   void core.inspectClis()
+  core.startUsageWatch()
   void core.scanSkills().catch(() => {})
   if (options.scheduler !== false) core.startScheduler()
 

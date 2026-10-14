@@ -2,7 +2,7 @@ import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type Difficulty, type AgentSeat, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type MemoryEntry, type MemoryKind, MEMORY_KINDS, MEMORY_LIMITS, type Difficulty, type AgentSeat, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
@@ -15,6 +15,7 @@ import { addWorktree, BRANCH, commitsAhead, dirtyFiles, filesChanged, hasRemote,
 import { slugify } from './squads.ts'
 import { normalizeRouting } from './routing.ts'
 import { decideTaskType } from './decider.ts'
+import { CLAUDE_USAGE_COMMAND, parseClaudeUsage, usageText } from './claudeUsage.ts'
 import { codexHome, codexLastTurn, findCodexRolloutById, latestCodexRollout, codexSessionId, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
@@ -22,7 +23,7 @@ import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
 import { claudeTranscript, claudeTurns, codexTurns, tailTurns, turnsMarkdown, type Turn } from './transcripts.ts'
 import { fromGeminiHook, statusFromHook, toGeminiHook, type HookPayload } from './hooks.ts'
 import { PaneManager, type PaneSnapshot } from './panes.ts'
-import { acceptanceNote, commandToolsNote, crewRole, HANDOFF_NUDGE, instructionsNote, leadRole, MAESTRO_RULE, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
+import { acceptanceNote, commandToolsNote, crewRole, projectMemoryNote, HANDOFF_NUDGE, instructionsNote, leadRole, MAESTRO_RULE, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
 import { normalizeSquad } from './squads.ts'
 import { dayKey, Store } from './store.ts'
 
@@ -35,6 +36,8 @@ const STATUS_SCRIPT = join(dirname(HOOK_SCRIPT), 'statusline.mjs')
 const ORBIT_CLI_SCRIPT = join(dirname(HOOK_SCRIPT), 'orbit-cli.mjs')
 /** How often live Codex agents' session files are read for usage. */
 const CODEX_POLL_MS = 5000
+/** How often the accounts' room is read again when no agent reports it. */
+const USAGE_WATCH_MS = 10 * 60_000
 /** Time for a CLI to stop its turn after Esc before new orders are typed. */
 const INTERRUPT_SETTLE_MS = 700
 const HANDOFF_STATUSES: readonly HandoffStatus[] = ['done', 'blocked', 'progress']
@@ -85,6 +88,7 @@ export class OrbitCore {
   /** Helpers whose task type only reads (Claude's edit tools are refused). */
   private readonly readOnly = new Set<number>()
   private codexTimer: NodeJS.Timeout | null = null
+  private usageTimer: NodeJS.Timeout | null = null
   private readonly accountFiles: AccountFiles
   /** Login state per account, from the CLIs; kept in memory and asked again on start. */
   private readonly accountStatus = new Map<string, AccountStatus>()
@@ -556,6 +560,54 @@ export class OrbitCore {
     return cardView(current)
   }
 
+  // ---- project memory: what a workspace remembers across missions ----
+
+  /** Adds an entry to a workspace's memory and tells every window. */
+  private remember(workspaceId: string, input: { kind: MemoryKind; text: string; source: MemoryEntry['source']; pinned?: boolean; id?: string }): MemoryEntry[] {
+    const text = input.text.trim().slice(0, MEMORY_LIMITS.text)
+    if (!text) throw new Error('A anotação está vazia')
+    if (!MEMORY_KINDS.includes(input.kind)) throw new Error('Tipo de anotação inválido')
+    const entries = this.store.saveMemory(workspaceId, { id: input.id ?? randomBytes(6).toString('hex'), kind: input.kind, text, at: Date.now(), source: input.source, pinned: input.pinned === true })
+    this.broadcast({ type: 'memory', workspaceId, entries })
+    return entries
+  }
+
+  /** A lead writes down something every future mission of this project should know. */
+  addProjectNote(caller: Pane, kind: MemoryKind, text: string): number {
+    if (caller.role !== 'lead') throw new Error('Só o líder anota na memória do projeto')
+    const mission = this.store.mission(caller.missionId)
+    if (!mission) throw new Error('Missão inexistente')
+    if (kind === 'missao') throw new Error('O resumo da missão entra sozinho quando ela fica pronta; use decisao, fato ou licao')
+    return this.remember(mission.workspaceId, { kind, text, source: { missionId: mission.id, missionTitle: mission.title, paneId: caller.id } }).length
+  }
+
+  /**
+   * The project's memory for a lead, within a budget: pinned entries first, then decisions,
+   * facts and lessons (newest first), then the latest missions' summaries.
+   */
+  projectMemory(workspaceId: string, budget = 6000): string {
+    const entries = this.store.memory(workspaceId)
+    if (entries.length === 0) return ''
+    const label: Record<MemoryKind, string> = { decisao: 'decision', fato: 'fact', licao: 'lesson', missao: 'mission' }
+    const line = (e: MemoryEntry) => `- [${label[e.kind]}${e.pinned ? ', pinned' : ''}${e.source ? ` · ${e.source.missionTitle}` : ' · the user'} · ${new Date(e.at).toISOString().slice(0, 10)}] ${oneLine(e.text)}`
+    const newest = (a: MemoryEntry, b: MemoryEntry) => b.at - a.at
+    const ordered = [
+      ...entries.filter((e) => e.pinned).sort(newest),
+      ...entries.filter((e) => !e.pinned && e.kind !== 'missao').sort(newest),
+      ...entries.filter((e) => !e.pinned && e.kind === 'missao').sort(newest).slice(0, 8),
+    ]
+    const out: string[] = []
+    let used = 0
+    for (const e of ordered) {
+      const text = line(e)
+      if (used + text.length > budget) break
+      out.push(text)
+      used += text.length
+    }
+    const left = entries.length - out.length
+    return `${out.join('\n')}${left > 0 ? `\n(${left} more in project_memory)` : ''}`
+  }
+
   // ---- leadership: notes, the briefing, and handing the lead to another agent ----
 
   /** A lead writes a decision down; every lead after it reads it in the briefing. */
@@ -610,6 +662,8 @@ export class OrbitCore {
       mission.budget && `budget: ${mission.usage.total.toLocaleString('en-US')} tokens used${mission.budget.tokens ? ` of ${mission.budget.tokens.toLocaleString('en-US')}` : ''}${mission.budget.exceeded ? ' (used up)' : ''}`,
     ].filter(Boolean)
     out.push(`## State\n\n${facts.map((f) => `- ${f}`).join('\n')}`)
+    const memory = this.projectMemory(mission.workspaceId, 4000)
+    if (memory) out.push(`## Project memory (from earlier missions and the user)\n\n${memory}`)
     if (mission.notes.length) out.push(`## Decisions the leads wrote down\n\n${mission.notes.map((n) => `- (#${n.paneId}) ${n.text}`).join('\n')}`)
     const cards = this.store.cards(missionId)
     if (cards.length) out.push(`## Board\n\n${cards.map((c) => `- [${c.column}] T${c.number} ${c.title}${c.assignee !== null ? ` (#${c.assignee})` : ''}`).join('\n')}`)
@@ -784,8 +838,35 @@ export class OrbitCore {
     }
     if (!this.store.account(accountId)) return // removed meanwhile
     if (account.cli === 'codex') this.readCodexLimits(account)
+    if (account.cli === 'claude' && account.kind === 'assinatura' && found.loggedIn !== false) void this.readClaudeLimits(account)
     const loginPaneId = this.accountStatus.get(accountId)?.loginPaneId ?? null
     this.setAccountStatus(accountId, { ...found, checkedAt: Date.now(), busy: loginPaneId && this.panes.isAlive(loginPaneId) ? 'login' : null })
+  }
+
+  /**
+   * A Claude subscription's limits from Claude Code's `/usage`, run headless: a local command
+   * (no model call, no cost), so the maestro knows its room even with no Claude agent open.
+   */
+  private async readClaudeLimits(account: Account): Promise<void> {
+    const { code, stdout } = await this.run(`${this.accountFiles.envPrefix(account)}${CLAUDE_USAGE_COMMAND}`, 30_000).catch(() => ({ code: 1, stdout: '' }))
+    const text = code === 0 ? usageText(stdout) : null
+    const usage = text ? parseClaudeUsage(text) : null
+    if (!usage || !this.store.account(account.id)) return
+    const known = this.store.limits().find((l) => l.accountId === account.id)
+    this.broadcast({ type: 'limits', limits: this.store.setLimits({ accountId: account.id, cli: 'claude', fiveHour: usage.fiveHour, weekly: usage.weekly, plan: known?.plan ?? null, updatedAt: Date.now() }) })
+  }
+
+  /** Every few minutes, the room of each Claude subscription (Codex's comes from its session files). */
+  startUsageWatch(): void {
+    if (this.usageTimer) return
+    this.usageTimer = setInterval(() => {
+      for (const account of this.store.accounts()) {
+        const signedOut = this.accountStatus.get(account.id)?.loggedIn === false
+        if (account.cli === 'claude' && account.kind === 'assinatura' && !signedOut) void this.readClaudeLimits(account)
+        if (account.cli === 'codex') this.readCodexLimits(account)
+      }
+    }, USAGE_WATCH_MS)
+    this.usageTimer.unref()
   }
 
   /**
@@ -1018,6 +1099,18 @@ export class OrbitCore {
         return // per-connection: handled by the server
       case 'browser.close':
         void this.browser.close(message.missionId)
+        return
+      case 'memory.get':
+        reply({ type: 'memory', workspaceId: message.workspaceId, entries: this.store.memory(message.workspaceId) })
+        return
+      case 'memory.save': {
+        if (!this.store.workspace(message.workspaceId)) throw new Error('Workspace desconhecido')
+        const old = message.entry.id ? this.store.memory(message.workspaceId).find((e) => e.id === message.entry.id) : undefined
+        this.remember(message.workspaceId, { id: old?.id, kind: message.entry.kind, text: message.entry.text, pinned: message.entry.pinned, source: old ? old.source : null })
+        return
+      }
+      case 'memory.delete':
+        this.broadcast({ type: 'memory', workspaceId: message.workspaceId, entries: this.store.deleteMemory(message.workspaceId, message.entryId) })
         return
       case 'mission.lead.change':
         void this.changeLead(message.missionId, message.to).catch((error) => this.fail(error))
@@ -1355,6 +1448,8 @@ export class OrbitCore {
     if (!mission) throw new Error('Missão inexistente')
     this.broadcast({ type: 'mission.updated', mission })
     this.event(mission.id, 'mission.ready', 'Missão pronta', text, caller.id)
+    // What a mission achieved stays in the project's memory for the missions after it.
+    this.remember(mission.workspaceId, { kind: 'missao', text: `${mission.title}: ${text}`, source: { missionId: mission.id, missionTitle: mission.title, paneId: caller.id } })
     return mission
   }
 
@@ -1656,6 +1751,7 @@ export class OrbitCore {
   shutdown(): void {
     if (this.codexTimer) clearInterval(this.codexTimer)
     if (this.scheduleTimer) clearInterval(this.scheduleTimer)
+    if (this.usageTimer) clearInterval(this.usageTimer)
     this.browser.shutdown()
     this.panes.killAll()
     this.store.flush()
@@ -1800,7 +1896,7 @@ export class OrbitCore {
       statusCommand: hookCommand(process.execPath, STATUS_SCRIPT),
       apiKeyHelper: account ? this.accountFiles.apiKeyHelper(account) : undefined,
       addDirs: folder ? workspace.folders.filter((f) => f !== folder && (!mission.git || f !== workspace.path)) : workspace.folders.slice(1),
-      rolePrompt: commandToolsNote(request.cli) + workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing, english) : crewRole(mission, { id }, { boss: options.boss ?? lead, children: options.children ?? 0, english }, squadRole, taskType)),
+      rolePrompt: commandToolsNote(request.cli) + workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy) + (request.role === 'lead' ? projectMemoryNote(this.projectMemory(mission.workspaceId)) + leadRole(mission, { id }, squad, routing, english) : crewRole(mission, { id }, { boss: options.boss ?? lead, children: options.children ?? 0, english }, squadRole, taskType)),
       task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
       orbitCommand: hookCommand(process.execPath, ORBIT_CLI_SCRIPT),
     })

@@ -3,6 +3,7 @@ import { WORKSPACE_LIMITS, type Workspace } from '@orbit/protocol'
 import { isTauri, useOrbitClient } from '../orbit/context.tsx'
 import { pathText } from '../orbit/labels.ts'
 import { Dialog } from './Dialog.tsx'
+import { MemoryPanel } from './MemoryPanel.tsx'
 import { CloseIcon, FolderIcon, PlusIcon } from './icons.tsx'
 
 /** Native macOS folder picker in the app; null when cancelled or outside Tauri. */
@@ -96,6 +97,7 @@ export function WorkspaceDialog({ workspace, onClose }: { workspace?: Workspace;
         </div>
       )}
       {editing && <p className="note">Agentes já abertos continuam com as pastas e instruções que tinham; os próximos recebem estas.</p>}
+      {workspace && <MemoryPanel workspaceId={workspace.id} />}
       {error && <p className="form-error" role="alert">{error}</p>}
     </Dialog>
   )

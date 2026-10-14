@@ -175,6 +175,15 @@ npm test
   as contas de uma CLI estão no limite, passa para a outra (se a missão permitir) e, sem nenhuma,
   recusa dizendo quando a primeira volta. Cada abertura devolve um recibo (tipo, troca de CLI,
   conta e motivo). O líder também tem `agent_spawn_many` e `accounts_status`.
+- **Memória do projeto**: cada workspace lembra entre missões. Os líderes anotam com
+  `project_note` decisões, fatos e lições que valem para as próximas missões; o resumo de cada
+  missão pronta entra sozinho. Todo líder novo começa com essa memória (as fixadas primeiro), o
+  dossiê a inclui e qualquer agente a lê com `project_memory`. Você vê, anota, fixa, edita e apaga
+  em Editar workspace › Memória do projeto.
+- **Folga do Claude sempre conhecida**: o Orbit roda o `/usage` do Claude Code sem conversa (é um
+  comando local: não chama modelo nem custa nada, e roda sem hooks nem MCP) para cada conta por
+  assinatura, ao abrir e a cada 10 minutos. A distribuição usa o uso real da janela de 5 horas e
+  da semana mesmo sem nenhum agente do Claude aberto.
 - **Maestro 2**:
   - **Codex líder de verdade**: roda no sandbox só leitura (qualquer edição pede a sua aprovação) e
     recebe o lembrete do maestro junto de cada mensagem, já que o Codex não tem hooks.
