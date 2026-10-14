@@ -29,11 +29,12 @@ export interface MissionTemplate {
   lead: { cli: AgentCli; model: string | null; effort: Effort | null }
   /** Titles of the cards the board starts with. */
   cards: string[]
+  budget: { tokens: number | null; costUsd: number | null } | null
   createdAt: number
   updatedAt: number
 }
 
-export type MissionTemplateInput = Omit<MissionTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
+export type MissionTemplateInput = Omit<MissionTemplate, 'id' | 'createdAt' | 'updatedAt' | 'budget'> & { id?: string; budget?: MissionTemplate['budget'] }
 
 /** When a scheduled mission runs (local time). Days: 0 = domingo … 6 = sábado; none = every day. */
 export type ScheduleWhen =
@@ -62,6 +63,30 @@ export interface Schedule {
 export type ScheduleInput = Pick<Schedule, 'name' | 'templateId' | 'workspaceId' | 'when' | 'enabled' | 'skipIfRunning'> & { id?: string }
 
 export const SCHEDULE_LIMITS = { schedules: 30, name: 60, maxHours: 168 } as const
+
+/** A mission's limit: tokens and/or cost (cost counts Claude only; Codex does not report it). */
+export interface MissionBudget {
+  tokens: number | null
+  costUsd: number | null
+  /** 80% reached (warned once). */
+  warned: boolean
+  /** 100% reached: agents were interrupted and Claude's tools are refused until it is raised. */
+  exceeded: boolean
+}
+
+export const BUDGET_WARN_AT = 0.8
+
+/** Tokens and cost one agent setup spent on one day in one mission (the usage ledger). */
+export interface UsageEntry {
+  day: string
+  workspaceId: string
+  missionId: string
+  cli: AgentCliForRole
+  model: string | null
+  accountId: string | null
+  tokens: number
+  costUsd: number
+}
 
 /** A mission whose agents each work in their own git worktree and branch. */
 export interface MissionGit {
@@ -118,6 +143,8 @@ export interface Mission {
   readyAt: number | null
   /** The lead's closing summary. */
   readySummary: string | null
+  /** Tokens/cost limit the person set; null = none. */
+  budget: MissionBudget | null
   status: MissionStatus
   createdAt: number
   updatedAt: number
@@ -481,7 +508,7 @@ export interface Card {
   updatedAt: number
 }
 
-export type MissionEventKind = 'mission.created' | 'mission.ready' | 'proposal' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser'
+export type MissionEventKind = 'mission.created' | 'mission.ready' | 'proposal' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser' | 'budget'
 
 export interface MissionEvent {
   id: string
@@ -560,7 +587,11 @@ export type ClientMessage =
   /** Rename, replace the folder list or the instructions (new agents get them). */
   | { type: 'workspace.update'; workspaceId: string; name?: string; folders?: string[]; instructions?: string }
   /** `isolation: 'worktrees'` gives every agent its own git worktree and branch. */
-  | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'>; cards?: string[]; allowedClis?: AgentCliForRole[] }
+  | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'>; cards?: string[]; allowedClis?: AgentCliForRole[]; budget?: { tokens: number | null; costUsd: number | null } | null }
+  /** Sets (or clears, with both null) a mission's budget. */
+  | { type: 'mission.budget'; missionId: string; tokens: number | null; costUsd: number | null }
+  /** The usage ledger of a month, YYYY-MM (answered to this connection). */
+  | { type: 'ledger.get'; month: string }
   /** The mission's report in Markdown (answered to this connection). */
   | { type: 'report.get'; missionId: string }
   /** Writes the report to a .md file the person picked. */
@@ -663,6 +694,7 @@ export type ServerMessage =
   | { type: 'update.status'; status: UpdateStatus }
   | { type: 'report'; missionId: string; markdown: string }
   | { type: 'report.saved'; missionId: string; path: string }
+  | { type: 'ledger'; month: string; entries: UsageEntry[] }
   | { type: 'schedule.updated'; schedule: Schedule }
   | { type: 'schedule.removed'; scheduleId: string }
   | { type: 'template.updated'; template: MissionTemplate }

@@ -68,6 +68,7 @@ export function missionReport(input: ReportInput): string {
   out.push(`## Em números\n\n${[
     `- ${agents} ${agents === 1 ? 'agente' : 'agentes'}${panes.length ? ` (${Object.entries(byCli).map(([k, v]) => `${v} ${k}`).join(', ')}${gone.length ? ` abertos agora, ${gone.length} já fechados` : ''})` : agents ? ' (todos já fechados)' : ''}`,
     `- ${tokens(mission.usage.total)} tokens${cost ? ` (US$ ${cost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} em preço de API, só do Claude)` : ''}`,
+    mission.budget && `- Orçamento: ${[mission.budget.tokens && `${tokens(mission.budget.tokens)} tokens`, mission.budget.costUsd && `US$ ${mission.budget.costUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`].filter(Boolean).join(' ou ')}${mission.budget.exceeded ? ' (esgotado)' : mission.budget.warned ? ' (passou de 80%)' : ''}`,
     cards.length > 0 && `- ${done} de ${cards.length} cartões feitos`,
     `- ${handoffs.length} ${handoffs.length === 1 ? 'retorno de ajudante' : 'retornos de ajudantes'}`,
     git && `- ${git.commits.length} ${git.commits.length === 1 ? 'commit' : 'commits'} e ${git.files.length} ${git.files.length === 1 ? 'arquivo' : 'arquivos'} no branch \`${git.branch}\``,

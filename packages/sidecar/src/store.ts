@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type OrbitSettings, type RoutingProposal, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
+import { EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type UsageEntry, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type OrbitSettings, type RoutingProposal, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
 import { BUILTIN_ACCOUNTS, migrateLimits } from './accounts.ts'
 import { DEFAULT_ROUTING, FACTORY_METHODS } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
@@ -26,6 +26,8 @@ interface PersistedState extends Omit<Snapshot, 'squads' | 'routing' | 'accounts
   disabledCatalog: string[]
   /** How each pane was opened (without its first task), to restart or resume it later. */
   paneSpecs: Record<string, SpawnPaneRequest>
+  /** Tokens and cost per day, mission and agent setup (CLI, model, account). */
+  usageLog: UsageEntry[]
 }
 
 /** Durable state in `<dataDir>/state.json`. Writes are debounced and atomic (tmp + rename). */
@@ -56,6 +58,8 @@ export class Store {
     this.state.cards ??= []
     this.state.templates ??= []
     this.state.schedules ??= []
+    this.state.usageLog ??= []
+    for (const template of this.state.templates) template.budget ??= null
     this.state.usageDays ??= []
     this.state.limits = migrateLimits(this.state.limits ?? [])
     this.state.customAccounts ??= []
@@ -72,6 +76,7 @@ export class Store {
       mission.allowedClis ??= ['claude', 'codex']
       mission.readyAt ??= null
       mission.readySummary ??= null
+      mission.budget ??= null
     }
     // Processes do not survive a sidecar restart.
     for (const pane of this.state.panes) {
@@ -282,10 +287,10 @@ export class Store {
     return this.state.workspaces.find((w) => w.id === id)
   }
 
-  createMission(input: { workspaceId: string; title: string; objective: string; mode: MissionMode; squadId: string | null; allowedClis?: Mission['allowedClis'] }, git: (id: string) => Mission['git'] = () => null, scheduleId: string | null = null): Mission {
+  createMission(input: { workspaceId: string; title: string; objective: string; mode: MissionMode; squadId: string | null; allowedClis?: Mission['allowedClis']; budget?: Mission['budget'] }, git: (id: string) => Mission['git'] = () => null, scheduleId: string | null = null): Mission {
     const now = Date.now()
     const id = randomUUID()
-    const mission: Mission = { id, status: 'active', createdAt: now, updatedAt: now, usage: { ...EMPTY_USAGE }, git: git(id), scheduleId, readyAt: null, readySummary: null, ...input, allowedClis: input.allowedClis?.length ? input.allowedClis : ['claude', 'codex'] }
+    const mission: Mission = { id, status: 'active', createdAt: now, updatedAt: now, usage: { ...EMPTY_USAGE }, git: git(id), scheduleId, readyAt: null, readySummary: null, ...input, allowedClis: input.allowedClis?.length ? input.allowedClis : ['claude', 'codex'], budget: input.budget ?? null }
     this.state.missions.push(mission)
     this.save()
     return { ...mission }
@@ -295,7 +300,7 @@ export class Store {
     return this.state.missions.find((m) => m.id === id)
   }
 
-  updateMission(id: string, patch: Partial<Pick<Mission, 'status' | 'title' | 'objective' | 'git' | 'readyAt' | 'readySummary'>>): Mission | undefined {
+  updateMission(id: string, patch: Partial<Pick<Mission, 'status' | 'title' | 'objective' | 'git' | 'readyAt' | 'readySummary' | 'budget'>>): Mission | undefined {
     const mission = this.mission(id)
     if (!mission) return undefined
     Object.assign(mission, patch, { updatedAt: Date.now() })
@@ -391,6 +396,27 @@ export class Store {
     return this.state.cards.length !== before
   }
 
+  /** Adds to the ledger line of that day, mission and agent setup. */
+  addLedger(entry: UsageEntry): void {
+    if (entry.tokens <= 0 && entry.costUsd <= 0) return
+    const line = this.state.usageLog.find((e) => e.day === entry.day && e.missionId === entry.missionId && e.cli === entry.cli && e.model === entry.model && e.accountId === entry.accountId)
+    if (line) {
+      line.tokens += entry.tokens
+      line.costUsd = Math.round((line.costUsd + entry.costUsd) * 1e6) / 1e6
+    } else {
+      this.state.usageLog.push({ ...entry })
+      // A year and a bit, like the activity map.
+      const oldest = dayKey(Date.now() - 400 * 86_400_000)
+      if (this.state.usageLog.length % 100 === 0) this.state.usageLog = this.state.usageLog.filter((e) => e.day >= oldest)
+    }
+    this.save()
+  }
+
+  /** Ledger lines of a month (YYYY-MM). */
+  ledger(month: string): UsageEntry[] {
+    return this.state.usageLog.filter((e) => e.day.startsWith(`${month}-`)).map((e) => ({ ...e }))
+  }
+
   schedules(): Schedule[] {
     return structuredClone(this.state.schedules)
   }
@@ -480,7 +506,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
-    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [], paneSpecs: {}, cards: [], templates: [], schedules: [], settings: { ...DEFAULT_SETTINGS }, proposals: [] }
+    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [], paneSpecs: {}, cards: [], templates: [], schedules: [], settings: { ...DEFAULT_SETTINGS }, proposals: [], usageLog: [] }
   }
 }
 

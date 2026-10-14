@@ -4,6 +4,7 @@ import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, EFFORT_LABEL, MODE_LABEL } from '../orbit/labels.ts'
 import { AccountSelect, EffortChoice, ModelInput } from './agentPickers.tsx'
 import { Dialog } from './Dialog.tsx'
+import { BudgetFields, budgetFrom } from './Budget.tsx'
 
 const MODE_HINT: Record<MissionMode, string> = {
   livre: 'Um agente, você no comando.',
@@ -83,6 +84,8 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   const [lead, setLead] = useState<AgentChoice>(DEFAULT_AGENT)
   const [worktrees, setWorktrees] = useState(false)
   const [clis, setClis] = useState<Array<'claude' | 'codex'>>(['claude', 'codex'])
+  const [budgetTokens, setBudgetTokens] = useState('')
+  const [budgetCost, setBudgetCost] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   /** A template fills the whole form; everything stays editable. */
@@ -97,6 +100,8 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
     setWorktrees(t.isolation === 'worktrees')
     setLead({ cli: t.lead.cli, model: t.lead.model ?? '', effort: t.lead.effort, accountId: null })
     setCards(t.cards)
+    setBudgetTokens(t.budget?.tokens ? String(t.budget.tokens / 1000) : '')
+    setBudgetCost(t.budget?.costUsd ? String(t.budget.costUsd) : '')
   }
 
   // Each mode suggests its own lead: the squad's, or the task table's for agentic missions.
@@ -114,7 +119,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
       if (!title.trim()) return setError('Dê um título para a missão.')
       if (mode === 'squad' && !squadId) return setError('Escolha o squad da missão.')
       if (invalidModel(lead)) return setError('Modelo inválido: use só letras, números, ponto, hífen, barra ou dois-pontos.')
-      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, cards, allowedClis: clis, lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
+      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, cards, allowedClis: clis, budget: budgetFrom(budgetTokens, budgetCost), lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
       onClose()
     }}>
       {templates.length > 0 && (
@@ -193,6 +198,10 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
         </p>
       )}
       {mode === 'squad' && <p className="note">O líder recebe o objetivo e o roteiro do squad e abre cada papel quando o roteiro mandar.</p>}
+      <fieldset className="field">
+        <legend>Orçamento <span className="muted">(opcional)</span></legend>
+        <BudgetFields idPrefix="m-budget" tokens={budgetTokens} cost={budgetCost} onTokens={setBudgetTokens} onCost={setBudgetCost} />
+      </fieldset>
       <label className="check mission-git">
         <input type="checkbox" checked={worktrees} onChange={(e) => setWorktrees(e.target.checked)} />
         <span>

@@ -79,7 +79,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     const mission = core.mission(caller.missionId)
     const squad = core.missionSquad(caller.missionId)
     return {
-      mission: mission && { title: mission.title, mode: mission.mode, objective: mission.objective, status: mission.status },
+      mission: mission && { title: mission.title, mode: mission.mode, objective: mission.objective, status: mission.status, used: { tokens: mission.usage.total, costUsd: mission.usage.costUsd }, budget: mission.budget && { tokens: mission.budget.tokens, costUsd: mission.budget.costUsd, warned: mission.budget.warned, exceeded: mission.budget.exceeded } },
       squad: squad && { name: squad.name, playbook: squad.playbook, roles: squad.roles.map((r) => ({ id: r.id, name: r.name, agent: r.cli, model: r.model })) },
       agents: core.missionPanes(caller.missionId).map(agentView),
       events: core.missionEvents(caller.missionId).slice(-(events ?? 20)).map((e) => ({ at: new Date(e.at).toISOString(), title: e.title, body: e.body })),

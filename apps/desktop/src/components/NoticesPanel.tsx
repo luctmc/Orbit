@@ -10,6 +10,7 @@ const EVENTS: Array<[keyof NoticePrefs, string, string]> = [
   ['finished', 'Um agente terminou', 'Um agente do Claude parou depois de trabalhar mais de 30 s.'],
   ['exited', 'Um agente encerrou', 'O processo do agente terminou (inclusive com erro).'],
   ['scheduled', 'Uma missão agendada começou', 'Uma missão da agenda foi iniciada sozinha.'],
+  ['budget', 'O orçamento de uma missão chegou a 80% ou acabou', 'Ao acabar, os agentes da missão são interrompidos.'],
 ]
 
 /** Settings › Avisos: which moments become a macOS notification. */
