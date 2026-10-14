@@ -49,7 +49,7 @@ test('lead and helper coordinate through MCP, handoffs and hooks', async () => {
     clients.push(leadMcp, crewMcp)
 
     const leadTools = (await leadMcp.listTools()).tools.map((t) => t.name).sort()
-    assert.deepEqual(leadTools, ['accounts_status', 'agent_close', 'agent_list', 'agent_read', 'agent_send', 'agent_spawn', 'agent_spawn_many', 'board_add', 'board_list', 'board_update', 'browser_click', 'browser_console', 'browser_key', 'browser_open', 'browser_screenshot', 'browser_scroll', 'browser_text', 'browser_type', 'handoff_list', 'mission_status', 'whoami'])
+    assert.deepEqual(leadTools, ['accounts_status', 'agent_close', 'agent_interrupt', 'agent_list', 'agent_read', 'agent_resume', 'agent_send', 'agent_spawn', 'agent_spawn_many', 'board_add', 'board_list', 'board_update', 'browser_click', 'browser_console', 'browser_key', 'browser_open', 'browser_screenshot', 'browser_scroll', 'browser_text', 'browser_type', 'handoff_list', 'mission_ready', 'mission_status', 'whoami'])
     const crewTools = (await crewMcp.listTools()).tools.map((t) => t.name).sort()
     assert.ok(crewTools.includes('handoff_submit') && !crewTools.includes('agent_spawn'))
 
@@ -64,12 +64,12 @@ test('lead and helper coordinate through MCP, handoffs and hooks', async () => {
     assert.match(textOf(await leadMcp.callTool({ name: 'agent_read', arguments: { agent: crew.id } })), /tela-do-ajudante/)
 
     // The helper hands off; the lead's terminal receives it and the flow records it.
-    const result = await crewMcp.callTool({ name: 'handoff_submit', arguments: { summary: 'testes passando', details: '12 ok' } })
-    assert.match(textOf(result), new RegExp(`líder #${lead.id}`))
+    const result = await crewMcp.callTool({ name: 'handoff_submit', arguments: { summary: 'testes passando', evidence: 'npm test', details: '12 ok' } })
+    assert.match(textOf(result), new RegExp(`entregue a #${lead.id}`))
     await ui.next('event.added', (m) => m.event.kind === 'handoff' && m.event.paneId === crew.id)
     await ui.next('pane.data', (m) => m.paneId === lead.id && m.data.includes(`[Orbit] Retorno de #${crew.id}`))
     const handoffs = JSON.parse(textOf(await leadMcp.callTool({ name: 'handoff_list', arguments: {} })))
-    assert.equal(handoffs[0].text, 'testes passando\n\n12 ok')
+    assert.equal(handoffs[0].text, 'testes passando\n\nEvidência: npm test\n\n12 ok')
 
     // A pane from another mission is out of reach.
     const denied = await leadMcp.callTool({ name: 'agent_read', arguments: { agent: 9999 } })

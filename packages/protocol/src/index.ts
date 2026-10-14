@@ -114,6 +114,10 @@ export interface Mission {
   scheduleId: string | null
   /** CLIs the maestro may give helpers (and fall back to when one is used up). */
   allowedClis: AgentCliForRole[]
+  /** When the lead declared the objective met (mission_ready); cleared when work starts again. */
+  readyAt: number | null
+  /** The lead's closing summary. */
+  readySummary: string | null
   status: MissionStatus
   createdAt: number
   updatedAt: number
@@ -123,6 +127,10 @@ export type AgentCli = 'claude' | 'codex' | 'shell'
 /** CLIs that can fill a squad role (a plain terminal cannot follow a brief). */
 export type AgentCliForRole = Exclude<AgentCli, 'shell'>
 export type PaneRole = 'lead' | 'crew'
+/** A helper's own report: finished, stuck, or still at it. */
+export type HandoffStatus = 'done' | 'blocked' | 'progress'
+/** `auto` = the helper ended its turn without a handoff, and Orbit delivered its last message. */
+export type PaneHandoff = HandoffStatus | 'auto'
 /** `waiting` = the agent needs a human; set by hook reports, not by output heuristics. */
 export type PaneStatus = 'starting' | 'running' | 'idle' | 'waiting' | 'exited'
 
@@ -148,8 +156,12 @@ export interface Pane {
   status: PaneStatus
   /** Why the agent needs a human, from its hook (e.g. a permission prompt). */
   attention: string | null
-  /** Last time this helper submitted a handoff to the lead. */
+  /** Last time this helper delivered its result (done, blocked, or Orbit delivering for it). */
   deliveredAt: number | null
+  /** What its last handoff said; null while it owes one. */
+  handoffStatus: PaneHandoff | null
+  /** The agent that gave it work and waits for its handoff (usually the lead). */
+  assignedBy: number | null
   /** Session totals reported by the CLI (status line for Claude, session file for Codex). */
   usage: TokenUsage | null
   /** How full the model's context window is, 0–100, when the CLI says. */
@@ -463,7 +475,7 @@ export interface Card {
   updatedAt: number
 }
 
-export type MissionEventKind = 'mission.created' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser'
+export type MissionEventKind = 'mission.created' | 'mission.ready' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser'
 
 export interface MissionEvent {
   id: string

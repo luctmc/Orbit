@@ -164,6 +164,15 @@ npm test
   as contas de uma CLI estão no limite, passa para a outra (se a missão permitir) e, sem nenhuma,
   recusa dizendo quando a primeira volta. Cada abertura devolve um recibo (tipo, troca de CLI,
   conta e motivo). O líder também tem `agent_spawn_many` e `accounts_status`.
+- **Entrega garantida**: o ajudante entrega com `handoff_submit` e um status (`done` com evidência,
+  que o Orbit exige; `blocked` com a pergunta; `progress`, só registrado), para quem pediu ou para
+  outro agente (`to`, um revisor, por exemplo, que passa a dever a entrega). Se ele encerrar o turno
+  sem entregar, o Orbit cobra uma vez (hook Stop no Claude; no Codex, o fim do turno vem do
+  arquivo de sessão e a cobrança é digitada no terminal) e, na vez seguinte, manda a última
+  mensagem dele para quem espera. Uma mensagem do líder é trabalho novo: o ajudante volta a dever a
+  entrega. O líder interrompe (`agent_interrupt`, Esc e nova orientação), retoma na mesma conversa
+  (`agent_resume`) e, com o objetivo verificado, declara a missão pronta (`mission_ready`): ela
+  ganha o selo "Pronta", o resumo entra no relatório e você recebe um aviso.
 - Missão **agêntica**: o líder recebe o objetivo e as instruções de papel e monta o time sozinho,
   classificando cada atividade na tabela **Quem faz cada tarefa** (Ajustes): cada tipo de tarefa
   define agente, modelo, esforço (`--effort` no Claude, `model_reasoning_effort` no Codex) e

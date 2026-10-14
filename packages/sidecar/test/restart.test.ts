@@ -9,13 +9,18 @@ import { connect, offline, ORIGIN, TOKEN } from './helpers.ts'
 
 const SESSION = '3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f'
 
-test('resuming continues the CLI conversation instead of sending the first prompt again', () => {
-  const claude = buildCommand({ cli: 'claude', model: 'opus', taskPath: '/p/task.md', rolePromptPath: '/p/role.md', resume: SESSION }, '/bin/zsh').args[2]!
+test('resuming continues the CLI conversation; the role is not sent again, only a new message', () => {
+  const claude = buildCommand({ cli: 'claude', model: 'opus', rolePromptPath: '/p/role.md', resume: SESSION }, '/bin/zsh').args[2]!
   assert.match(claude, new RegExp(`^claude --resume ${SESSION} --model opus`))
   assert.doesNotMatch(claude, /task\.md/)
-  const codex = buildCommand({ cli: 'codex', model: 'gpt-6', taskPath: '/p/task.md', rolePromptPath: '/p/role.md', resume: SESSION }, '/bin/zsh').args[2]!
+  const codex = buildCommand({ cli: 'codex', model: 'gpt-6', rolePromptPath: '/p/role.md', resume: SESSION }, '/bin/zsh').args[2]!
   assert.match(codex, new RegExp(`^codex resume -m gpt-6 .*-- ${SESSION}; exec`))
   assert.doesNotMatch(codex, /role\.md|task\.md/)
+  // The lead resuming a helper: the message goes as the next turn of the same conversation.
+  const next = buildCommand({ cli: 'codex', model: null, taskPath: '/p/task.md', rolePromptPath: '/p/role.md', resume: SESSION }, '/bin/zsh').args[2]!
+  assert.match(next, new RegExp(`-- ${SESSION} "\\$\\(cat '/p/task\\.md'\\)"; exec`))
+  assert.doesNotMatch(next, /role\.md/)
+  assert.match(buildCommand({ cli: 'claude', model: null, taskPath: '/p/task.md', resume: SESSION }, '/bin/zsh').args[2]!, new RegExp(`--resume ${SESSION} .*-- "\\$\\(cat '/p/task\\.md'\\)"`))
   assert.throws(() => buildCommand({ cli: 'claude', model: null, resume: 'x; rm -rf ~' }, '/bin/zsh'), /Conversa inválida/)
 })
 

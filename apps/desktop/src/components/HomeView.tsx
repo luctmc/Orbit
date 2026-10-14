@@ -153,6 +153,7 @@ function MissionCard({ summary, squadName, onOpen }: { summary: MissionSummary; 
             <span className={`badge badge--${mission.mode}`}>{MODE_LABEL[mission.mode]}{squadName ? ` · ${squadName}` : ''}</span>
             {mission.status === 'archived' && <span className="badge">Arquivada</span>}
             {mission.scheduleId && <span className="badge">Agendada</span>}
+            {mission.readyAt && <span className="badge badge--ready" title={mission.readySummary ?? undefined}>Pronta</span>}
           </div>
           <p className="muted">{meta}</p>
         </div>

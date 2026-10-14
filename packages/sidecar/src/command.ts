@@ -59,7 +59,8 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
     if (launch.mcpConfigPath) parts.push('--mcp-config', shellQuote(launch.mcpConfigPath))
     if (launch.settingsPath) parts.push('--settings', shellQuote(launch.settingsPath))
     if (launch.rolePromptPath) parts.push('--append-system-prompt', fromFile(launch.rolePromptPath))
-    if (launch.taskPath && !resume) parts.push('--', fromFile(launch.taskPath))
+    // On resume the task is the next message of the same conversation.
+    if (launch.taskPath) parts.push('--', fromFile(launch.taskPath))
   } else {
     parts.push('codex')
     if (resume) parts.push('resume')
@@ -77,8 +78,10 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
       if (/^[A-Za-z0-9_-]{1,64}$/.test(name) && name !== 'orbit') parts.push('-c', shellQuote(`mcp_servers.${name}.enabled=false`))
     }
     if (resume) {
-      // The conversation already carries its role; the id goes last, as `codex resume` expects.
+      // The conversation already carries its role; the id goes last, as `codex resume` expects,
+      // then the next message, if any.
       parts.push('--', resume)
+      if (launch.taskPath) parts.push(fromFile(launch.taskPath))
     } else {
       const prompt = [launch.rolePromptPath, launch.taskPath].filter((p): p is string => Boolean(p))
       if (prompt.length) parts.push('--', `"$(cat ${prompt.map(shellQuote).join(' ')})"`)

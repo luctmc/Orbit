@@ -3,6 +3,7 @@ import { timeOf } from '../orbit/labels.ts'
 
 const TONE: Record<MissionEventKind, string> = {
   'mission.created': 'neutral',
+  'mission.ready': 'live',
   'pane.spawned': 'live',
   'pane.exited': 'off',
   'pane.waiting': 'wait',

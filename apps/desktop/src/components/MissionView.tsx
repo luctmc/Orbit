@@ -123,6 +123,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
             <h1>{mission.title}</h1>
             <span className={`badge badge--${mission.mode}`}>{MODE_LABEL[mission.mode]}{squad ? ` · ${squad.name}` : ''}</span>
             {archived && <span className="badge">Arquivada</span>}
+            {mission.readyAt && <span className="badge badge--ready" title={mission.readySummary ?? undefined}>Pronta</span>}
           </div>
           <p className="muted">
             {mission.objective || 'Sem objetivo descrito.'} · {alive} {alive === 1 ? 'agente vivo' : 'agentes vivos'}

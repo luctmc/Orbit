@@ -2,7 +2,7 @@ import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
@@ -14,13 +14,13 @@ import { missionReport } from './report.ts'
 import { addWorktree, BRANCH, commitsAhead, dirtyFiles, filesChanged, hasRemote, pushBranch, removeWorktree, repoInfo } from './git.ts'
 import { slugify } from './squads.ts'
 import { normalizeRouting } from './routing.ts'
-import { codexHome, codexSessionId, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
+import { codexHome, codexLastTurn, codexSessionId, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
 import { statusFromHook, type HookPayload } from './hooks.ts'
 import { PaneManager, type PaneSnapshot } from './panes.ts'
-import { crewRole, instructionsNote, leadRole, MAESTRO_RULE, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
+import { crewRole, HANDOFF_NUDGE, instructionsNote, leadRole, MAESTRO_RULE, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
 import { normalizeSquad } from './squads.ts'
 import { Store } from './store.ts'
 
@@ -32,6 +32,12 @@ const HOOK_SCRIPT = process.env.ORBIT_HOOK_SCRIPT ?? fileURLToPath(new URL('../h
 const STATUS_SCRIPT = join(dirname(HOOK_SCRIPT), 'statusline.mjs')
 /** How often live Codex agents' session files are read for usage. */
 const CODEX_POLL_MS = 5000
+/** Time for a CLI to stop its turn after Esc before new orders are typed. */
+const INTERRUPT_SETTLE_MS = 700
+const HANDOFF_STATUSES: readonly HandoffStatus[] = ['done', 'blocked', 'progress']
+const HANDOFF_LABEL: Record<HandoffStatus, string> = { done: 'concluído', blocked: 'bloqueado', progress: 'em andamento' }
+/** Messages typed into a terminal go as one line. */
+const oneLine = (text: string) => text.replace(/\s*\n\s*/g, ' / ').trim()
 
 export type Broadcast = (message: ServerMessage) => void
 
@@ -62,6 +68,10 @@ export class OrbitCore {
   private readonly clis = new Map<AgentCliForRole, CliStatus>([['claude', blankStatus('claude')], ['codex', blankStatus('codex')]])
   /** Codex agent → its session file, once found. */
   private readonly codexRollouts = new Map<number, string>()
+  /** The last Codex turn already handled per agent, so each turn end is seen once. */
+  private readonly codexTurns = new Map<number, string>()
+  /** Codex helpers already asked once to deliver since their last assignment. */
+  private readonly nudged = new Set<number>()
   private codexTimer: NodeJS.Timeout | null = null
   private readonly accountFiles: AccountFiles
   /** Login state per account, from the CLIs; kept in memory and asked again on start. */
@@ -122,6 +132,7 @@ export class OrbitCore {
       }
       this.syncPane(pane)
       this.event(pane.missionId, 'pane.exited', `#${pane.id} encerrou`, `Processo terminou com código ${pane.exitCode ?? '?'}.`, pane.id)
+      if (this.owesHandoff(pane)) this.tellAssigner(pane, `[Orbit] #${pane.id} (${pane.title}) encerrou sem entregar o retorno (código ${pane.exitCode ?? '?'}). Retome com agent_resume ou abra outro ajudante.`)
     })
   }
 
@@ -987,7 +998,9 @@ export class OrbitCore {
       const type = this.store.routing().taskTypes.find((t) => t.id === taskTypeId)
       if (type) receipt.push(`tipo: ${type.name} (escolhido pelo líder)`)
     }
-    const pane = this.spawn({ missionId: caller.missionId, role: 'crew', ...input, cli: input.cli ?? 'claude', taskTypeId }, { receipt })
+    const opened = this.spawn({ missionId: caller.missionId, role: 'crew', ...input, cli: input.cli ?? 'claude', taskTypeId }, { receipt })
+    this.assign(opened.id, caller.id)
+    const pane = this.store.pane(opened.id) ?? opened
     receipt.push(`abriu: ${[CLI_LABEL[pane.cli], pane.model ?? 'modelo padrão', pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}`)
     return { pane, receipt }
   }
@@ -996,12 +1009,97 @@ export class OrbitCore {
   sendTo(caller: Pane, targetId: number, text: string): void {
     const target = this.sameMission(caller, targetId)
     if (!this.panes.submit(target.id, `[Orbit] Mensagem de #${caller.id}: ${text}`)) throw new Error(`#${targetId} não está rodando`)
+    // A message from the lead is new work: the helper owes a handoff again.
+    if (caller.role === 'lead' && target.role === 'crew' && target.cli !== 'shell') this.assign(target.id, caller.id)
+  }
+
+  /** Stops what a helper is doing (Esc, as a person would) and, optionally, gives it new orders. */
+  async interrupt(caller: Pane, targetId: number, message: string | null): Promise<void> {
+    const target = this.sameMission(caller, targetId)
+    if (!this.panes.isAlive(target.id) || target.cli === 'shell') throw new Error(`#${targetId} não é um agente rodando`)
+    this.panes.write(target.id, '\x1b')
+    if (!message?.trim()) return
+    await new Promise((resolve) => setTimeout(resolve, INTERRUPT_SETTLE_MS))
+    this.sendTo(caller, targetId, message.trim())
+  }
+
+  /** Opens a helper again in the same conversation, with a message to carry on; returns the new agent. */
+  resumeHelper(caller: Pane, targetId: number, message: string | null): Pane {
+    const target = this.sameMission(caller, targetId)
+    if (target.role !== 'crew' || target.cli === 'shell') throw new Error(`#${targetId} não é um ajudante`)
+    if (this.panes.isAlive(target.id) && (target.status === 'running' || target.status === 'starting')) {
+      throw new Error(`#${targetId} está trabalhando. Para mudar o rumo use agent_interrupt; para falar com ele, agent_send.`)
+    }
+    const pane = this.restartPane(target.id, true, message?.trim() || 'Continue a tarefa de onde parou. Ao terminar, entregue com handoff_submit.')
+    this.assign(pane.id, caller.id)
+    return this.store.pane(pane.id) ?? pane
+  }
+
+  /** The lead declares the objective met: the mission shows as ready and the person is told. */
+  missionReady(caller: Pane, summary: string, force: boolean): Mission {
+    if (caller.role !== 'lead') throw new Error('Só o líder declara a missão pronta')
+    const text = summary.trim().slice(0, 4000)
+    if (!text) throw new Error('Escreva o resumo: o que foi feito, por quem, como foi verificado e o que falta')
+    const pending = this.missionPanes(caller.missionId).filter((p) => p.role === 'crew' && p.cli !== 'shell' && this.panes.isAlive(p.id) && p.assignedBy !== null && p.handoffStatus !== 'done' && p.handoffStatus !== 'blocked' && p.handoffStatus !== 'auto')
+    if (pending.length && !force) throw new Error(`Ainda falta retorno de ${pending.map((p) => `#${p.id} (${p.title})`).join(', ')}. Espere as entregas, ou feche-os, ou passe force: true se o trabalho deles não importa mais.`)
+    const mission = this.store.updateMission(caller.missionId, { readyAt: Date.now(), readySummary: text })
+    if (!mission) throw new Error('Missão inexistente')
+    this.broadcast({ type: 'mission.updated', mission })
+    this.event(mission.id, 'mission.ready', 'Missão pronta', text, caller.id)
+    return mission
+  }
+
+  /** Gives a helper work from `by`: it owes a handoff again, and the mission is not ready anymore. */
+  private assign(paneId: number, by: number): void {
+    this.nudged.delete(paneId)
+    this.panes.setHandoff(paneId, { status: null, assignedBy: by })
+    const pane = this.store.pane(paneId)
+    const mission = pane && this.store.mission(pane.missionId)
+    if (mission?.readyAt) {
+      const updated = this.store.updateMission(mission.id, { readyAt: null, readySummary: null })
+      if (updated) this.broadcast({ type: 'mission.updated', mission: updated })
+    }
+  }
+
+  /** A helper someone gave work to and that has not reported back yet. */
+  private owesHandoff(pane: Pane): boolean {
+    return pane.role === 'crew' && pane.cli !== 'shell' && pane.assignedBy !== null && pane.handoffStatus === null
+  }
+
+  /** Types a line into the terminal of whoever gave this helper its work (or the lead). */
+  private tellAssigner(pane: Pane, text: string): number | null {
+    const alive = (p: Pane | undefined) => p && p.id !== pane.id && this.panes.isAlive(p.id) ? p : undefined
+    const to = alive(pane.assignedBy !== null ? this.store.pane(pane.assignedBy) : undefined)
+      ?? alive(this.missionPanes(pane.missionId).find((p) => p.role === 'lead'))
+    if (!to) return null
+    this.panes.submit(to.id, text)
+    return to.id
+  }
+
+  /**
+   * A helper ended its turn. If it still owes a handoff, it is asked to deliver once (Claude: the
+   * Stop hook blocks; Codex: a message in its terminal); the next time, Orbit delivers its last
+   * message for it, so whoever waits is never left hanging. Returns the reason to block, if any.
+   */
+  private turnEnded(pane: Pane, lastMessage: string | null, canBlock: boolean): string | null {
+    if (!this.owesHandoff(pane)) return null
+    if (canBlock) return HANDOFF_NUDGE
+    if (pane.cli === 'codex' && !this.nudged.has(pane.id)) {
+      this.nudged.add(pane.id)
+      this.panes.submit(pane.id, `[Orbit] ${HANDOFF_NUDGE}`)
+      return null
+    }
+    const said = oneLine(lastMessage?.trim() || this.panes.screenText(pane.id, 20)).slice(-1500) || '(nada na tela)'
+    this.panes.setHandoff(pane.id, { status: 'auto' })
+    this.event(pane.missionId, 'handoff', `Retorno de #${pane.id} (automático)`, `#${pane.id} encerrou o turno sem handoff_submit. Última mensagem:\n\n${said}`, pane.id)
+    this.tellAssigner(pane, `[Orbit] #${pane.id} (${pane.title}) encerrou o turno sem entregar. Última mensagem dele: ${said} (Se ele perguntou algo, responda com agent_send; se diz que terminou, confira a evidência antes de aceitar.)`)
+    return null
   }
 
   /** The lead closes a helper of its own mission (kills the process, removes the pane). */
   closeHelper(caller: Pane, targetId: number, force = false): void {
     const target = this.sameMission(caller, targetId)
-    if (!force && target.deliveredAt === null && this.panes.isAlive(target.id) && target.cli !== 'shell') {
+    if (!force && target.deliveredAt === null && target.assignedBy !== null && this.panes.isAlive(target.id) && target.cli !== 'shell') {
       throw new Error(`#${targetId} ainda não entregou o retorno. Espere: ele chega sozinho no seu terminal. Se o ajudante travou de verdade, confira com agent_read e feche com force: true.`)
     }
     if (target.role === 'lead') throw new Error('O líder não pode ser fechado por aqui')
@@ -1013,12 +1111,20 @@ export class OrbitCore {
     return this.panes.screenText(target.id, lines)
   }
 
-  /** A helper's result: recorded in the mission flow and typed into the lead's terminal. */
-  handoff(caller: Pane, summary: string, details: string): { deliveredTo: number | null } {
-    let text = summary.trim().slice(0, 2000)
+  /**
+   * A helper's report. Done and blocked are delivered: typed into the terminal of whoever gave it the
+   * work (or `to`, another agent of the mission) and recorded in the flow. Progress is only recorded,
+   * so the lead is not woken for it. Done needs evidence of how it was verified.
+   */
+  handoff(caller: Pane, input: { summary: string; details?: string; status?: HandoffStatus; evidence?: string; to?: number | null }): { deliveredTo: number | null; status: HandoffStatus } {
+    const status = input.status ?? 'done'
+    if (!HANDOFF_STATUSES.includes(status)) throw new Error(`Status inválido: ${status}`)
+    let text = input.summary.trim().slice(0, 2000)
     if (!text) throw new Error('O resumo do retorno está vazio')
+    const evidence = (input.evidence ?? '').trim().slice(0, 4000)
+    if (status === 'done' && !evidence) throw new Error('Diga em evidence como verificou: comandos rodados e o resultado, testes, arquivos conferidos. Se não deu para verificar, entregue com status blocked e explique o que falta.')
     const git = this.store.mission(caller.missionId)?.git
-    if (git && caller.branch && caller.branch !== git.branch) {
+    if (git && caller.branch && caller.branch !== git.branch && status !== 'progress') {
       const dirty = safe(() => dirtyFiles(this.worktreeOf(caller, git)), [])
       const ahead = safe(() => commitsAhead(git.repo, git.branch, caller.branch!).length, 0)
       const notes = [
@@ -1027,15 +1133,25 @@ export class OrbitCore {
       ].filter(Boolean)
       text = `${text} [${notes.join('; ')}]`
     }
-    const body = details.trim() ? `${text}\n\n${details.trim().slice(0, 20000)}` : text
-    this.event(caller.missionId, 'handoff', `Retorno de #${caller.id}`, body, caller.id)
-    this.panes.markDelivered(caller.id)
+    // `to` naming whoever is waiting anyway (the lead) is a plain delivery.
+    const named = input.to != null && input.to !== caller.assignedBy ? this.sameMission(caller, input.to) : undefined
+    const target = named?.role === 'lead' ? undefined : named
+    if (target && !this.panes.isAlive(target.id)) throw new Error(`#${target.id} não está rodando`)
+    const label = HANDOFF_LABEL[status]
+    const details = (input.details ?? '').trim().slice(0, 20000)
+    const body = [text, evidence && `Evidência: ${evidence}`, details].filter(Boolean).join('\n\n')
+    this.event(caller.missionId, 'handoff', `Retorno de #${caller.id} (${label})${target ? ` para #${target.id}` : ''}`, body, caller.id)
+    this.panes.setHandoff(caller.id, { status })
+    if (status === 'progress' && !target) return { deliveredTo: null, status }
 
-    const lead = this.missionPanes(caller.missionId).find((p) => p.role === 'lead' && p.id !== caller.id && this.panes.isAlive(p.id))
-    if (!lead) return { deliveredTo: null }
-    const more = details.trim() ? ' (detalhes em handoff_list)' : ''
-    this.panes.submit(lead.id, `[Orbit] Retorno de #${caller.id} (${caller.title}): ${text}${more}`)
-    return { deliveredTo: lead.id }
+    const line = `${oneLine(text)}${evidence ? ` · evidência: ${oneLine(evidence).slice(0, 600)}` : ''}${details ? ' (detalhes em handoff_list)' : ''}`
+    if (target) {
+      this.panes.submit(target.id, `[Orbit] Retorno de #${caller.id} (${caller.title}) para você, ${label}: ${line}`)
+      // Work handed on (to a reviewer, say) is owed back by that agent to whoever leads it.
+      if (target.role === 'crew' && target.cli !== 'shell') this.assign(target.id, target.assignedBy ?? caller.assignedBy ?? caller.id)
+      return { deliveredTo: target.id, status }
+    }
+    return { deliveredTo: this.tellAssigner(caller, `[Orbit] Retorno de #${caller.id} (${caller.title}), ${label}: ${line}`), status }
   }
 
   /** Claude's status line, forwarded by the agent: usage, context and account limits. */
@@ -1074,11 +1190,25 @@ export class OrbitCore {
           const sessionId = codexSessionId(file)
           if (sessionId) this.panes.setSession(pane.id, sessionId)
         }
-        this.applyReport(pane.id, fromCodexRollout(readTail(file)))
+        const tail = readTail(file)
+        this.applyReport(pane.id, fromCodexRollout(tail))
+        this.codexTurn(pane, tail)
       } catch {
         // the file may be mid-write; try again on the next tick
       }
     }
+  }
+
+  /** Each new `task_complete` in a Codex helper's session file is the end of its turn. */
+  private codexTurn(pane: Pane, tail: string): void {
+    const turn = codexLastTurn(tail)
+    if (!turn?.done) return
+    const seen = this.codexTurns.get(pane.id)
+    this.codexTurns.set(pane.id, turn.id)
+    // A resumed conversation starts with its old turns: those ended before this agent opened.
+    if (seen === turn.id || (seen === undefined && turn.at && turn.at < pane.createdAt)) return
+    const current = this.store.pane(pane.id)
+    if (current) this.turnEnded(current, turn.lastMessage, false)
   }
 
   private watchCodex(): void {
@@ -1152,6 +1282,11 @@ export class OrbitCore {
 
   /** Status from Claude's hooks; for PreToolUse, a refusal when the tool is switched off. */
   hookReport(paneId: number, payload: HookPayload): object | null {
+    const stopping = payload.hook_event_name === 'Stop' ? this.store.pane(paneId) : undefined
+    if (stopping) {
+      const reason = this.turnEnded(stopping, payload.last_assistant_message ?? null, payload.stop_hook_active !== true)
+      if (reason) return { decision: 'block', reason }
+    }
     const next = statusFromHook(payload)
     if (next) this.panes.report(paneId, next.status, next.attention)
     const pane = this.store.pane(paneId)
@@ -1327,7 +1462,7 @@ export class OrbitCore {
   }
 
   /** Opens an agent again with its settings: a new conversation or, with `resume`, the same one. */
-  private restartPane(paneId: number, resume: boolean): void {
+  private restartPane(paneId: number, resume: boolean, message?: string): Pane {
     const pane = this.store.pane(paneId)
     if (!pane) throw new Error(`#${paneId} não existe`)
     const spec = this.store.paneSpec(paneId)
@@ -1337,7 +1472,7 @@ export class OrbitCore {
     const git = this.store.mission(pane.missionId)?.git
     const worktree = git && pane.branch ? { path: this.worktreeOf(pane, git), branch: pane.branch } : undefined
     this.closePane(paneId)
-    this.spawn({ ...spec, title: pane.title }, {
+    return this.spawn({ ...spec, title: pane.title, ...(message ? { task: message } : {}) }, {
       worktree,
       resume: resume ? sessionId! : undefined,
       opened: (id) => (resume ? `#${id} retomou a conversa de #${paneId}` : `#${id} reabriu #${paneId}`),
@@ -1369,6 +1504,8 @@ export class OrbitCore {
     if (!this.store.pane(id)) return
     this.panes.forget(id)
     this.codexRollouts.delete(id)
+    this.codexTurns.delete(id)
+    this.nudged.delete(id)
     this.skillPolicies.delete(id)
     this.store.removePane(id)
     for (const [token, paneId] of this.paneTokens) if (paneId === id) this.paneTokens.delete(token)

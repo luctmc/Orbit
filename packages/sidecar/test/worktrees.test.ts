@@ -94,7 +94,7 @@ test('each agent works in its own worktree and branch, and the mission becomes a
     const token = /TOKEN:([\w-]{20,}):/.exec((await ui.next('pane.data', (m) => m.paneId === helper.id && /TOKEN:[\w-]{20,}:/.test(m.data))).data)![1]!
     mcp = new Client({ name: 'test', version: '0' })
     await mcp.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.port}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${token}` } } }))
-    await mcp.callTool({ name: 'handoff_submit', arguments: { summary: 'Frete pronto' } })
+    await mcp.callTool({ name: 'handoff_submit', arguments: { summary: 'Frete pronto', evidence: 'npm test' } })
     const handoff = await ui.next('event.added', (m) => m.event.kind === 'handoff')
     assert.match(handoff.event.body, new RegExp(`1 commit\\(s\\) para integrar \\(git merge ${branch}--${helper.id}\\)`))
     assert.match(handoff.event.body, /1 arquivo\(s\) sem commit/)

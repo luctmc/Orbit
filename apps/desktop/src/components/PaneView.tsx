@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Pane } from '@orbit/protocol'
+import type { Pane, PaneHandoff } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, costText, EFFORT_LABEL, pathText, STATUS, tokensText } from '../orbit/labels.ts'
 import { CloseIcon, MoreIcon } from './icons.tsx'
 import { Terminal } from './Terminal.tsx'
+
+/** What a helper's last handoff said. */
+const HANDOFF_CHIP: Record<PaneHandoff, { label: string; tone: string; title: string }> = {
+  done: { label: 'entregue', tone: 'chip--done', title: 'Entregou o retorno, com evidência' },
+  blocked: { label: 'bloqueado', tone: 'chip--warn', title: 'Entregou dizendo que travou; espera resposta' },
+  progress: { label: 'em andamento', tone: '', title: 'Mandou um aviso de progresso e segue trabalhando' },
+  auto: { label: 'entregue pelo Orbit', tone: 'chip--done', title: 'Encerrou o turno sem entregar; o Orbit mandou a última mensagem dele' },
+}
 
 /** The agent's ⋯ menu: rename, resume or reopen, duplicate, copy its number, close. */
 function PaneMenu({ pane, onRename, onClose }: { pane: Pane; onRename: () => void; onClose: () => void }) {
@@ -70,7 +78,7 @@ export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: b
         <span className={`role role--${pane.role}`}>{pane.role === 'lead' ? 'Líder' : pane.squadRole ?? pane.taskType ?? 'Ajudante'}</span>
         <span className="pane__id">#{pane.id}</span>
         <PaneTitle pane={pane} editing={renaming} onEditing={setRenaming} onSelect={onSelect} />
-        {pane.deliveredAt !== null && <span className="chip chip--done">entregue</span>}
+        {pane.handoffStatus && <span className={`chip ${HANDOFF_CHIP[pane.handoffStatus].tone}`} title={HANDOFF_CHIP[pane.handoffStatus].title}>{HANDOFF_CHIP[pane.handoffStatus].label}</span>}
         <span className="chip">{[CLI_LABEL[pane.cli], account && !account.builtin && account.name, pane.model, pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}</span>
         <div className="menu-anchor">
           <button type="button" className="icon-btn" aria-label={`Ações de #${pane.id}`} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>

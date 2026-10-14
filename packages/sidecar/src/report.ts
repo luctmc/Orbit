@@ -37,6 +37,8 @@ const line = (text: string, max = 400) => {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat
 }
 
+const HANDOFF_TEXT = { done: 'entregou', blocked: 'entregou bloqueado', auto: 'o Orbit entregou por ele' } as const
+
 /** The mission as a Markdown report: setup, numbers, agents, board, deliveries, changes, timeline. */
 export function missionReport(input: ReportInput): string {
   const { mission, workspace, squad, panes, cards, events, git, pr, folders } = input
@@ -52,9 +54,10 @@ export function missionReport(input: ReportInput): string {
     workspace && `**Workspace:** ${workspace.name}`,
     `**Início:** ${when(mission.createdAt)}`,
     `**Duração:** ${duration(last - mission.createdAt)}`,
-    `**Situação:** ${mission.status === 'archived' ? 'arquivada' : 'em andamento'}`,
+    `**Situação:** ${mission.status === 'archived' ? 'arquivada' : mission.readyAt ? `pronta desde ${when(mission.readyAt)}` : 'em andamento'}`,
   ].filter(Boolean).join(' · '))
   if (mission.objective) out.push(`## Objetivo\n\n${mission.objective}`)
+  if (mission.readySummary) out.push(`## Resultado (segundo o líder)\n\n${mission.readySummary}`)
 
   // Closed agents leave the mission but not its flow: "Agente #N aberto — title — CLI · model · seat".
   const known = new Set(panes.map((p) => p.id))
@@ -75,7 +78,7 @@ export function missionReport(input: ReportInput): string {
     out.push(`## Agentes\n\n${[...panes.map((p) => {
       const seat = p.role === 'lead' ? 'líder' : p.squadRole ?? p.taskType ?? 'ajudante'
       const how = [CLI[p.cli], p.accountId && input.accountNames[p.accountId], p.model, p.effort && `esforço ${p.effort}`].filter(Boolean).join(', ')
-      const extra = [p.usage && `${tokens(p.usage.total)} tokens`, p.branch && p.branch !== git?.branch && `branch \`${p.branch}\``, p.deliveredAt !== null && 'entregou'].filter(Boolean).join(' · ')
+      const extra = [p.usage && `${tokens(p.usage.total)} tokens`, p.branch && p.branch !== git?.branch && `branch \`${p.branch}\``, p.handoffStatus && p.handoffStatus !== 'progress' && HANDOFF_TEXT[p.handoffStatus]].filter(Boolean).join(' · ')
       return `- **#${p.id} ${line(p.title, 120)}** (${seat}) — ${how}${extra ? ` · ${extra}` : ''}`
     }), ...closed].join('\n')}`)
   }

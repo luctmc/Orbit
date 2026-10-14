@@ -148,6 +148,43 @@ export function findCodexRollout(home: string, cwd: string, since: number, taken
 }
 
 /** The tail of a growing file, enough to hold the last token_count event. */
+/** A Codex turn as its session file tells it: started, or complete with its last message. */
+export interface CodexTurn {
+  id: string
+  done: boolean
+  /** When the event was written (epoch ms; 0 when unknown). */
+  at: number
+  lastMessage: string | null
+}
+
+/**
+ * The latest turn in the tail of a Codex session file. Codex has no hooks; `task_started` and
+ * `task_complete` events are how Orbit learns that a Codex agent ended its turn.
+ */
+export function codexLastTurn(text: string): CodexTurn | null {
+  const lines = text.split('\n')
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!
+    if (!line.includes('"task_complete"') && !line.includes('"task_started"')) continue
+    let event: any
+    try {
+      event = JSON.parse(line)
+    } catch {
+      continue
+    }
+    const payload = event.payload ?? event
+    if (payload?.type !== 'task_complete' && payload?.type !== 'task_started') continue
+    const at = Date.parse(event.timestamp ?? '') || 0
+    return {
+      id: typeof payload.turn_id === 'string' ? payload.turn_id : `${payload.type}@${at}`,
+      done: payload.type === 'task_complete',
+      at,
+      lastMessage: typeof payload.last_agent_message === 'string' ? payload.last_agent_message : null,
+    }
+  }
+  return null
+}
+
 export function readTail(path: string, bytes = 256 * 1024): string {
   const size = statSync(path).size
   if (size <= bytes) return readFileSync(path, 'utf8')

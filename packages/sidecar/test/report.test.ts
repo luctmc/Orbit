@@ -10,7 +10,7 @@ import { connect, offline, ORIGIN, TOKEN } from './helpers.ts'
 
 const t0 = Date.UTC(2026, 9, 14, 13, 0)
 const mission = { id: 'm', workspaceId: 'w', title: 'Frete', objective: 'Calcular o frete por peso.', mode: 'agentica', squadId: null, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 152_000, costUsd: 0.42 }, git: null, status: 'active', createdAt: t0, updatedAt: t0 + 30 * 60_000 } as Mission
-const pane = (p: Partial<Pane>) => ({ id: 1, missionId: 'm', role: 'lead', squadRole: null, taskType: null, cli: 'claude', model: 'opus', effort: 'high', accountId: null, sessionId: null, branch: null, title: 'Líder', cwd: '/x', status: 'idle', attention: null, deliveredAt: null, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 100_000, costUsd: 0.3 }, contextPercent: 10, pid: null, exitCode: null, createdAt: t0, ...p }) as Pane
+const pane = (p: Partial<Pane>) => ({ id: 1, missionId: 'm', role: 'lead', squadRole: null, taskType: null, cli: 'claude', model: 'opus', effort: 'high', accountId: null, sessionId: null, branch: null, title: 'Líder', cwd: '/x', status: 'idle', attention: null, deliveredAt: null, handoffStatus: null, assignedBy: null, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 100_000, costUsd: 0.3 }, contextPercent: 10, pid: null, exitCode: null, createdAt: t0, ...p }) as Pane
 const card = (c: Partial<Card>) => ({ id: String(c.number), missionId: 'm', number: 1, title: 'x', notes: '', column: 'afazer', order: 0, assignee: null, createdBy: 'você', createdAt: t0, updatedAt: t0, ...c }) as Card
 const event = (e: Partial<MissionEvent>) => ({ id: Math.random().toString(), missionId: 'm', kind: 'pane.spawned', at: t0, title: 'Agente #1 aberto', body: '', paneId: 1, ...e }) as MissionEvent
 
@@ -19,7 +19,7 @@ test('the report puts the whole mission in Markdown', () => {
     mission,
     workspace: { id: 'w', name: 'loja', path: '/loja', folders: ['/loja'], lastOpenedAt: 0, instructions: '' },
     squad: undefined,
-    panes: [pane({}), pane({ id: 2, role: 'crew', taskType: 'Funcionalidade', cli: 'codex', model: 'gpt-6', effort: 'medium', accountId: 'trab', title: 'Frete', deliveredAt: t0, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 52_000, costUsd: null } })],
+    panes: [pane({}), pane({ id: 2, role: 'crew', taskType: 'Funcionalidade', cli: 'codex', model: 'gpt-6', effort: 'medium', accountId: 'trab', title: 'Frete', deliveredAt: t0, handoffStatus: 'done', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 52_000, costUsd: null } })],
     accountNames: { trab: 'Codex trabalho' },
     cards: [card({ number: 1, title: 'Calcular por peso', column: 'feito', assignee: 2 }), card({ number: 2, title: 'Tabela de CEP', column: 'afazer' })],
     events: [
