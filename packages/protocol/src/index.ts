@@ -13,6 +13,41 @@ export interface Workspace {
   lastOpenedAt: number
 }
 
+/** A mission whose agents each work in their own git worktree and branch. */
+export interface MissionGit {
+  /** Repository root of the workspace's main folder. */
+  repo: string
+  /** The main folder inside it ('' at the root); agents start there in their copy. */
+  sub: string
+  /** Branch the mission started from, and the PR's base. */
+  base: string
+  /** The lead's branch, where the helpers' work is merged. */
+  branch: string
+  /** The lead's working copy. */
+  leadPath: string
+  pr: { number: number; url: string } | null
+}
+
+/** What a mission branch has, for the PR. */
+export interface GitSummary {
+  base: string
+  branch: string
+  commits: Array<{ sha: string; subject: string }>
+  files: Array<{ path: string; added: number | null; removed: number | null }>
+  /** Each agent's branch: commits the mission branch does not have yet, and uncommitted files. */
+  agents: Array<{ paneId: number; title: string; branch: string; ahead: number; dirty: string[] }>
+  remote: boolean
+}
+
+export interface PrStatus {
+  number: number
+  url: string
+  state: 'OPEN' | 'MERGED' | 'CLOSED'
+  draft: boolean
+  checks: Array<{ name: string; state: 'ok' | 'fail' | 'pending' | 'skip' }>
+  checkedAt: number
+}
+
 export interface Mission {
   id: string
   workspaceId: string
@@ -23,6 +58,8 @@ export interface Mission {
   squadId: string | null
   /** Tokens and cost of every agent the mission has had (closed ones included). */
   usage: TokenUsage
+  /** Set when each agent works in its own branch (git worktree). */
+  git: MissionGit | null
   status: MissionStatus
   createdAt: number
   updatedAt: number
@@ -50,6 +87,8 @@ export interface Pane {
   accountId: string | null
   /** The CLI's conversation id (Claude's hooks, Codex's session file), to resume it later. */
   sessionId: string | null
+  /** Its own branch, in missions where each agent has a worktree. */
+  branch: string | null
   title: string
   cwd: string
   status: PaneStatus
@@ -418,7 +457,8 @@ export type ClientMessage =
   | { type: 'workspace.create'; name: string; folders: string[] }
   /** Rename, or replace the folder list (new agents get the new list). */
   | { type: 'workspace.update'; workspaceId: string; name?: string; folders?: string[] }
-  | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; squadId?: string | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'> }
+  /** `isolation: 'worktrees'` gives every agent its own git worktree and branch. */
+  | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'> }
   | { type: 'mission.archive'; missionId: string }
   | { type: 'pane.spawn'; request: SpawnPaneRequest }
   /** A terminal view mounted: send me this pane's current screen, then its live output. */
@@ -435,6 +475,11 @@ export type ClientMessage =
   | { type: 'pane.restart'; paneId: number; resume: boolean }
   /** Another helper with the same settings, without a task. */
   | { type: 'pane.duplicate'; paneId: number }
+  /** Commits, files and agents' branches of a worktree mission (answered to this connection). */
+  | { type: 'git.summary'; missionId: string }
+  /** Pushes the mission branch and opens its PR with gh. */
+  | { type: 'git.pr.create'; missionId: string; title: string; body: string; draft: boolean }
+  | { type: 'git.pr.status'; missionId: string }
   | { type: 'card.add'; missionId: string; title: string; notes?: string; column?: CardColumn; assignee?: number | null }
   | { type: 'card.update'; cardId: string; title?: string; notes?: string; assignee?: number | null }
   /** To `column`, at `index` among its cards (end when omitted). */
@@ -457,9 +502,9 @@ export type ClientMessage =
   | { type: 'account.login'; accountId: string }
   /** Git status of each folder of the workspace (answered to this connection only). */
   | { type: 'files.status'; workspaceId: string; missionId?: string | null }
-  | { type: 'files.tree'; workspaceId: string; folder: string }
-  | { type: 'files.diff'; workspaceId: string; folder: string; path: string }
-  | { type: 'files.read'; workspaceId: string; folder: string; path: string }
+  | { type: 'files.tree'; workspaceId: string; folder: string; missionId?: string | null }
+  | { type: 'files.diff'; workspaceId: string; folder: string; path: string; missionId?: string | null }
+  | { type: 'files.read'; workspaceId: string; folder: string; path: string; missionId?: string | null }
   /** Read the installed skills, agents and MCP servers again. */
   | { type: 'catalog.scan' }
   /** Lets Orbit's agents use an item, or not. */
@@ -500,7 +545,9 @@ export type ServerMessage =
   | { type: 'update.status'; status: UpdateStatus }
   | { type: 'card.updated'; card: Card }
   | { type: 'card.removed'; cardId: string }
-  /** A files.* question failed (answered to the asking connection). */
+  | { type: 'git.summary'; missionId: string; summary: GitSummary }
+  | { type: 'git.pr'; missionId: string; status: PrStatus }
+  /** A files.* or git.* question failed (answered to the asking connection). */
   | { type: 'files.error'; message: string }
   /** Files of a folder (tracked and new, without what .gitignore hides). */
   | { type: 'files.tree'; workspaceId: string; folder: string; files: string[]; truncated: boolean }

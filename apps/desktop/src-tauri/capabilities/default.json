@@ -10,6 +10,7 @@
     "core:window:allow-start-dragging",
     "dialog:allow-open",
     "notification:default",
-    "core:window:allow-set-badge-count"
+    "core:window:allow-set-badge-count",
+    "opener:default"
   ]
 }

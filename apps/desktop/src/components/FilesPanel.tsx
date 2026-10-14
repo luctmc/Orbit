@@ -16,6 +16,12 @@ type View =
 
 const folderName = (folder: string) => folder.split('/').filter(Boolean).pop() ?? folder
 
+/** Agents' copies are named by their branch; plain folders by their name. */
+function label(folder: string, status: FolderStatus[] | null): string {
+  const branch = status?.find((f) => f.folder === folder)?.branch
+  return folder.includes('/worktrees/') && branch ? branch : folderName(folder)
+}
+
 function splitPath(path: string): [string, string] {
   const at = path.lastIndexOf('/')
   return at === -1 ? ['', path] : [path.slice(0, at + 1), path.slice(at + 1)]
@@ -47,7 +53,9 @@ export function FilesPanel({ workspace, missionId, onClose }: { workspace: Works
   }, [refresh])
 
   const total = status?.reduce((n, f) => n + f.changes.length, 0) ?? 0
-  const multi = workspace.folders.length > 1
+  // Worktree missions are shown in the agents' copies, which the status lists first.
+  const folders = status?.map((f) => f.folder) ?? workspace.folders
+  const multi = folders.length > 1
 
   return (
     <aside className="side-panel files" aria-label="Arquivos do workspace">
@@ -67,13 +75,13 @@ export function FilesPanel({ workspace, missionId, onClose }: { workspace: Works
       {error && <p className="form-error files__error" role="alert">{error}</p>}
       <div className="side-panel__body">
         {view.kind === 'diff' ? (
-          <DiffView workspaceId={workspace.id} folder={view.folder} path={view.path} change={status?.find((f) => f.folder === view.folder)?.changes.find((c) => c.path === view.path)} multi={multi} />
+          <DiffView workspaceId={workspace.id} missionId={missionId} folder={view.folder} path={view.path} change={status?.find((f) => f.folder === view.folder)?.changes.find((c) => c.path === view.path)} multi={multi} />
         ) : view.kind === 'file' ? (
-          <FileView workspaceId={workspace.id} folder={view.folder} path={view.path} multi={multi} />
+          <FileView workspaceId={workspace.id} missionId={missionId} folder={view.folder} path={view.path} multi={multi} />
         ) : tab === 'mudancas' ? (
           <Changes status={status} multi={multi} onOpen={(folder, path) => setView({ kind: 'diff', folder, path })} />
         ) : (
-          <Tree workspace={workspace} status={status} onOpen={(folder, path) => setView({ kind: 'file', folder, path })} />
+          <Tree workspaceId={workspace.id} missionId={missionId} folders={folders} status={status} onOpen={(folder, path) => setView({ kind: 'file', folder, path })} />
         )}
       </div>
     </aside>
@@ -87,7 +95,7 @@ function Changes({ status, multi, onOpen }: { status: FolderStatus[] | null; mul
       {status.map((f) => (
         <section key={f.folder} className="files__folder" aria-label={folderName(f.folder)}>
           <div className="files__folder-head">
-            {multi && <strong>{folderName(f.folder)}</strong>}
+            {multi && <strong>{label(f.folder, status)}</strong>}
             {f.git ? (
               <span className="muted">{f.branch ? <>branch <code>{f.branch}</code></> : 'sem branch'}{f.ahead ? ` · ${f.ahead} à frente` : ''}{f.behind ? ` · ${f.behind} atrás` : ''}</span>
             ) : (
@@ -121,15 +129,15 @@ function Changes({ status, multi, onOpen }: { status: FolderStatus[] | null; mul
   )
 }
 
-function DiffView({ workspaceId, folder, path, change, multi }: { workspaceId: string; folder: string; path: string; change: FileChange | undefined; multi: boolean }) {
+function DiffView({ workspaceId, missionId, folder, path, change, multi }: { workspaceId: string; missionId: string; folder: string; path: string; change: FileChange | undefined; multi: boolean }) {
   const client = useOrbitClient()
   const [diff, setDiff] = useState<{ text: string; truncated: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     setDiff(null)
-    client.ask({ type: 'files.diff', workspaceId, folder, path }, 'files.diff', (m) => m.folder === folder && m.path === path)
+    client.ask({ type: 'files.diff', workspaceId, missionId, folder, path }, 'files.diff', (m) => m.folder === folder && m.path === path)
       .then((m) => setDiff({ text: m.diff, truncated: m.truncated }), (e: Error) => setError(e.message))
-  }, [client, workspaceId, folder, path, change?.added, change?.removed])
+  }, [client, workspaceId, missionId, folder, path, change?.added, change?.removed])
 
   // The diff header (diff --git, index, ---/+++) says nothing the title does not.
   const lines = useMemo(() => {
@@ -156,15 +164,15 @@ function DiffView({ workspaceId, folder, path, change, multi }: { workspaceId: s
   )
 }
 
-function FileView({ workspaceId, folder, path, multi }: { workspaceId: string; folder: string; path: string; multi: boolean }) {
+function FileView({ workspaceId, missionId, folder, path, multi }: { workspaceId: string; missionId: string; folder: string; path: string; multi: boolean }) {
   const client = useOrbitClient()
   const [file, setFile] = useState<{ text: string | null; reason: string | null; size: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     setFile(null)
-    client.ask({ type: 'files.read', workspaceId, folder, path }, 'files.content', (m) => m.folder === folder && m.path === path)
+    client.ask({ type: 'files.read', workspaceId, missionId, folder, path }, 'files.content', (m) => m.folder === folder && m.path === path)
       .then((m) => setFile({ text: m.text, reason: m.reason, size: m.size }), (e: Error) => setError(e.message))
-  }, [client, workspaceId, folder, path])
+  }, [client, workspaceId, missionId, folder, path])
   const lines = file?.text?.split('\n') ?? []
   if (lines.length && lines[lines.length - 1] === '') lines.pop()
   return (
@@ -199,9 +207,10 @@ function buildTree(paths: string[]): Dir {
   return root
 }
 
-function Tree({ workspace, status, onOpen }: { workspace: Workspace; status: FolderStatus[] | null; onOpen: (folder: string, path: string) => void }) {
+function Tree({ workspaceId, missionId, folders, status, onOpen }: { workspaceId: string; missionId: string; folders: string[]; status: FolderStatus[] | null; onOpen: (folder: string, path: string) => void }) {
   const client = useOrbitClient()
-  const [folder, setFolder] = useState(workspace.folders[0]!)
+  const [folder, setFolder] = useState(folders[0]!)
+  useEffect(() => { if (!folders.includes(folder)) setFolder(folders[0]!) }, [folders, folder])
   const [files, setFiles] = useState<{ list: string[]; truncated: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -209,9 +218,9 @@ function Tree({ workspace, status, onOpen }: { workspace: Workspace; status: Fol
 
   useEffect(() => {
     setFiles(null)
-    client.ask({ type: 'files.tree', workspaceId: workspace.id, folder }, 'files.tree', (m) => m.folder === folder)
+    client.ask({ type: 'files.tree', workspaceId, missionId, folder }, 'files.tree', (m) => m.folder === folder)
       .then((m) => setFiles({ list: m.files, truncated: m.truncated }), (e: Error) => setError(e.message))
-  }, [client, workspace.id, folder])
+  }, [client, workspaceId, missionId, folder])
 
   const changed = useMemo(() => new Map(status?.find((f) => f.folder === folder)?.changes.map((c) => [c.path, c.kind]) ?? []), [status, folder])
   const needle = query.trim().toLowerCase()
@@ -252,9 +261,9 @@ function Tree({ workspace, status, onOpen }: { workspace: Workspace; status: Fol
   return (
     <div className="tree">
       <div className="tree__bar">
-        {workspace.folders.length > 1 && (
+        {folders.length > 1 && (
           <select aria-label="Pasta" value={folder} onChange={(e) => setFolder(e.target.value)}>
-            {workspace.folders.map((f) => <option key={f} value={f}>{folderName(f)}</option>)}
+            {folders.map((f) => <option key={f} value={f}>{label(f, status)}</option>)}
           </select>
         )}
         <label className="search">

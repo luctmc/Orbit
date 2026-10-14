@@ -1,4 +1,4 @@
-import { EFFORT_LABEL, type Mission, type Pane, type Routing, type Squad, type SquadRole, type TaskType } from '@orbit/protocol'
+import { EFFORT_LABEL, type Mission, type MissionGit, type Pane, type Routing, type Squad, type SquadRole, type TaskType } from '@orbit/protocol'
 
 /** Role instructions Orbit gives its agents. They only describe how to use Orbit's tools. */
 
@@ -81,4 +81,19 @@ export function workspaceNote(folders: string[]): string {
 
 export function objectiveTask(mission: Mission): string {
   return `Objetivo da missão:\n\n${mission.objective}`
+}
+
+/** Told to agents of a mission where each one has its own worktree and branch. */
+export function worktreeNote(git: MissionGit, role: 'lead' | 'crew', branch: string, cwd: string): string {
+  const lines = role === 'lead'
+    ? [
+        `Você trabalha numa cópia isolada do repositório (git worktree) em ${cwd}, no branch ${branch}, criado a partir de ${git.base}. O usuário não vê essas mudanças na pasta dele até o PR.`,
+        `Cada ajudante que você abrir recebe uma cópia e um branch próprios (${branch}--N, a partir do seu) e commita lá. Quando um ajudante entregar, integre com \`git merge ${branch}--N\` aqui (a ferramenta branches do "orbit" mostra os branches e o que falta integrar).`,
+        'Commite o resultado no seu branch; o usuário abre o PR pelo Orbit. Não faça push nem troque de branch.',
+      ]
+    : [
+        `Você trabalha numa cópia isolada do repositório (git worktree) em ${cwd}, no seu branch ${branch}.`,
+        'Commite suas mudanças nesse branch antes de entregar (handoff_submit); o líder integra o branch. Não faça push nem troque de branch.',
+      ]
+  return `${lines.join('\n')}\n\n`
 }
