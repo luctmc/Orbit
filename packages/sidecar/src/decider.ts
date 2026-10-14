@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { TaskType } from '@orbit/protocol'
+import type { Difficulty, TaskType } from '@orbit/protocol'
 import type { Run } from './clis.ts'
 import { shellQuote } from './command.ts'
 
@@ -17,6 +17,7 @@ const TIMEOUT_MS = 30_000
 export function decisionPrompt(text: string, types: TaskType[]): string {
   return [
     'Você classifica atividades de programação para escolher quem as faz. Responda só com o JSON pedido.',
+    'difficulty: simples (mudança pequena e óbvia), normal, ou dificil (raciocínio longo, muitos arquivos, causa desconhecida, risco alto).',
     'Tipos (id: quando se aplica):',
     ...types.map((t) => `- ${t.id}: ${t.name}${t.description ? `. ${t.description}` : ''}`),
     '',
@@ -28,25 +29,26 @@ export function decisionPrompt(text: string, types: TaskType[]): string {
 export function decisionSchema(types: TaskType[]): string {
   return JSON.stringify({
     type: 'object',
-    properties: { kind: { type: 'string', enum: types.map((t) => t.id) }, why: { type: 'string', description: 'Uma frase curta' } },
-    required: ['kind', 'why'],
+    properties: { kind: { type: 'string', enum: types.map((t) => t.id) }, difficulty: { type: 'string', enum: ['simples', 'normal', 'dificil'] }, why: { type: 'string', description: 'Uma frase curta' } },
+    required: ['kind', 'difficulty', 'why'],
   })
 }
 
 /** The type the model chose, from Claude's `--output-format json` reply; null if unusable. */
-export function parseDecision(stdout: string, types: TaskType[]): { type: TaskType; why: string } | null {
+export function parseDecision(stdout: string, types: TaskType[]): { type: TaskType; why: string; difficulty: Difficulty } | null {
   try {
     const reply = JSON.parse(stdout)
     if (reply.is_error) return null
     const out = reply.structured_output ?? JSON.parse(String(reply.result ?? ''))
     const type = types.find((t) => t.id === out?.kind)
-    return type ? { type, why: String(out.why ?? '').trim().slice(0, 200) } : null
+    const difficulty: Difficulty = out.difficulty === 'simples' || out.difficulty === 'dificil' ? out.difficulty : 'normal'
+    return type ? { type, why: String(out.why ?? '').trim().slice(0, 200), difficulty } : null
   } catch {
     return null
   }
 }
 
-export async function decideTaskType(run: Run, dir: string, text: string, types: TaskType[]): Promise<{ type: TaskType; why: string } | null> {
+export async function decideTaskType(run: Run, dir: string, text: string, types: TaskType[]): Promise<{ type: TaskType; why: string; difficulty: Difficulty } | null> {
   mkdirSync(dir, { recursive: true })
   const file = join(dir, `decisao-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`)
   writeFileSync(file, decisionPrompt(text, types))

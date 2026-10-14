@@ -1,4 +1,4 @@
-import { AGENT_CLIS, EFFORTS, MODEL_ID, ROUTING_LIMITS, SLUG, type AgentCliForRole, type Effort, type Routing, type TaskType } from '@orbit/protocol'
+import { AGENT_CLIS, EFFORTS, MODEL_ID, ROUTING_LIMITS, SLUG, type AgentCliForRole, type AgentSeat, type Effort, type Routing, type TaskType } from '@orbit/protocol'
 import { slugify } from './squads.ts'
 
 /**
@@ -15,8 +15,19 @@ export const FACTORY_METHODS: Record<string, { method: string; readOnly: boolean
   revisao: { readOnly: true, method: '1. Não edite arquivos.\n2. Leia o diff (git show, git diff) e o código em volta.\n3. Tente refutar: rode os testes, procure bordas, regressões e riscos de segurança.\n4. Confira que os testes novos falham sem a mudança.\n5. Entregue APROVADO ou A CORRIGIR, com arquivo:linha e o porquê de cada ponto.' },
 }
 
+/** Each built-in kind's equivalent on the other CLI, for the maestro to balance the load. */
+export const FACTORY_ALTS: Record<string, AgentSeat> = {
+  bug: { cli: 'codex', model: null, effort: 'medium' },
+  funcionalidade: { cli: 'codex', model: null, effort: 'medium' },
+  refatoracao: { cli: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' },
+  testes: { cli: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' },
+  investigacao: { cli: 'codex', model: null, effort: 'high' },
+  documentacao: { cli: 'codex', model: null, effort: 'low' },
+  revisao: { cli: 'claude', model: 'claude-opus-5-5', effort: 'high' },
+}
+
 const row = (id: string, name: string, description: string, model: string | null, effort: Effort, cli: AgentCliForRole = 'claude'): TaskType =>
-  ({ id, name, description, cli, model, effort, skills: [], onlySkills: false, method: FACTORY_METHODS[id]?.method ?? '', readOnly: FACTORY_METHODS[id]?.readOnly ?? false })
+  ({ id, name, description, cli, model, effort, skills: [], onlySkills: false, method: FACTORY_METHODS[id]?.method ?? '', readOnly: FACTORY_METHODS[id]?.readOnly ?? false, alt: FACTORY_ALTS[id] ?? null })
 
 /** The table Orbit ships with; the user edits a copy in Settings. */
 export const DEFAULT_ROUTING: Routing = {
@@ -65,7 +76,9 @@ export function normalizeRouting(input: Routing): Routing {
     const skills = skillList(t.skills, `Tabela (${name})`)
     const description = typeof t.description === 'string' ? t.description.trim().slice(0, ROUTING_LIMITS.description) : ''
     const method = typeof t.method === 'string' ? t.method.trim().slice(0, ROUTING_LIMITS.method) : ''
-    return { id, name, description, cli: cli(t.cli, name), model: model(t.model, name), effort: effort(t.effort, name), skills, onlySkills: t.onlySkills === true, method, readOnly: t.readOnly === true }
+    const rowCli = cli(t.cli, name)
+    const alt = t.alt && t.alt.cli !== rowCli ? { cli: cli(t.alt.cli, `${name} (equivalente)`), model: model(t.alt.model, `${name} (equivalente)`), effort: effort(t.alt.effort, `${name} (equivalente)`) } : null
+    return { id, name, description, cli: rowCli, model: model(t.model, name), effort: effort(t.effort, name), skills, onlySkills: t.onlySkills === true, method, readOnly: t.readOnly === true, alt }
   })
 
   return {

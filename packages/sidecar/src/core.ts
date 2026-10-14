@@ -2,11 +2,11 @@ import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type Difficulty, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
-import { accountRooms, chooseAccount, classifyTask, type AccountRoom } from './maestro.ts'
+import { accountRooms, BALANCE_GAP, chooseAccount, classifyTask, cliLoad, LIVE_WEIGHT, seatForDifficulty, type AccountRoom } from './maestro.ts'
 import { dueSchedules, nextRun, normalizeWhen } from './schedules.ts'
 import { fileDiff, folderStatus, folderTree, readFile } from './files.ts'
 import { Updates } from './updates.ts'
@@ -1195,7 +1195,7 @@ export class OrbitCore {
    * A helper opened by an agent. In agentic missions an activity without a role, type or explicit
    * CLI is classified by the maestro; the receipt says what was chosen and why.
    */
-  async spawnHelper(caller: Pane, input: { title: string; task: string; cli?: AgentCli; model: string | null; effort?: Effort | null; squadRoleId?: string | null; taskTypeId?: string | null; accept?: string[]; folder?: string | null }): Promise<{ pane: Pane; receipt: string[] }> {
+  async spawnHelper(caller: Pane, input: { title: string; task: string; cli?: AgentCli; model: string | null; effort?: Effort | null; squadRoleId?: string | null; taskTypeId?: string | null; accept?: string[]; folder?: string | null; difficulty?: Difficulty | null }): Promise<{ pane: Pane; receipt: string[] }> {
     const receipt: string[] = []
     const mission = this.store.mission(caller.missionId)
     if (caller.role === 'crew') {
@@ -1203,6 +1203,8 @@ export class OrbitCore {
       if (slots === 0) throw new Error(this.missionPanes(caller.missionId).some((p) => p.assignedBy === caller.id && this.panes.isAlive(p.id)) ? `Você já tem ${MAX_CHILDREN} sub-ajudantes abertos. Feche um que já entregou (agent_close) antes de abrir outro.` : 'Sub-ajudantes não podem abrir ajudantes.')
     }
     let taskTypeId = input.taskTypeId ?? null
+    let difficulty: Difficulty | null = input.difficulty ?? null
+    let difficultyBy = 'líder'
     if ((mission?.mode === 'agentica' || caller.role === 'crew') && !taskTypeId && !input.squadRoleId && !input.cli && !input.model) {
       const text = `${input.title}\n${input.task}`
       const types = this.store.routing().taskTypes
@@ -1211,7 +1213,10 @@ export class OrbitCore {
       // keywords' answer stands if it fails.
       if (!sure && this.store.settings().smartClassify) {
         const decided = await decideTaskType(this.run, join(this.dataDir, 'decisor'), text, types).catch(() => null)
-        if (decided) ({ type, via } = { type: decided.type, via: `decidido pelo Haiku${via === 'padrão' ? '' : ` (as palavras: ${via})`}: ${decided.why}` })
+        if (decided) {
+          ({ type, via } = { type: decided.type, via: `decidido pelo Haiku${via === 'padrão' ? '' : ` (as palavras: ${via})`}: ${decided.why}` })
+          if (!difficulty) [difficulty, difficultyBy] = [decided.difficulty, 'Haiku']
+        }
         else via = `${via}; o decisor não respondeu`
       }
       taskTypeId = type.id
@@ -1224,8 +1229,10 @@ export class OrbitCore {
     if (accept.length) receipt.push(`critérios de aceite: ${accept.length}`)
     if (input.folder) receipt.push(`pasta: ${input.folder}`)
     const children = caller.role === 'lead' && (mission?.mode === 'agentica' || mission?.mode === 'squad') ? MAX_CHILDREN : 0
-    const { accept: _, ...request } = input
-    const opened = this.spawn({ missionId: caller.missionId, role: 'crew', ...request, task: input.task + acceptanceNote(accept), cli: input.cli ?? 'claude', taskTypeId }, { receipt, boss: caller, children })
+    const { accept: _, difficulty: __, ...request } = input
+    // A model the lead named stays; otherwise the activity's difficulty picks the tier.
+    const tier = difficulty && difficulty !== 'normal' && !input.model ? { difficulty, by: difficultyBy } : undefined
+    const opened = this.spawn({ missionId: caller.missionId, role: 'crew', ...request, task: input.task + acceptanceNote(accept), cli: input.cli ?? 'claude', taskTypeId }, { receipt, boss: caller, children, tier })
     if (accept.length) this.acceptance.set(opened.id, accept)
     this.assign(opened.id, caller.id)
     const pane = this.store.pane(opened.id) ?? opened
@@ -1655,7 +1662,7 @@ export class OrbitCore {
   // ---- internals ----
 
   /** `resume` continues that conversation of the CLI; `opened` replaces the flow's "Agente #N aberto". */
-  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number } = {}): Pane {
+  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; tier?: { difficulty: Difficulty; by: string } } = {}): Pane {
     const receipt = options.receipt ?? []
     const mission = this.store.mission(input.missionId)
     if (!mission || mission.status !== 'active') throw new Error('Missão inexistente ou arquivada')
@@ -1688,23 +1695,41 @@ export class OrbitCore {
     let chosen: Account | null = null
     if (request.cli !== 'shell' && !request.accountId) {
       const allowedHere = mission.allowedClis
+      // The row's equivalent on another CLI, when the mission allows it.
+      const alt = taskType?.alt && allowedHere.includes(taskType.alt.cli) ? taskType.alt : null
       const move = (to: AgentCliForRole, why: string) => {
         receipt.push(`${CLI_LABEL[request.cli]} → ${CLI_LABEL[to]}: ${why}`)
         request.cli = to
+        if (alt && alt.cli === to) {
+          // The table says what this work runs as there.
+          request.model = alt.model
+          request.effort = alt.effort
+          return
+        }
         request.model = null
         // Keep the effort only if the other CLI's default model takes it.
         if (request.effort && !effortsFor(this.catalog, to, null).includes(request.effort)) request.effort = null
       }
-      if (!allowedHere.includes(request.cli) && allowedHere[0] && request.role !== 'lead') move(allowedHere[0], 'a missão não usa essa CLI')
+      if (!allowedHere.includes(request.cli) && allowedHere[0] && request.role !== 'lead') move(alt?.cli ?? allowedHere[0], 'a missão não usa essa CLI')
       const live = this.liveByAccount()
+      // Fair share: when the table's CLI is much busier than the equivalent's, the equivalent takes it.
+      if (alt && request.role !== 'lead' && request.cli !== alt.cli && taskType && request.cli === taskType.cli) {
+        const here = cliLoad(this.rooms(request.cli, live))
+        const there = cliLoad(this.rooms(alt.cli, live))
+        if (there !== null && here !== null && here - there >= BALANCE_GAP) {
+          move(alt.cli, `${CLI_LABEL[request.cli]} com carga ${Math.round(here)}, ${CLI_LABEL[alt.cli]} com ${Math.round(there)} (uso da conta + ${LIVE_WEIGHT} por agente rodando): foi para o equivalente da tabela`)
+        }
+      }
       let choice = chooseAccount(this.rooms(request.cli as AgentCliForRole, live))
       // Used up: the next CLI the mission allows that is installed and has room.
       if (choice.exhausted && request.role !== 'lead') {
-        for (const other of allowedHere.filter((c) => c !== request.cli)) {
-          const alt = chooseAccount(this.rooms(other, live))
-          if (alt.exhausted) continue
+        // The table's equivalent first, then any other CLI the mission allows.
+        const others = allowedHere.filter((c) => c !== request.cli).sort((a, b) => Number(b === alt?.cli) - Number(a === alt?.cli))
+        for (const other of others) {
+          const next = chooseAccount(this.rooms(other, live))
+          if (next.exhausted) continue
           move(other, `todas as contas do ${CLI_LABEL[request.cli]} estão no limite`)
-          choice = alt
+          choice = next
           break
         }
       }
@@ -1714,6 +1739,15 @@ export class OrbitCore {
       }
       chosen = choice.account
       receipt.push(`conta: ${choice.reason}`)
+    }
+    // The difficulty moves the seat within the chosen CLI: a cheaper model or a stronger one.
+    if (options.tier && request.cli !== 'shell') {
+      const seat = seatForDifficulty(request.cli, request.model ?? null, request.effort ?? null, options.tier.difficulty, (model) => effortsFor(this.catalog, request.cli, model))
+      if (seat.changed) {
+        request.model = seat.model
+        request.effort = seat.effort
+        receipt.push(`dificuldade: ${options.tier.difficulty === 'dificil' ? 'difícil' : 'simples'} (${options.tier.by}) → ${[seat.model ?? 'modelo padrão', seat.effort && `esforço ${EFFORT_LABEL[seat.effort]}`].filter(Boolean).join(', ')}`)
+      }
     }
     // Each model accepts its own levels (Codex lists them; Claude takes low…max).
     const allowed = effortsFor(this.catalog, request.cli, request.model)

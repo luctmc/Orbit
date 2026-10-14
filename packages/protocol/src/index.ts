@@ -387,6 +387,22 @@ export interface TaskType {
   method: string
   /** Reads and reports, never edits files (Claude's edit tools are refused; Codex is told). */
   readOnly: boolean
+  /**
+   * The same work on another CLI: the maestro sends it there when this row's CLI is much busier
+   * (its accounts' use plus the agents already on them), or used up.
+   */
+  alt: AgentSeat | null
+}
+
+/** How hard an activity is: simple ones go to a cheaper model, hard ones to a stronger one or more effort. */
+export type Difficulty = 'simples' | 'normal' | 'dificil'
+export const DIFFICULTIES: readonly Difficulty[] = ['simples', 'normal', 'dificil']
+
+/** A CLI, model and effort that can take a kind of work. */
+export interface AgentSeat {
+  cli: AgentCliForRole
+  model: string | null
+  effort: Effort | null
 }
 
 /** Agentic missions: the lead's default and the task table it routes helpers through. */

@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
-import { AGENT_CLIS, BROWSER_KEYS, type AgentCliForRole, BROWSER_VIEWPORT, CARD_COLUMNS, CARD_LIMITS, EFFORTS, MODEL_ID, type CardColumn, type Effort, type HandoffStatus, type Pane } from '@orbit/protocol'
+import { AGENT_CLIS, BROWSER_KEYS, type AgentCliForRole, type Difficulty, BROWSER_VIEWPORT, CARD_COLUMNS, CARD_LIMITS, EFFORTS, MODEL_ID, type CardColumn, type Effort, type HandoffStatus, type Pane } from '@orbit/protocol'
 import type { OrbitCore } from './core.ts'
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
@@ -41,7 +41,7 @@ const agentView = (p: Pane) => ({
 
 const ACCEPT = z.array(z.string().min(1).max(300)).max(8).optional().describe('Critérios de aceite: o que precisa ser verdade para a entrega valer. O ajudante só entrega done respondendo a cada um')
 
-type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: AgentCliForRole; model?: string; effort?: Effort; accept?: string[]; folder?: string }
+type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: AgentCliForRole; model?: string; effort?: Effort; accept?: string[]; folder?: string; difficulty?: Difficulty }
 
 /** In a workspace with several folders, a helper can start in the one its work is in. */
 function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
@@ -51,7 +51,7 @@ function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
 
 /** Opens a helper and returns its line of the reply: number, title and the receipt. */
 async function openHelper(core: OrbitCore, caller: Pane, h: HelperInput): Promise<string> {
-  const { pane, receipt } = await core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null })
+  const { pane, receipt } = await core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null, difficulty: h.difficulty ?? null })
   return `#${pane.id} ${pane.title}\n${receipt.map((line) => `  ▸ ${line}`).join('\n')}`
 }
 
@@ -106,6 +106,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       model: z.string().regex(MODEL_ID).optional().describe('Só se o usuário pediu um modelo específico'),
       effort: z.enum(EFFORTS as [Effort, ...Effort[]]).optional().describe('Só se o usuário pediu. Claude: low…max; Codex: depende do modelo (low a ultra)'),
       accept: ACCEPT,
+      difficulty: z.enum(['simples', 'normal', 'dificil']).optional().describe('simples (pequena e óbvia) vai para o modelo mais barato da CLI; dificil (raciocínio longo, muitos arquivos, causa desconhecida) para o mais forte ou mais esforço; padrão: normal, como na tabela'),
       ...folderField(core, caller),
     }
     const open = (h: HelperInput) => openHelper(core, caller, h)
