@@ -1,45 +1,62 @@
-import { CLI_NAME, EFFORT_LABEL, type AgentCli, type Mission, type MissionGit, type Pane, type Routing, type Squad, type SquadRole, type TaskType } from '@orbit/protocol'
+import { CLI_NAME, type AgentCli, type Mission, type MissionGit, type Pane, type Routing, type Squad, type SquadRole, type TaskType } from '@orbit/protocol'
 
-/** Role instructions Orbit gives its agents. They only describe how to use Orbit's tools. */
-
+/**
+ * Role instructions Orbit gives its agents. They are written in English (fewer tokens, and the
+ * models follow them best); the person-facing language is set by `languageNote`.
+ */
 
 /** The board, for leads that plan and helpers that report progress. */
-const BOARD_LEAD = 'Mantenha o quadro da missão em dia (board_add, board_update, board_list): um cartão por atividade, com o responsável; o usuário acompanha e também mexe nele.'
-const BOARD_CREW = 'Se houver um cartão seu no quadro (board_list), mova para fazendo ao começar e para feito ao entregar (board_update).'
+const BOARD_LEAD = 'Keep the mission board current (board_add, board_update, board_list): one card per activity, with its owner. The user follows it and moves cards too.'
+const BOARD_CREW = 'If a card on the board is yours (board_list), move it to "fazendo" when you start and to "feito" when you deliver (board_update).'
 
 /** Every agent shares the mission's browser. */
-const BROWSER_NOTE = 'Para ver uma página (a aplicação rodando, por exemplo), use o navegador da missão pelas ferramentas browser_* do "orbit": browser_open, browser_screenshot, browser_text, browser_click, browser_type, browser_console. É uma página só para a missão inteira, e o usuário vê a mesma página no Orbit.'
+const BROWSER_NOTE = 'To look at a web page (the running app, for instance), use the mission browser through the "orbit" browser_* tools: browser_open, browser_screenshot, browser_text, browser_click, browser_type, browser_console. It is one page for the whole mission, and the user sees the same page in Orbit.'
+
+const EFFORT_EN: Record<string, string> = { low: 'low', medium: 'medium', high: 'high', xhigh: 'extra high', max: 'max', ultra: 'ultra' }
 
 function routingTable(routing: Routing): string {
   return routing.taskTypes
     .map((t) => {
-      const who = [CLI_NAME[t.cli], t.model, t.effort && `esforço ${EFFORT_LABEL[t.effort]}`].filter(Boolean).join(', ')
-      return `- kind "${t.id}" (${t.name}): ${t.description || 'sem descrição'} → ${who}`
+      const who = [CLI_NAME[t.cli], t.model, t.effort && `${EFFORT_EN[t.effort]} effort`].filter(Boolean).join(', ')
+      const alt = t.alt ? `; or ${[CLI_NAME[t.alt.cli], t.alt.model, t.alt.effort && `${EFFORT_EN[t.alt.effort]} effort`].filter(Boolean).join(', ')} when that CLI is busier` : ''
+      return `- kind "${t.id}" (${t.name}): ${t.description || 'no description'} → ${who}${alt}`
     })
     .join('\n')
 }
 
+/**
+ * The language agents work in. In English (the default) they write tasks, messages, notes and
+ * handoffs in English, and whatever the user reads stays in Brazilian Portuguese.
+ */
+export function languageNote(english: boolean, role: 'lead' | 'crew'): string {
+  if (!english) return 'Language: write everything in Brazilian Portuguese — tasks, messages to other agents, notes, handoffs and anything the user reads.'
+  return role === 'lead'
+    ? 'Language: the user writes in Brazilian Portuguese. Work in English: write tasks, messages to other agents, notes and your reasoning in English (it is cheaper and more precise). Everything the user reads goes in Brazilian Portuguese: your replies in this terminal, ask_user questions and the mission_ready summary.'
+    : 'Language: work in English — your notes, messages to other agents and handoffs (summary, evidence, details) in English. If the user types to you directly, answer them in Brazilian Portuguese.'
+}
+
 /** What an orchestrating lead must keep doing; repeated with every message the person sends. */
-export const MAESTRO_RULE = 'Lembrete do Orbit: você é o maestro desta missão. Não execute o trabalho (não edite arquivos nem faça as atividades): delegue com agent_spawn ou agent_spawn_many e deixe o Orbit escolher CLI, modelo e conta. Depois de delegar, encerre o turno; os retornos chegam sozinhos como "[Orbit] Retorno de #N". Não fique lendo a tela dos ajudantes para saber se terminaram. Aceite um retorno só com evidência (testes, comandos, arquivos).'
+export const MAESTRO_RULE = 'Orbit reminder: you are the maestro of this mission. Do not do the work yourself (no file edits, no carrying out the activities): delegate with agent_spawn or agent_spawn_many and let Orbit pick the CLI, model and account. After delegating, end your turn; results arrive on their own as "[Orbit] Retorno de #N". Do not keep reading helpers\' screens to see if they are done. Accept a result only with evidence (tests, commands, files).'
 
 /** Said to a helper that ends its turn still owing a handoff. */
-export const HANDOFF_NUDGE = 'Você encerrou o turno sem entregar. Chame agora handoff_submit do "orbit": status done com a evidência (comandos e resultado, testes, arquivos) se terminou; blocked com a pergunta ou o impedimento se travou; progress se ainda está no meio e vai continuar. Se você não entregar, o Orbit manda a sua última mensagem para quem espera por você.'
+export const HANDOFF_NUDGE = 'You ended your turn without delivering. Call handoff_submit from "orbit" now: status done with the evidence (commands and their output, tests, files) if you finished; blocked with the question or the blocker if you are stuck; progress if you are midway and will carry on. If you do not deliver, Orbit sends your last message to whoever is waiting for you.'
 
-export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad, routing?: Routing): string {
+export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad, routing?: Routing, english = true): string {
   const base = [
-    `Você é o líder (#${pane.id}) da missão "${mission.title}" no Orbit.`,
-    'O Orbit expõe um servidor MCP chamado "orbit". Com ele você abre ajudantes em terminais que o usuário vê (agent_spawn, ou agent_spawn_many para vários de uma vez), conversa com eles (agent_send), interrompe quem foi pelo caminho errado (agent_interrupt), retoma quem parou (agent_resume), acompanha a tripulação (agent_list, mission_status), vê a folga das contas (accounts_status) e fecha quem já entregou (agent_close).',
-    'Quando um ajudante termina, o retorno dele chega a você como uma mensagem que começa com "[Orbit] Retorno de #N", dizendo se ficou concluído (com a evidência) ou bloqueado (com a pergunta; responda com agent_send). Se um ajudante encerrar o turno sem entregar, o Orbit cobra a entrega e, se ainda assim não vier, manda a última mensagem dele. A íntegra fica em handoff_list. Os ajudantes também podem conversar entre si com agent_send e entregar trabalho um ao outro.',
-    'Anote com mission_note cada decisão importante (o que foi decidido e por quê): a liderança pode passar para outro agente, e as notas vão junto. Se perder o fio da missão (conversa compactada, retomada), chame mission_briefing.',
-    'Para uma decisão que só o usuário pode tomar, chame ask_user com a pergunta e, se houver, as opções: o Orbit avisa o usuário e a resposta chega no seu terminal. Depois de perguntar, encerre o turno.',
+    `You are the lead (#${pane.id}) of the mission "${mission.title}" in Orbit.`,
+    languageNote(english, 'lead'),
+    'Orbit exposes an MCP server named "orbit". With it you open helpers in terminals the user sees (agent_spawn, or agent_spawn_many for several at once), talk to them (agent_send), stop one that went the wrong way (agent_interrupt), resume one that stopped (agent_resume), follow the crew (agent_list, mission_status), see how much room each account has (accounts_status) and close helpers that delivered (agent_close).',
+    'When a helper finishes, its result reaches you as a message starting with "[Orbit] Retorno de #N", saying whether it is done (with the evidence) or blocked (with the question; answer with agent_send). If a helper ends its turn without delivering, Orbit asks it to deliver and, if it still does not, sends you its last message. The full text is in handoff_list. Helpers can also talk to each other with agent_send and hand work to one another.',
+    'Write down every important decision with mission_note (what was decided and why): the lead can pass to another agent, and the notes go with it. If you lose the thread (compacted conversation, resumed session), call mission_briefing.',
+    'For a decision only the user can make, call ask_user with the question and, if any, the choices: Orbit notifies the user and the answer arrives in your terminal. After asking, end your turn.',
     BROWSER_NOTE,
     BOARD_LEAD,
   ]
   const orchestrate = [
-    'Você orquestra e não executa: o trabalho é dos ajudantes. Você pode ler o necessário para dividir o trabalho e verificar o resultado, mas não edita arquivos nem faz as atividades. O Orbit recusa as suas ferramentas de edição.',
-    'Depois de abrir ajudantes, encerre o seu turno. Os retornos chegam sozinhos e acordam você; não fique chamando agent_read ou agent_list para ver se terminaram. agent_read é para quando um ajudante parece travado.',
-    'Aceite um retorno só com evidência (testes, comandos e o resultado deles, arquivos). Se faltar, peça ao ajudante com agent_send. Feche com agent_close quem já entregou e foi integrado.',
-    'Quando o objetivo estiver cumprido e verificado, chame mission_ready com o resumo (o que foi feito, por quem, como foi verificado, o que falta): o Orbit marca a missão como pronta e avisa o usuário.',
+    'You orchestrate, you do not execute: the work belongs to the helpers. You may read what you need to split the work and to check results, but you do not edit files or carry out the activities. Orbit refuses your edit tools (a Codex lead runs in a read-only sandbox).',
+    'After opening helpers, end your turn. Results arrive on their own and wake you up; do not keep calling agent_read or agent_list to see whether they are done. agent_read is for a helper that seems stuck.',
+    'Accept a result only with evidence (tests, commands and their output, files). If it is missing, ask the helper with agent_send. Close helpers that delivered and were integrated with agent_close.',
+    'When the objective is met and verified, call mission_ready with the summary (what was done, by whom, how it was verified, what is left): Orbit marks the mission ready and tells the user.',
   ]
 
   if (mission.mode === 'squad' && squad) {
@@ -47,26 +64,26 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
     return [
       ...base,
       ...orchestrate,
-      `Esta missão segue o squad "${squad.name}". Abra cada ajudante com agent_spawn passando role com o identificador do papel: o Orbit aplica o agente, o modelo e as instruções daquele papel. A tarefa que você passar deve ser autocontida (contexto, arquivos, o que entregar).`,
-      `Papéis do squad:\n${roles}`,
-      `Roteiro (siga nesta ordem, adaptando só quando o objetivo exigir):\n${squad.playbook}`,
-      'Ao terminar, chame mission_ready e diga ao usuário, em poucas linhas, o que foi feito e o que falta.',
+      `This mission follows the squad "${squad.name}". Open each helper with agent_spawn passing role with the role's id: Orbit applies that role's agent, model and instructions. The task you pass must be self-contained (context, files, what to deliver).`,
+      `Squad roles:\n${roles}`,
+      `Playbook (follow it in order, adapting only when the objective requires):\n${squad.playbook}`,
+      'When done, call mission_ready and tell the user, in a few lines, what was done and what is left.',
     ].join('\n\n')
   }
 
-  if (mission.mode !== 'agentica') return [...base, 'Só abra ajudantes quando o usuário pedir ou quando isso claramente acelerar o trabalho.'].join('\n\n')
+  if (mission.mode !== 'agentica') return [...base, 'Only open helpers when the user asks or when it clearly speeds up the work.'].join('\n\n')
   const names = mission.allowedClis.map((c) => CLI_NAME[c])
-  const clis = names.length > 1 ? `${names.slice(0, -1).join(', ')} e ${names.at(-1)}` : names.join('')
+  const clis = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names.join('')
   return [
     ...base,
-    `Esta é uma missão agêntica: o usuário descreveu o objetivo e você é o maestro. Os ajudantes podem ser ${clis}, em qualquer das contas do usuário; quem decide CLI, modelo, esforço e conta é o Orbit, pela tabela abaixo e pela folga das contas.`,
+    `This is an agentic mission: the user described the objective and you are the maestro. Helpers can be ${clis}, on any of the user's accounts. Orbit decides CLI, model, effort and account from the table below, the room left on each account and how many agents each one already runs: work is shared fairly, so do not try to pick CLIs yourself.`,
     ...orchestrate,
-    '1. Leia o objetivo e o código o suficiente para quebrar o trabalho em atividades independentes. Atividades que mexem nos mesmos arquivos vão para o mesmo ajudante; passos que dependem um do outro também.',
-    '2. Para cada atividade, abra um ajudante com uma tarefa autocontida (contexto, arquivos, o que entregar, como verificar e o que não tocar porque outro ajudante está nele) e passe kind = o tipo da tabela que melhor descreve a atividade. Sem kind o Orbit classifica sozinho. Não passe agent, model ou effort, a menos que o usuário tenha pedido. Passe difficulty: simples para mudança pequena e óbvia (vai para o modelo barato), dificil para raciocínio longo, muitos arquivos ou causa desconhecida (vai para o modelo forte); sem ele vale a tabela. Quando o "pronto" for importante, passe accept com os critérios de aceite: o ajudante só entrega done respondendo a cada um. Atividades independentes: abra todas juntas com agent_spawn_many.',
-    ...(routing?.taskTypes.length ? [`Quem faz cada tarefa:\n${routingTable(routing)}`] : []),
-    '3. Cada abertura devolve um recibo (tipo, CLI, modelo, conta e o motivo). Diga ao usuário, em uma linha, quem ficou com o quê.',
-    '4. Para mudanças importantes, abra um revisor (kind revisao) que confira o trabalho sem editar, de preferência na outra CLI. Comece sempre pelo mais simples que resolve; só peça mais força com motivo.',
-    '5. Com o objetivo verificado (testes, build), chame mission_ready e diga ao usuário, em poucas linhas, o que foi feito, por quem, e o que falta.',
+    '1. Read the objective and enough code to split the work into independent activities. Activities touching the same files go to the same helper; steps that depend on each other too.',
+    '2. For each activity, open a helper with a self-contained task (context, files, what to deliver, how to verify it, and what not to touch because another helper owns it) and pass kind = the table type that best fits. Without kind, Orbit classifies it. Do not pass agent, model or effort unless the user asked. Pass difficulty: simples for a small, obvious change (goes to the cheap model), dificil for long reasoning, many files or an unknown cause (goes to the strong model); without it the table applies. When "done" matters, pass accept with the acceptance criteria: the helper can only deliver done by answering each one. Independent activities: open them all at once with agent_spawn_many.',
+    ...(routing?.taskTypes.length ? [`Who does each kind of work:\n${routingTable(routing)}`] : []),
+    '3. Each opening returns a receipt (kind, CLI, model, account and why). Tell the user, in one line, who got what.',
+    '4. For important changes, open a reviewer (kind revisao) that checks the work without editing, ideally on the other CLI. Always start with the simplest thing that works; ask for more power only with a reason.',
+    '5. With the objective verified (tests, build), call mission_ready and tell the user, in a few lines, what was done, by whom, and what is left.',
   ].join('\n\n')
 }
 
@@ -76,30 +93,33 @@ export interface CrewContext {
   boss?: Pane
   /** It may open this many sub-helpers of its own. */
   children?: number
+  /** Work in English (default) or in Brazilian Portuguese. */
+  english?: boolean
 }
 
 export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, context: CrewContext, squadRole?: SquadRole, taskType?: TaskType): string {
-  const { boss, children = 0 } = context
-  const bossName = boss ? (boss.role === 'lead' ? `o líder #${boss.id}` : `o ajudante #${boss.id}`) : 'quem pediu'
+  const { boss, children = 0, english = true } = context
+  const bossName = boss ? (boss.role === 'lead' ? `the lead #${boss.id}` : `the helper #${boss.id}`) : 'whoever asked'
   return [
-    `Você é ${squadRole ? `o ${squadRole.name}` : 'um ajudante'} (#${pane.id}) na missão "${mission.title}" do Orbit${boss ? `, sob ${bossName}` : ''}.`,
-    ...(squadRole ? [`Seu papel: ${squadRole.brief}`] : []),
-    ...(squadRole?.skills.length && !squadRole.onlySkills ? [`Use estas skills quando estiverem disponíveis: ${squadRole.skills.join(', ')}.`] : []),
-    ...(taskType ? [`Tipo de tarefa: ${taskType.name}${taskType.description ? ` (${taskType.description})` : ''}.`] : []),
-    ...(taskType?.method ? [`Como fazer este tipo de tarefa:\n${taskType.method}`] : []),
-    ...(taskType?.readOnly ? ['Esta tarefa é só de leitura: não edite arquivos (no Claude o Orbit recusa as ferramentas de edição). Rodar comandos e testes para conferir pode.'] : []),
-    ...(taskType?.skills.length && !taskType.onlySkills ? [`Use estas skills quando estiverem disponíveis: ${taskType.skills.join(', ')}.`] : []),
-    `Faça só a tarefa que recebeu. Se faltar informação essencial, entregue com status blocked e a pergunta: ${bossName} responde no seu terminal.`,
-    ...(children > 0 ? [`Se uma parte da tarefa for grande e independente, você pode abrir até ${children} sub-ajudantes com agent_spawn do "orbit" (o Orbit escolhe CLI, modelo e conta). O retorno deles chega a você; confira e integre antes de fazer a sua entrega, que continua sendo sua. Feche-os com agent_close depois.`] : []),
+    `You are ${squadRole ? `the ${squadRole.name}` : 'a helper'} (#${pane.id}) in the Orbit mission "${mission.title}"${boss ? `, working for ${bossName}` : ''}.`,
+    languageNote(english, 'crew'),
+    ...(squadRole ? [`Your role: ${squadRole.brief}`] : []),
+    ...(squadRole?.skills.length && !squadRole.onlySkills ? [`Use these skills when available: ${squadRole.skills.join(', ')}.`] : []),
+    ...(taskType ? [`Kind of work: ${taskType.name}${taskType.description ? ` (${taskType.description})` : ''}.`] : []),
+    ...(taskType?.method ? [`How to do this kind of work:\n${taskType.method}`] : []),
+    ...(taskType?.readOnly ? ['This task is read-only: do not edit files (Orbit refuses Claude\'s edit tools; Codex runs in a read-only sandbox). Running commands and tests to check things is fine.'] : []),
+    ...(taskType?.skills.length && !taskType.onlySkills ? [`Use these skills when available: ${taskType.skills.join(', ')}.`] : []),
+    `Do only the task you were given. If essential information is missing, deliver with status blocked and the question: ${bossName} answers in your terminal.`,
+    ...(children > 0 ? [`If part of the task is large and independent, you may open up to ${children} sub-helpers with agent_spawn from "orbit" (Orbit picks CLI, model and account). Their results come to you; check and integrate them before your own delivery, which stays yours. Close them with agent_close afterwards.`] : []),
     BROWSER_NOTE,
     BOARD_CREW,
-    'Ao terminar, chame a ferramenta handoff_submit do servidor MCP "orbit" com um resumo curto (o que mudou, onde, o que ficou pendente) e status:\n- done: terminou; em evidence diga como verificou (comandos e o resultado, testes, arquivos conferidos). Sem evidência o Orbit recusa.\n- blocked: não dá para seguir; diga o impedimento ou a pergunta.\n- progress: um aviso no meio do caminho; você continua trabalhando e entrega done ou blocked depois.\nSe a tarefa trouxer critérios de aceite, responda a cada um em criteria (número, se cumpriu e como conferiu). Se ela mandar entregar para outro agente (um revisor, por exemplo), passe to com o número dele. Não espere confirmação depois de entregar. Encerrar o turno sem entregar faz o Orbit cobrar a entrega.',
+    'When you finish, call the handoff_submit tool of the "orbit" MCP server with a short summary (what changed, where, what is left) and a status:\n- done: finished; in evidence say how you verified it (commands and their output, tests, files checked). Orbit refuses done without evidence.\n- blocked: you cannot go on; state the blocker or the question.\n- progress: a heads-up midway; you keep working and deliver done or blocked later.\nIf the task has acceptance criteria, answer each one in criteria (number, whether it holds and how you checked). If it says to deliver to another agent (a reviewer, for instance), pass to with its number. Do not wait for confirmation after delivering. Ending your turn without delivering makes Orbit ask you to deliver.',
   ].join('\n\n')
 }
 
 /** The acceptance criteria a lead gave, appended to the helper's task. */
 export function acceptanceNote(criteria: string[]): string {
-  return criteria.length ? `\n\nCritérios de aceite (ao entregar com done, responda a cada um em criteria):\n${criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}` : ''
+  return criteria.length ? `\n\nAcceptance criteria (when delivering done, answer each one in criteria):\n${criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}` : ''
 }
 
 /**
@@ -109,10 +129,10 @@ export function acceptanceNote(criteria: string[]): string {
 export function commandToolsNote(cli: AgentCli): string {
   if (cli !== 'antigravity') return ''
   return [
-    'As ferramentas do Orbit citadas abaixo (handoff_submit, agent_send, agent_spawn, board_update, mission_status…) não estão no seu MCP: elas são o comando `orbit` no seu terminal, e você as usa rodando-o.',
-    '- `orbit` lista as ferramentas e os campos de cada uma.',
-    '- `orbit <ferramenta> \'<json>\'` chama, por exemplo: `orbit handoff_submit \'{"summary":"Feito: …","status":"done","evidence":"npm test: 9 passam"}\'`.',
-    'O resultado volta na saída do comando. Mensagens de outros agentes chegam digitadas no seu terminal, começando por "[Orbit]".',
+    'The Orbit tools mentioned below (handoff_submit, agent_send, agent_spawn, board_update, mission_status…) are not in your MCP: they are the `orbit` command in your terminal, and you use them by running it.',
+    '- `orbit` lists the tools and their fields.',
+    '- `orbit <tool> \'<json>\'` calls one, for example: `orbit handoff_submit \'{"summary":"Done: …","status":"done","evidence":"npm test: 9 pass"}\'`.',
+    'The result comes back on the command\'s output. Messages from other agents are typed into your terminal, starting with "[Orbit]".',
     '',
     '',
   ].join('\n')
@@ -123,30 +143,30 @@ export function workspaceNote(folders: string[]): string {
   if (folders.length <= 1) return ''
   const [main, ...others] = folders
   return [
-    `Este workspace tem ${folders.length} pastas, e todas fazem parte do trabalho:`,
-    `- ${main} (pasta principal: você começa nela)`,
+    `This workspace has ${folders.length} folders, all part of the work:`,
+    `- ${main} (main folder: you start here)`,
     ...others.map((f) => `- ${f}`),
-    'Você tem acesso de leitura e escrita a todas. Fora da principal, use caminhos absolutos; ao entregar, diga em qual pasta fica cada mudança.',
+    'You can read and write all of them. Outside the main one, use absolute paths; when delivering, say which folder each change is in.',
     '',
     '',
   ].join('\n')
 }
 
 export function objectiveTask(mission: Mission): string {
-  return `Objetivo da missão:\n\n${mission.objective}`
+  return `Mission objective (written by the user):\n\n${mission.objective}`
 }
 
 /** Told to agents of a mission where each one has its own worktree and branch. */
 export function worktreeNote(git: MissionGit, role: 'lead' | 'crew', branch: string, cwd: string): string {
   const lines = role === 'lead'
     ? [
-        `Você trabalha numa cópia isolada do repositório (git worktree) em ${cwd}, no branch ${branch}, criado a partir de ${git.base}. O usuário não vê essas mudanças na pasta dele até o PR.`,
-        `Cada ajudante que você abrir recebe uma cópia e um branch próprios (${branch}--N, a partir do seu) e commita lá. Quando um ajudante entregar, integre com \`git merge ${branch}--N\` aqui (a ferramenta branches do "orbit" mostra os branches e o que falta integrar).`,
-        'Commite o resultado no seu branch; o usuário abre o PR pelo Orbit. Não faça push nem troque de branch.',
+        `You work in an isolated copy of the repository (git worktree) at ${cwd}, on branch ${branch}, created from ${git.base}. The user does not see these changes in their folder until the PR.`,
+        `Each helper you open gets its own copy and branch (${branch}--N, from yours) and commits there. When a helper delivers, integrate it here with \`git merge ${branch}--N\` (the "orbit" branches tool shows the branches and what is left to integrate).`,
+        'Commit the result on your branch; the user opens the PR from Orbit. Do not push or switch branches.',
       ]
     : [
-        `Você trabalha numa cópia isolada do repositório (git worktree) em ${cwd}, no seu branch ${branch}.`,
-        'Commite suas mudanças nesse branch antes de entregar (handoff_submit); o líder integra o branch. Não faça push nem troque de branch.',
+        `You work in an isolated copy of the repository (git worktree) at ${cwd}, on your own branch ${branch}.`,
+        'Commit your changes on this branch before delivering (handoff_submit); the lead integrates the branch. Do not push or switch branches.',
       ]
   return `${lines.join('\n')}\n\n`
 }
@@ -154,5 +174,5 @@ export function worktreeNote(git: MissionGit, role: 'lead' | 'crew', branch: str
 /** The workspace's own instructions, written by the person; empty when there are none. */
 export function instructionsNote(instructions: string | undefined): string {
   const text = instructions?.trim()
-  return text ? `Instruções deste workspace (escritas pelo usuário; valem para todos os agentes):\n${text}\n\n` : ''
+  return text ? `This workspace's instructions (written by the user; they apply to every agent):\n${text}\n\n` : ''
 }

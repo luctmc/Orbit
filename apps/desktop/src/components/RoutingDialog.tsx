@@ -200,6 +200,10 @@ function ResumeOnStart() {
         <span>Quando nenhuma palavra diz o tipo da atividade, o Claude Haiku decide pela tabela (alguns segundos e uma fração de centavo; sem ele, vale o tipo padrão)</span>
       </label>
       <label className="check">
+        <input type="checkbox" checked={settings.agentsInEnglish} onChange={(e) => save({ agentsInEnglish: e.target.checked })} />
+        <span>Agentes trabalham em inglês entre si (tarefas, mensagens, entregas) e falam com você em português: gasta menos tokens e costuma render mais</span>
+      </label>
+      <label className="check">
         <input type="checkbox" checked={settings.resumeOnStart} onChange={(e) => save({ resumeOnStart: e.target.checked })} />
         <span>Ao abrir o Orbit, retomar os agentes das missões em andamento na mesma conversa (quem estava devendo uma entrega recebe um aviso para continuar)</span>
       </label>

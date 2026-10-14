@@ -126,10 +126,10 @@ test('switching items off reaches running Claude agents through their hook, and 
 
     ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Skills', objective: '', mode: 'agentica', lead: { cli: 'claude', model: null, title: '' } })
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
-    assert.match(readFileSync(join(dataDir, 'panes', String(lead.id), 'role.md'), 'utf8'), /Desligadas no Orbit \(não use\): migrar/)
+    assert.match(readFileSync(join(dataDir, 'panes', String(lead.id), 'role.md'), 'utf8'), /Switched off in Orbit \(do not use\): migrar/)
     ui.send({ type: 'pane.spawn', request: { missionId: lead.missionId, role: 'crew', cli: 'claude', model: null, title: 'bug', taskTypeId: routing.taskTypes[0]!.id } })
     const { pane: crew } = await ui.next('pane.updated', (m) => m.pane.title === 'bug')
-    assert.match(readFileSync(join(dataDir, 'panes', String(crew.id), 'role.md'), 'utf8'), /use só estas skills: revisar/)
+    assert.match(readFileSync(join(dataDir, 'panes', String(crew.id), 'role.md'), 'utf8'), /use only these skills: revisar/)
     ui.send({ type: 'pane.spawn', request: { missionId: lead.missionId, role: 'crew', cli: 'codex', model: null, title: 'codex' } })
     await ui.next('pane.updated', (m) => m.pane.title === 'codex')
     assert.deepEqual(launches.find((l) => l.cli === 'codex')?.disabledMcp, ['node_repl'])

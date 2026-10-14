@@ -16,12 +16,12 @@ const TIMEOUT_MS = 30_000
 
 export function decisionPrompt(text: string, types: TaskType[]): string {
   return [
-    'Você classifica atividades de programação para escolher quem as faz. Responda só com o JSON pedido.',
-    'difficulty: simples (mudança pequena e óbvia), normal, ou dificil (raciocínio longo, muitos arquivos, causa desconhecida, risco alto).',
-    'Tipos (id: quando se aplica):',
+    'You classify programming activities to choose who does them. Reply with the requested JSON only.',
+    'difficulty: simples (small, obvious change), normal, or dificil (long reasoning, many files, unknown cause, high risk).',
+    'Kinds (id: when it applies):',
     ...types.map((t) => `- ${t.id}: ${t.name}${t.description ? `. ${t.description}` : ''}`),
     '',
-    'Atividade:',
+    'Activity:',
     text.slice(0, 4000),
   ].join('\n')
 }
@@ -29,7 +29,7 @@ export function decisionPrompt(text: string, types: TaskType[]): string {
 export function decisionSchema(types: TaskType[]): string {
   return JSON.stringify({
     type: 'object',
-    properties: { kind: { type: 'string', enum: types.map((t) => t.id) }, difficulty: { type: 'string', enum: ['simples', 'normal', 'dificil'] }, why: { type: 'string', description: 'Uma frase curta' } },
+    properties: { kind: { type: 'string', enum: types.map((t) => t.id) }, difficulty: { type: 'string', enum: ['simples', 'normal', 'dificil'] }, why: { type: 'string', description: 'One short sentence, in Brazilian Portuguese' } },
     required: ['kind', 'difficulty', 'why'],
   })
 }

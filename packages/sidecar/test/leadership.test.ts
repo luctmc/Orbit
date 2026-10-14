@@ -33,7 +33,7 @@ test("an agent's last words are read from its CLI's own files", () => {
     { type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Delegado ao #3.' }] } },
   ].map((l) => JSON.stringify(l)).join('\n')
   assert.deepEqual(codexTurns(codex), [{ role: 'pessoa', text: 'Revise o PR' }, { role: 'agente', text: 'Delegado ao #3.' }])
-  assert.equal(turnsMarkdown([{ role: 'pessoa', text: 'a'.repeat(50) }, { role: 'agente', text: 'fim' }], 30), '**Líder:** fim')
+  assert.equal(turnsMarkdown([{ role: 'pessoa', text: 'a'.repeat(50) }, { role: 'agente', text: 'fim' }], 30), '**Lead:** fim')
 })
 
 test('the lead changes hands without losing anything: briefing, notes, helpers and the old lead\'s last words', async () => {
@@ -94,17 +94,17 @@ test('the lead changes hands without losing anything: briefing, notes, helpers a
     const helperId = Number(/#(\d+) /.exec(await asCodexLead.call('agent_spawn', { title: 'Correção', task: 'Corrija a média', kind: 'bug', agent: 'claude' }))![1])
     const asHelper = await mcpAs(helperId)
     await asHelper.call('agent_send', { agent: codexLead.id, message: 'Comecei pela média' })
-    await sees(codexLead.id, 'Lembrete do Orbit')
+    await sees(codexLead.id, 'Orbit reminder: you are the maestro')
 
     // Claude takes over: a new agent with the briefing as its first prompt; the helper now owes it.
     ui.send({ type: 'mission.lead.change', missionId: mission.id, to: { kind: 'new', cli: 'claude', model: 'sonnet', effort: 'high', accountId: null } })
     const { pane: claudeLead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead' && m.pane.cli === 'claude')
     await ui.next('pane.removed', (m) => m.paneId === codexLead.id)
     const briefing = readFileSync(launches.at(-1)!.taskPath!, 'utf8')
-    assert.match(briefing, /^# Dossiê da missão "Troca"\n\nVocê assume a liderança no lugar de #\d+ \(Codex\)/)
-    assert.match(briefing, /## Objetivo\n\nCorrigir a média e cobrir com testes/)
-    assert.match(briefing, /## Decisões anotadas pelos líderes\n\n- \(#\d+\) Média divide por length; não mexer em soma/)
-    assert.match(briefing, new RegExp(`- #${helperId} Correção — Claude · claude-sonnet-5-5, Correção de bug; \\w+; deve entrega a #${codexLead.id}`))
+    assert.match(briefing, /^# Mission briefing: "Troca"\n\nYou take over as lead from #\d+ \(Codex\)/)
+    assert.match(briefing, /## Objective \(written by the user\)\n\nCorrigir a média e cobrir com testes/)
+    assert.match(briefing, /## Decisions the leads wrote down\n\n- \(#\d+\) Média divide por length; não mexer em soma/)
+    assert.match(briefing, new RegExp(`- #${helperId} Correção — Claude · claude-sonnet-5-5, Correção de bug; \\w+; owes a result to #${codexLead.id}`))
     assert.equal(launches.at(-1)!.sandbox, undefined, 'a Claude lead is kept from editing by its hook')
     assert.equal(server.core.store.pane(helperId)!.assignedBy, claudeLead.id)
     const changed = (await ui.next('event.added', (m) => m.event.kind === 'lead.changed')).event
@@ -119,7 +119,7 @@ test('the lead changes hands without losing anything: briefing, notes, helpers a
     const asClaudeLead = await mcpAs(claudeLead.id)
     await fetch(`http://127.0.0.1:${server.port}/hooks`, { method: 'POST', headers: { authorization: `Bearer ${await tokenOf(claudeLead.id)}`, 'content-type': 'application/json' }, body: JSON.stringify({ hook_event_name: 'SessionStart', session_id: SESSION }) })
     await ui.next('pane.updated', (m) => m.pane.id === claudeLead.id && m.pane.sessionId === SESSION)
-    assert.match(await asClaudeLead.call('mission_briefing'), /## Decisões anotadas/)
+    assert.match(await asClaudeLead.call('mission_briefing'), /## Decisions the leads wrote down/)
 
     // Promote the helper: it keeps its conversation, gets the lead's tools and the reading order.
     assert.ok(!(await asHelper.tools()).includes('mission_briefing'))
@@ -127,9 +127,9 @@ test('the lead changes hands without losing anything: briefing, notes, helpers a
     await ui.next('pane.removed', (m) => m.paneId === claudeLead.id)
     assert.deepEqual([server.core.store.pane(helperId)!.role, server.core.store.pane(helperId)!.assignedBy], ['lead', null])
     assert.ok((await asHelper.tools()).includes('mission_briefing'))
-    await sees(helperId, 'chame mission_briefing')
+    await sees(helperId, 'call mission_briefing')
     const briefing2 = await asHelper.call('mission_briefing')
-    assert.match(briefing2, /## Fluxo recente[\s\S]*Liderança: #\d+ \(Codex\) → #\d+/)
+    assert.match(briefing2, /## Recent flow[\s\S]*Liderança: #\d+ \(Codex\) → #\d+/)
     // The previous lead's words were in the briefing handed over (shown in the event).
     const second = (await ui.next('event.added', (m) => m.event.kind === 'lead.changed' && m.event.paneId === helperId)).event
     assert.match(second.body, new RegExp(`fim da conversa de #${claudeLead.id}`))

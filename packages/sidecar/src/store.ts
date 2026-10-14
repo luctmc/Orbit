@@ -3,11 +3,11 @@ import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { AGENT_CLIS, EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type UsageEntry, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type OrbitSettings, type RoutingProposal, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
 import { BUILTIN_ACCOUNTS, migrateLimits } from './accounts.ts'
-import { DEFAULT_ROUTING, FACTORY_ALTS, FACTORY_METHODS } from './routing.ts'
+import { DEFAULT_ROUTING, FACTORY_ALTS, FACTORY_METHODS, OLD_FACTORY_START } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
 
 const EVENTS_PER_MISSION = 200
-const DEFAULT_SETTINGS: OrbitSettings = { resumeOnStart: true, smartClassify: true }
+const DEFAULT_SETTINGS: OrbitSettings = { resumeOnStart: true, smartClassify: true, agentsInEnglish: true }
 const PROPOSALS_KEPT = 50
 
 interface PersistedState extends Omit<Snapshot, 'squads' | 'routing' | 'accounts'> {
@@ -49,6 +49,8 @@ export class Store {
     for (const row of this.state.routing?.taskTypes ?? []) {
       row.onlySkills ??= false
       row.method ??= FACTORY_METHODS[row.id]?.method ?? ''
+      // A factory method still in its old Portuguese text becomes the English one; edited ones stay.
+      if (OLD_FACTORY_START[row.id] && row.method.startsWith(OLD_FACTORY_START[row.id]!)) row.method = FACTORY_METHODS[row.id]!.method
       row.readOnly ??= FACTORY_METHODS[row.id]?.readOnly ?? false
       row.alt ??= FACTORY_ALTS[row.id] && FACTORY_ALTS[row.id]!.cli !== row.cli ? FACTORY_ALTS[row.id]! : null
     }
@@ -194,7 +196,7 @@ export class Store {
   }
 
   saveSettings(settings: OrbitSettings): OrbitSettings {
-    this.state.settings = { resumeOnStart: settings?.resumeOnStart === true, smartClassify: settings?.smartClassify === true }
+    this.state.settings = { resumeOnStart: settings?.resumeOnStart === true, smartClassify: settings?.smartClassify === true, agentsInEnglish: settings?.agentsInEnglish !== false }
     this.save()
     return this.settings()
   }

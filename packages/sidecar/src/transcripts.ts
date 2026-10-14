@@ -74,7 +74,7 @@ export function turnsMarkdown(turns: Turn[], budget = 12_000, perTurn = 1_500): 
   const out: string[] = []
   let used = 0
   for (const turn of [...turns].reverse()) {
-    const block = `**${turn.role === 'agente' ? 'Líder' : 'Mensagem ao líder'}:** ${clip(turn.text.trim(), perTurn)}`
+    const block = `**${turn.role === 'agente' ? 'Lead' : 'To the lead'}:** ${clip(turn.text.trim(), perTurn)}`
     if (used + block.length > budget) break
     out.unshift(block)
     used += block.length

@@ -91,7 +91,7 @@ test('the maestro picks CLI and account by itself, falls back when one is used u
     }
 
     // The lead is reminded at every message and cannot edit files.
-    assert.match((await hook({ hook_event_name: 'UserPromptSubmit', prompt: 'oi' })).hookSpecificOutput.additionalContext, /você é o maestro/)
+    assert.match((await hook({ hook_event_name: 'UserPromptSubmit', prompt: 'oi' })).hookSpecificOutput.additionalContext, /you are the maestro/)
     assert.equal((await hook({ hook_event_name: 'PreToolUse', tool_name: 'Edit', tool_input: { file_path: '/x' } })).hookSpecificOutput.permissionDecision, 'deny')
     assert.equal(await hook({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/x' } }), null)
 

@@ -98,7 +98,7 @@ test('a squad mission briefs the lead with the script and opens helpers by role'
     assert.equal(reviewer.model, 'claude-opus-5-5', 'the role decides the model')
     await ui.next('pane.data', (m) => m.paneId === reviewer.id && m.data.includes('FAKE claude claude-opus-5-5'))
     const crewRole = readFileSync(join(dataDir, 'panes', String(reviewer.id), 'role.md'), 'utf8')
-    assert.match(crewRole, /Você é o Revisor/)
+    assert.match(crewRole, /You are the Revisor/)
     assert.match(crewRole, /Você revisa a mudança do Construtor sem editar nada/)
 
     const unknown = await mcp.callTool({ name: 'agent_spawn', arguments: { role: 'astronauta', task: 'x' } })

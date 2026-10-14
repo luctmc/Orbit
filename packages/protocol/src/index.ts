@@ -607,6 +607,8 @@ export interface OrbitSettings {
   resumeOnStart: boolean
   /** When no keyword tells an activity's type, a small model (Claude Haiku) decides. */
   smartClassify: boolean
+  /** Agents work in English among themselves and answer the person in Portuguese. */
+  agentsInEnglish: boolean
 }
 
 /** What a lead may suggest changing in a row of the task table. */

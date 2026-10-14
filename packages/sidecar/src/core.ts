@@ -600,34 +600,34 @@ export class OrbitCore {
     const lead = panes.find((p) => p.role === 'lead')
     const who = (p: Pane) => [CLI_LABEL[p.cli], p.model].filter(Boolean).join(' · ')
     const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text)
-    const out: string[] = [`# Dossiê da missão "${mission.title}"`]
-    if (previous) out.push(`Você assume a liderança no lugar de #${previous.pane.id} (${who(previous.pane)}). Nada se perdeu: está tudo abaixo. Leia antes de agir e continue de onde a liderança parou; não refaça o que já foi entregue.`)
-    out.push(`## Objetivo\n\n${mission.objective || '(sem objetivo escrito: pergunte ao usuário)'}`)
+    const out: string[] = [`# Mission briefing: "${mission.title}"`]
+    if (previous) out.push(`You take over as lead from #${previous.pane.id} (${who(previous.pane)}). Nothing was lost: it is all below. Read it before acting and carry on from where the lead stopped; do not redo what was already delivered.`)
+    out.push(`## Objective (written by the user)\n\n${mission.objective || '(no objective written: ask the user)'}`)
     const facts = [
-      `modo ${mission.mode}`,
-      mission.mode === 'agentica' && `CLIs liberadas: ${mission.allowedClis.map((c) => CLI_LABEL[c]).join(', ')}`,
-      mission.readyAt && `declarada pronta: ${oneLine(mission.readySummary ?? '').slice(0, 300)}`,
-      mission.budget && `orçamento: ${mission.usage.total.toLocaleString('pt-BR')} tokens usados${mission.budget.tokens ? ` de ${mission.budget.tokens.toLocaleString('pt-BR')}` : ''}${mission.budget.exceeded ? ' (esgotado)' : ''}`,
+      `mode ${mission.mode}`,
+      mission.mode === 'agentica' && `CLIs allowed: ${mission.allowedClis.map((c) => CLI_LABEL[c]).join(', ')}`,
+      mission.readyAt && `declared ready: ${oneLine(mission.readySummary ?? '').slice(0, 300)}`,
+      mission.budget && `budget: ${mission.usage.total.toLocaleString('en-US')} tokens used${mission.budget.tokens ? ` of ${mission.budget.tokens.toLocaleString('en-US')}` : ''}${mission.budget.exceeded ? ' (used up)' : ''}`,
     ].filter(Boolean)
-    out.push(`## Situação\n\n${facts.map((f) => `- ${f}`).join('\n')}`)
-    if (mission.notes.length) out.push(`## Decisões anotadas pelos líderes\n\n${mission.notes.map((n) => `- (#${n.paneId}) ${n.text}`).join('\n')}`)
+    out.push(`## State\n\n${facts.map((f) => `- ${f}`).join('\n')}`)
+    if (mission.notes.length) out.push(`## Decisions the leads wrote down\n\n${mission.notes.map((n) => `- (#${n.paneId}) ${n.text}`).join('\n')}`)
     const cards = this.store.cards(missionId)
-    if (cards.length) out.push(`## Quadro\n\n${cards.map((c) => `- [${CARD_COLUMN_LABEL[c.column]}] T${c.number} ${c.title}${c.assignee !== null ? ` (#${c.assignee})` : ''}`).join('\n')}`)
+    if (cards.length) out.push(`## Board\n\n${cards.map((c) => `- [${c.column}] T${c.number} ${c.title}${c.assignee !== null ? ` (#${c.assignee})` : ''}`).join('\n')}`)
     const crew = panes.filter((p) => p.role === 'crew' && p.id !== lead?.id)
     if (crew.length) {
-      const state = (p: Pane) => p.handoffStatus === null ? (p.assignedBy !== null ? `deve entrega a #${p.assignedBy}` : 'sem tarefa do líder') : p.handoffStatus === 'progress' ? 'em andamento' : `entregou (${p.handoffStatus})`
-      out.push(`## Ajudantes\n\n${crew.map((p) => `- #${p.id} ${p.title} — ${who(p)}${p.taskType ? `, ${p.taskType}` : ''}; ${p.status}; ${state(p)}`).join('\n')}`)
+      const state = (p: Pane) => p.handoffStatus === null ? (p.assignedBy !== null ? `owes a result to #${p.assignedBy}` : 'no task from the lead') : p.handoffStatus === 'progress' ? 'in progress' : `delivered (${p.handoffStatus})`
+      out.push(`## Helpers\n\n${crew.map((p) => `- #${p.id} ${p.title} — ${who(p)}${p.taskType ? `, ${p.taskType}` : ''}; ${p.status}; ${state(p)}`).join('\n')}`)
     }
     const handoffs = this.missionEvents(missionId, 'handoff').slice(-8)
-    if (handoffs.length) out.push(`## Retornos recebidos\n\n${handoffs.map((e) => `### ${e.title}\n${clip(e.body, 1800)}`).join('\n\n')}`)
+    if (handoffs.length) out.push(`## Results received\n\n${handoffs.map((e) => `### ${e.title}\n${clip(e.body, 1800)}`).join('\n\n')}`)
     if (mission.git) {
       const summary = safe(() => this.gitSummary(missionId), null)
-      if (summary) out.push(`## Branches\n\nMissão no branch ${summary.branch} (base ${summary.base}), ${summary.commits.length} commit(s).${summary.agents.length ? `\n${summary.agents.map((a) => `- #${a.paneId} ${a.branch}: ${a.ahead} commit(s) a integrar, ${a.dirty.length} arquivo(s) sem commit`).join('\n')}` : ''}`)
+      if (summary) out.push(`## Branches\n\nMission on branch ${summary.branch} (base ${summary.base}), ${summary.commits.length} commit(s).${summary.agents.length ? `\n${summary.agents.map((a) => `- #${a.paneId} ${a.branch}: ${a.ahead} commit(s) to integrate, ${a.dirty.length} uncommitted file(s)`).join('\n')}` : ''}`)
     }
-    if (previous?.turns.length) out.push(`## Fim da conversa do líder anterior (#${previous.pane.id})\n\n${turnsMarkdown(previous.turns, 6000, 1200)}`)
+    if (previous?.turns.length) out.push(`## End of the previous lead's conversation (#${previous.pane.id})\n\n${turnsMarkdown(previous.turns, 6000, 1200)}`)
     const flow = this.missionEvents(missionId).filter((e) => e.kind !== 'handoff').slice(-25)
-    if (flow.length) out.push(`## Fluxo recente\n\n${flow.map((e) => `- ${new Date(e.at).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })} ${e.title}`).join('\n')}`)
-    out.push('## Como seguir\n\nOs ajudantes que devem entrega agora entregam para você. Anote decisões importantes com mission_note: elas passam para qualquer líder depois de você. Para reler este dossiê, chame mission_briefing.')
+    if (flow.length) out.push(`## Recent flow\n\n${flow.map((e) => `- ${new Date(e.at).toISOString().slice(5, 16).replace('T', ' ')} ${e.title}`).join('\n')}`)
+    out.push('## How to carry on\n\nHelpers that owe a result now deliver it to you. Write important decisions down with mission_note: they pass to any lead after you. To read this briefing again, call mission_briefing.')
     return clip(out.join('\n\n'), 18_000)
   }
 
@@ -659,7 +659,7 @@ export class OrbitCore {
     const from = old ? `#${old.id} (${[CLI_LABEL[old.cli], old.model].filter(Boolean).join(' · ')})` : 'ninguém'
     this.event(missionId, 'lead.changed', `Liderança: ${from} → #${lead.id}`, `${[CLI_LABEL[lead.cli], lead.model].filter(Boolean).join(' · ')} assumiu com o dossiê da missão${previous?.turns.length ? ` e o fim da conversa de #${previous.pane.id}` : ''}.`, lead.id)
     if (to.kind === 'promote') {
-      this.submitTo(lead.id, `[Orbit] Você agora é o líder desta missão, no lugar de ${from}. Antes de qualquer coisa, chame mission_briefing do "orbit" e leia o dossiê inteiro: objetivo, decisões, quadro, ajudantes, retornos e o fim da conversa do líder anterior. A partir de agora você orquestra: delega com agent_spawn, não executa, e os retornos chegam para você.`)
+      this.submitTo(lead.id, `[Orbit] You are now the lead of this mission, taking over from ${from}. First of all, call mission_briefing from "orbit" and read the whole briefing: objective, decisions, board, helpers, results and the end of the previous lead's conversation. From now on you orchestrate: delegate with agent_spawn, do not execute, and results come to you. Answer the user in Brazilian Portuguese.`)
     }
     return this.store.pane(lead.id) ?? lead
   }
@@ -747,8 +747,8 @@ export class OrbitCore {
     const off = this.store.disabledCatalog().filter((id) => id.startsWith(`${cli}:skill:`) || id.startsWith(`${cli}:agent:`))
     const names = off.map((id) => id.split(':').slice(2).join(':'))
     const lines: string[] = []
-    if (policy?.only) lines.push(policy.only.length ? `Neste papel use só estas skills: ${policy.only.join(', ')}.` : 'Neste papel não use skills.')
-    if (names.length) lines.push(`Desligadas no Orbit (não use): ${names.slice(0, 40).join(', ')}${names.length > 40 ? '…' : ''}.`)
+    if (policy?.only) lines.push(policy.only.length ? `In this role use only these skills: ${policy.only.join(', ')}.` : 'In this role do not use skills.')
+    if (names.length) lines.push(`Switched off in Orbit (do not use): ${names.slice(0, 40).join(', ')}${names.length > 40 ? '…' : ''}.`)
     return lines.length ? `${lines.join('\n')}\n\n` : ''
   }
 
@@ -1783,6 +1783,7 @@ export class OrbitCore {
     }
     const title = request.title.trim().slice(0, 120) || squadRole?.name || taskType?.name || `${CLI_LABEL[request.cli]} #${id}`
     const token = randomBytes(24).toString('base64url')
+    const english = this.store.settings().agentsInEnglish
     const lead = this.missionPanes(mission.id).find((p) => p.role === 'lead')
     const launch = writeAgentFiles({
       paneDir: this.paneDir(id),
@@ -1795,7 +1796,7 @@ export class OrbitCore {
       statusCommand: hookCommand(process.execPath, STATUS_SCRIPT),
       apiKeyHelper: account ? this.accountFiles.apiKeyHelper(account) : undefined,
       addDirs: folder ? workspace.folders.filter((f) => f !== folder && (!mission.git || f !== workspace.path)) : workspace.folders.slice(1),
-      rolePrompt: commandToolsNote(request.cli) + workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, { boss: options.boss ?? lead, children: options.children ?? 0 }, squadRole, taskType)),
+      rolePrompt: commandToolsNote(request.cli) + workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing, english) : crewRole(mission, { id }, { boss: options.boss ?? lead, children: options.children ?? 0, english }, squadRole, taskType)),
       task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
       orbitCommand: hookCommand(process.execPath, ORBIT_CLI_SCRIPT),
     })

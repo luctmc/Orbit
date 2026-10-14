@@ -77,7 +77,7 @@ test('each agent works in its own worktree and branch, and the mission becomes a
     assert.equal(lead.branch, branch)
     assert.equal(lead.cwd, join(dataDir, 'worktrees', mission.id, 'lider', 'app'), 'the lead starts in the same subfolder of its copy')
     assert.equal(git(work, 'rev-parse', '--abbrev-ref', 'HEAD').trim(), 'main', "the person's checkout is untouched")
-    assert.match(readFileSync(join(dataDir, 'panes', String(lead.id), 'role.md'), 'utf8'), /cópia isolada do repositório \(git worktree\)/)
+    assert.match(readFileSync(join(dataDir, 'panes', String(lead.id), 'role.md'), 'utf8'), /isolated copy of the repository \(git worktree\)/)
 
     ui.send({ type: 'pane.spawn', request: { missionId: mission.id, role: 'crew', cli: 'claude', model: null, title: 'Frete' } })
     const { pane: helper } = await ui.next('pane.updated', (m) => m.pane.title === 'Frete')
