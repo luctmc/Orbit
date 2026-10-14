@@ -2,7 +2,7 @@ import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, CARD_COLUMNS, CARD_LIMITS, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type MissionGit, type PrStatus, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, TEMPLATE_LIMITS, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type MissionGit, type PrStatus, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
@@ -17,7 +17,7 @@ import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
 import { statusFromHook, type HookPayload } from './hooks.ts'
 import { PaneManager, type PaneSnapshot } from './panes.ts'
-import { crewRole, leadRole, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
+import { crewRole, instructionsNote, leadRole, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
 import { normalizeSquad } from './squads.ts'
 import { Store } from './store.ts'
 
@@ -247,6 +247,36 @@ export class OrbitCore {
       if (!safe(() => removeWorktree(git.repo, path), false)) kept.push(entry === 'lider' ? 'do líder' : `de #${entry}`)
     }
     if (kept.length) this.event(missionId, 'pane.exited', 'Cópias mantidas', `Ficaram mudanças sem commit nas cópias ${kept.join(', ')}, em ${root}. Os branches continuam no repositório.`, null)
+  }
+
+  // ---- mission templates ----
+
+  private normalizeTemplate(input: MissionTemplateInput): MissionTemplate {
+    const existing = typeof input?.id === 'string' ? this.store.template(input.id) : undefined
+    if (!existing && this.store.templateCount() >= TEMPLATE_LIMITS.templates) throw new Error(`No máximo ${TEMPLATE_LIMITS.templates} modelos`)
+    if (!MODES.includes(input.mode)) throw new Error(`Modo inválido: ${String(input.mode)}`)
+    const workspaceId = input.workspaceId && this.store.workspace(input.workspaceId) ? input.workspaceId : null
+    const squadId = input.mode === 'squad' ? input.squadId ?? null : null
+    if (input.mode === 'squad' && (!squadId || !this.store.squad(squadId))) throw new Error('Escolha um squad que exista para o modelo')
+    const lead = input.lead ?? { cli: 'claude', model: null, effort: null }
+    if (!CLIS.includes(lead.cli)) throw new Error(`Agente inválido: ${String(lead.cli)}`)
+    if (lead.model && !MODEL_ID.test(lead.model)) throw new Error(`Modelo inválido: ${lead.model}`)
+    if (lead.effort && !EFFORTS.includes(lead.effort)) throw new Error(`Esforço inválido: ${lead.effort}`)
+    const now = Date.now()
+    return {
+      id: existing?.id ?? randomBytes(6).toString('hex'),
+      name: requireText(input.name, 'nome do modelo', TEMPLATE_LIMITS.name),
+      workspaceId,
+      title: requireText(input.title, 'título', 120),
+      objective: typeof input.objective === 'string' ? input.objective.trim().slice(0, 4000) : '',
+      mode: input.mode,
+      squadId,
+      isolation: input.isolation === 'worktrees' ? 'worktrees' : null,
+      lead: { cli: lead.cli, model: lead.model || null, effort: lead.cli === 'shell' ? null : lead.effort ?? null },
+      cards: templateCards(input.cards),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    }
   }
 
   // ---- the mission's board ----
@@ -549,6 +579,7 @@ export class OrbitCore {
         const workspace = this.store.updateWorkspace(message.workspaceId, {
           name: message.name === undefined ? undefined : workspaceName(message.name),
           folders: message.folders === undefined ? undefined : validFolders(message.folders),
+          instructions: message.instructions === undefined ? undefined : typeof message.instructions === 'string' ? message.instructions.trim().slice(0, WORKSPACE_LIMITS.instructions) : '',
         })
         if (workspace) this.broadcast({ type: 'workspace.updated', workspace })
         return
@@ -579,6 +610,8 @@ export class OrbitCore {
         this.broadcast({ type: 'mission.updated', mission })
         const opening = squad ? `Squad ${squad.name}. ${mission.objective || 'Sem objetivo descrito.'}` : mission.objective || 'Sem objetivo descrito.'
         this.event(mission.id, 'mission.created', 'Missão iniciada', opening, null)
+        // Cards from a template are on the board before the lead looks at it.
+        for (const title of templateCards(message.cards)) this.addCard(mission.id, 'modelo', { title })
         // Agentic and squad leads start working on the objective right away.
         const task = mission.mode !== 'livre' && mission.objective ? objectiveTask(mission) : null
         this.spawn({ ...message.lead, missionId: mission.id, role: 'lead', task })
@@ -693,6 +726,15 @@ export class OrbitCore {
         void this.prStatus(message.missionId)
           .then((status) => reply({ type: 'git.pr', missionId: message.missionId, status }))
           .catch((error) => reply({ type: 'files.error', message: error instanceof Error ? error.message : String(error) }))
+        return
+      case 'template.save': {
+        const template = this.normalizeTemplate(message.template)
+        this.store.saveTemplate(template)
+        this.broadcast({ type: 'template.updated', template })
+        return
+      }
+      case 'template.delete':
+        if (this.store.deleteTemplate(message.templateId)) this.broadcast({ type: 'template.removed', templateId: message.templateId })
         return
       case 'card.add':
         this.addCard(message.missionId, 'você', message)
@@ -1000,7 +1042,7 @@ export class OrbitCore {
       statusCommand: hookCommand(process.execPath, STATUS_SCRIPT),
       apiKeyHelper: account ? this.accountFiles.apiKeyHelper(account) : undefined,
       addDirs: workspace.folders.slice(1),
-      rolePrompt: workspaceNote(workspace.folders) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, lead, squadRole, taskType)),
+      rolePrompt: workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, lead, squadRole, taskType)),
       task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
     })
 
@@ -1157,6 +1199,11 @@ export function parsePrStatus(json: string): PrStatus {
     return { name, state: conclusion === 'SUCCESS' || conclusion === 'NEUTRAL' ? 'ok' : conclusion === 'SKIPPED' ? 'skip' : 'fail' } as const
   })
   return { number: data.number, url: data.url, state: data.state, draft: data.isDraft === true, checks, checkedAt: Date.now() }
+}
+
+/** Card titles a template starts the board with: trimmed, non-empty, within the limits. */
+function templateCards(input: unknown): string[] {
+  return (Array.isArray(input) ? input : []).map((t) => String(t).trim().slice(0, CARD_LIMITS.title)).filter(Boolean).slice(0, TEMPLATE_LIMITS.cards)
 }
 
 function cardColumn(value: unknown): CardColumn {

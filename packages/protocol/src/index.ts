@@ -11,7 +11,29 @@ export interface Workspace {
   folders: string[]
   name: string
   lastOpenedAt: number
+  /** What every agent of this workspace is told: conventions, test commands, what to avoid. */
+  instructions: string
 }
+
+/** A mission to start again: its setup, its lead and the board's cards. */
+export interface MissionTemplate {
+  id: string
+  name: string
+  /** Only offered in this workspace; null = any. */
+  workspaceId: string | null
+  title: string
+  objective: string
+  mode: MissionMode
+  squadId: string | null
+  isolation: 'worktrees' | null
+  lead: { cli: AgentCli; model: string | null; effort: Effort | null }
+  /** Titles of the cards the board starts with. */
+  cards: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+export type MissionTemplateInput = Omit<MissionTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
 
 /** A mission whose agents each work in their own git worktree and branch. */
 export interface MissionGit {
@@ -432,6 +454,7 @@ export interface Snapshot {
   limits: AccountLimits[]
   accounts: Account[]
   cards: Card[]
+  templates: MissionTemplate[]
 }
 
 export interface SpawnPaneRequest {
@@ -455,10 +478,13 @@ export type ClientMessage =
   | { type: 'workspace.open'; path: string }
   /** A workspace made of several folders; the first is the main one. */
   | { type: 'workspace.create'; name: string; folders: string[] }
-  /** Rename, or replace the folder list (new agents get the new list). */
-  | { type: 'workspace.update'; workspaceId: string; name?: string; folders?: string[] }
+  /** Rename, replace the folder list or the instructions (new agents get them). */
+  | { type: 'workspace.update'; workspaceId: string; name?: string; folders?: string[]; instructions?: string }
   /** `isolation: 'worktrees'` gives every agent its own git worktree and branch. */
-  | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'> }
+  | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'>; cards?: string[] }
+  /** Creates or replaces a mission template. */
+  | { type: 'template.save'; template: MissionTemplateInput }
+  | { type: 'template.delete'; templateId: string }
   | { type: 'mission.archive'; missionId: string }
   | { type: 'pane.spawn'; request: SpawnPaneRequest }
   /** A terminal view mounted: send me this pane's current screen, then its live output. */
@@ -543,6 +569,8 @@ export type ServerMessage =
   | { type: 'account.status'; statuses: AccountStatus[] }
   | { type: 'files.status'; workspaceId: string; folders: FolderStatus[] }
   | { type: 'update.status'; status: UpdateStatus }
+  | { type: 'template.updated'; template: MissionTemplate }
+  | { type: 'template.removed'; templateId: string }
   | { type: 'card.updated'; card: Card }
   | { type: 'card.removed'; cardId: string }
   | { type: 'git.summary'; missionId: string; summary: GitSummary }
@@ -573,5 +601,6 @@ export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$/
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/
 
 export const SQUAD_LIMITS = { name: 60, description: 280, playbook: 8000, brief: 4000, roles: 8 } as const
-export const WORKSPACE_LIMITS = { folders: 10, name: 60 } as const
+export const WORKSPACE_LIMITS = { folders: 10, name: 60, instructions: 8000 } as const
+export const TEMPLATE_LIMITS = { templates: 50, name: 60, cards: 30 } as const
 export const ROUTING_LIMITS = { taskTypes: 16, name: 40, description: 200, skills: 6, skill: 40 } as const

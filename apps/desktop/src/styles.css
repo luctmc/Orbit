@@ -575,3 +575,11 @@ h1, h2, p { margin: 0; }
 .pr__check--ok { color: var(--accent); background: var(--accent-soft); }
 .pr__check--fail { color: var(--danger); background: #2a1513; }
 .pr__check--pending { color: var(--wait); background: #21170c; }
+
+/* Templates */
+.template-pick__row { display: flex; align-items: center; gap: 12px; }
+.template-pick__row select { flex: 1; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); }
+.template-facts { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.template-facts dt { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.template-facts dd { margin: 2px 0 0; font-size: 13px; color: var(--text-2); overflow-wrap: anywhere; }
+.template-facts__wide { grid-column: 1 / -1; }

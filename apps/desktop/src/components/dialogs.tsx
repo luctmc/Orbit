@@ -72,7 +72,10 @@ function invalidModel(choice: AgentChoice): boolean {
 
 export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManageSquads, onManageRouting }: { workspaceId: string; workspaceName: string; onClose: () => void; onManageSquads: () => void; onManageRouting: () => void }) {
   const client = useOrbitClient()
-  const { squads, routing } = useOrbit()
+  const { squads, routing, templates: allTemplates } = useOrbit()
+  const templates = allTemplates.filter((t) => t.workspaceId === null || t.workspaceId === workspaceId).sort((a, b) => a.name.localeCompare(b.name))
+  const [templateId, setTemplateId] = useState('')
+  const [cards, setCards] = useState<string[]>([])
   const [title, setTitle] = useState('')
   const [objective, setObjective] = useState('')
   const [mode, setMode] = useState<MissionMode>('livre')
@@ -80,6 +83,20 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   const [lead, setLead] = useState<AgentChoice>(DEFAULT_AGENT)
   const [worktrees, setWorktrees] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  /** A template fills the whole form; everything stays editable. */
+  const applyTemplate = (id: string) => {
+    setTemplateId(id)
+    const t = templates.find((x) => x.id === id)
+    if (!t) return setCards([])
+    setTitle(t.title)
+    setObjective(t.objective)
+    setMode(t.mode)
+    setSquadId(t.squadId)
+    setWorktrees(t.isolation === 'worktrees')
+    setLead({ cli: t.lead.cli, model: t.lead.model ?? '', effort: t.lead.effort, accountId: null })
+    setCards(t.cards)
+  }
 
   // Each mode suggests its own lead: the squad's, or the task table's for agentic missions.
   const pickMode = (next: MissionMode) => {
@@ -96,9 +113,27 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
       if (!title.trim()) return setError('Dê um título para a missão.')
       if (mode === 'squad' && !squadId) return setError('Escolha o squad da missão.')
       if (invalidModel(lead)) return setError('Modelo inválido: use só letras, números, ponto, hífen, barra ou dois-pontos.')
-      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
+      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, cards, lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
       onClose()
     }}>
+      {templates.length > 0 && (
+        <div className="field template-pick">
+          <label htmlFor="m-template">Modelo</label>
+          <div className="template-pick__row">
+            <select id="m-template" value={templateId} onChange={(e) => applyTemplate(e.target.value)}>
+              <option value="">Sem modelo</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.workspaceId ? '' : ' (qualquer workspace)'}</option>)}
+            </select>
+            {templateId && (
+              <button type="button" className="link-btn" onClick={() => {
+                const t = templates.find((x) => x.id === templateId)
+                if (t && confirm(`Apagar o modelo "${t.name}"?`)) { client.send({ type: 'template.delete', templateId }); applyTemplate('') }
+              }}>Apagar modelo</button>
+            )}
+          </div>
+          {cards.length > 0 && <p className="note">O quadro começa com {cards.length} {cards.length === 1 ? 'cartão' : 'cartões'}: {cards.join(' · ')}</p>}
+        </div>
+      )}
       <div className="field">
         <label htmlFor="m-title">Título</label>
         <input id="m-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Refatorar a autenticação" autoFocus />
