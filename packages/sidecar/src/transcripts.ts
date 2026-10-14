@@ -69,11 +69,15 @@ export function codexTurns(text: string): Turn[] {
   return turns
 }
 
+/** Orbit's own role instructions and briefings, which the CLI logs as a first user message. */
+const ORBIT_PREAMBLE = /Orbit exposes an MCP server named "orbit"|^# Mission briefing|^You are (the lead|a helper|the )/
+
 /** The end of a conversation as Markdown, within a size budget (newest turns kept). */
 export function turnsMarkdown(turns: Turn[], budget = 12_000, perTurn = 1_500): string {
   const out: string[] = []
   let used = 0
   for (const turn of [...turns].reverse()) {
+    if (turn.role === 'pessoa' && ORBIT_PREAMBLE.test(turn.text)) continue
     const block = `**${turn.role === 'agente' ? 'Lead' : 'To the lead'}:** ${clip(turn.text.trim(), perTurn)}`
     if (used + block.length > budget) break
     out.unshift(block)

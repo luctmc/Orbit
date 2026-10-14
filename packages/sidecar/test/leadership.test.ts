@@ -34,6 +34,8 @@ test("an agent's last words are read from its CLI's own files", () => {
   ].map((l) => JSON.stringify(l)).join('\n')
   assert.deepEqual(codexTurns(codex), [{ role: 'pessoa', text: 'Revise o PR' }, { role: 'agente', text: 'Delegado ao #3.' }])
   assert.equal(turnsMarkdown([{ role: 'pessoa', text: 'a'.repeat(50) }, { role: 'agente', text: 'fim' }], 30), '**Lead:** fim')
+  // Orbit's own role prompt, logged as the first message, is not part of what the new lead reads.
+  assert.equal(turnsMarkdown([{ role: 'pessoa', text: 'You are the lead (#2) of the mission "M" in Orbit.\n\nOrbit exposes an MCP server named "orbit".' }, { role: 'agente', text: 'Delegado.' }]), '**Lead:** Delegado.')
 })
 
 test('the lead changes hands without losing anything: briefing, notes, helpers and the old lead\'s last words', async () => {
@@ -104,7 +106,7 @@ test('the lead changes hands without losing anything: briefing, notes, helpers a
     assert.match(briefing, /^# Mission briefing: "Troca"\n\nYou take over as lead from #\d+ \(Codex\)/)
     assert.match(briefing, /## Objective \(written by the user\)\n\nCorrigir a média e cobrir com testes/)
     assert.match(briefing, /## Decisions the leads wrote down\n\n- \(#\d+\) Média divide por length; não mexer em soma/)
-    assert.match(briefing, new RegExp(`- #${helperId} Correção — Claude · claude-sonnet-5-5, Correção de bug; \\w+; owes a result to #${codexLead.id}`))
+    assert.match(briefing, new RegExp(`- #${helperId} Correção — Claude · claude-sonnet-5-5, Correção de bug; \\w+; owes a result to you \\(it was working for #${codexLead.id}\\)`))
     assert.equal(launches.at(-1)!.sandbox, undefined, 'a Claude lead is kept from editing by its hook')
     assert.equal(server.core.store.pane(helperId)!.assignedBy, claudeLead.id)
     const changed = (await ui.next('event.added', (m) => m.event.kind === 'lead.changed')).event

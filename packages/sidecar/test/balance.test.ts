@@ -94,6 +94,11 @@ test('the maestro shares work across CLIs by load, uses the table\'s equivalent,
     const hard = await spawn({ title: 'Bug difícil', task: 'Corrija a condição de corrida no pagamento', kind: 'bug', difficulty: 'dificil' })
     assert.match(hard, /▸ dificuldade: difícil \(líder\) → claude-opus-5-5, esforço alto/)
     assert.match(hard, /▸ abriu: Claude · claude-opus-5-5 · esforço alto/)
+    // Reopened, it keeps the seat it really had, not the table's.
+    const hardId = Number(/#(\d+) Bug difícil/.exec(hard)![1])
+    ui.send({ type: 'pane.restart', paneId: hardId, resume: false })
+    await ui.next('event.added', (m) => m.event.title === `#${hardId} reaberto numa conversa nova`)
+    assert.deepEqual([launches.at(-1)!.cli, launches.at(-1)!.model, launches.at(-1)!.effort], ['claude', 'claude-opus-5-5', 'high'])
     assert.match(await spawn({ title: 'Docs', task: 'Corrija um erro de digitação no README', kind: 'documentacao', difficulty: 'simples' }), /▸ abriu: Claude · claude-haiku-5-5 · esforço baixo/)
     const named = await spawn({ title: 'Nomeado', task: 'Corrija o erro do login', agent: 'claude', model: 'claude-sonnet-5-5', difficulty: 'dificil' })
     assert.doesNotMatch(named, /dificuldade/)

@@ -2,7 +2,7 @@ import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type Difficulty, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type Difficulty, type AgentSeat, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
@@ -615,7 +615,9 @@ export class OrbitCore {
     if (cards.length) out.push(`## Board\n\n${cards.map((c) => `- [${c.column}] T${c.number} ${c.title}${c.assignee !== null ? ` (#${c.assignee})` : ''}`).join('\n')}`)
     const crew = panes.filter((p) => p.role === 'crew' && p.id !== lead?.id)
     if (crew.length) {
-      const state = (p: Pane) => p.handoffStatus === null ? (p.assignedBy !== null ? `owes a result to #${p.assignedBy}` : 'no task from the lead') : p.handoffStatus === 'progress' ? 'in progress' : `delivered (${p.handoffStatus})`
+      // Whoever worked for the previous lead now works for the reader of this briefing.
+      const owner = (id: number) => (previous && id === previous.pane.id ? `you (it was working for #${id})` : `#${id}`)
+      const state = (p: Pane) => p.handoffStatus === null ? (p.assignedBy !== null ? `owes a result to ${owner(p.assignedBy)}` : 'no task from the lead') : p.handoffStatus === 'progress' ? 'in progress' : `delivered (${p.handoffStatus})`
       out.push(`## Helpers\n\n${crew.map((p) => `- #${p.id} ${p.title} — ${who(p)}${p.taskType ? `, ${p.taskType}` : ''}; ${p.status}; ${state(p)}`).join('\n')}`)
     }
     const handoffs = this.missionEvents(missionId, 'handoff').slice(-8)
@@ -1662,7 +1664,7 @@ export class OrbitCore {
   // ---- internals ----
 
   /** `resume` continues that conversation of the CLI; `opened` replaces the flow's "Agente #N aberto". */
-  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; tier?: { difficulty: Difficulty; by: string } } = {}): Pane {
+  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; tier?: { difficulty: Difficulty; by: string }; keep?: AgentSeat } = {}): Pane {
     const receipt = options.receipt ?? []
     const mission = this.store.mission(input.missionId)
     if (!mission || mission.status !== 'active') throw new Error('Missão inexistente ou arquivada')
@@ -1687,6 +1689,8 @@ export class OrbitCore {
       : taskType
         ? { ...input, role: 'crew', cli: taskType.cli, model: taskType.model, effort: taskType.effort }
         : { ...input }
+    // Reopening an agent keeps the seat it really had (balancing and difficulty already decided it).
+    if (options.keep) Object.assign(request, { cli: options.keep.cli, model: options.keep.model, effort: options.keep.effort })
     if (!CLIS.includes(request.cli)) throw new Error(`Agente inválido: ${request.cli}`)
     if (request.effort && !EFFORTS.includes(request.effort)) throw new Error(`Esforço inválido: ${request.effort}`)
 
@@ -1866,6 +1870,7 @@ export class OrbitCore {
     const accept = this.acceptance.get(paneId)
     this.closePane(paneId)
     const opened = this.spawn({ ...spec, title: pane.title, ...(message ? { task: message } : {}) }, {
+      keep: pane.cli === 'shell' ? undefined : { cli: pane.cli, model: pane.model, effort: pane.effort },
       id: paneId,
       worktree,
       resume: resume ? sessionId! : undefined,
