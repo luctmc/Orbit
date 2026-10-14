@@ -2,11 +2,11 @@ import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, BUDGET_WARN_AT, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
-import { accountRooms, chooseAccount, classifyTask, otherCli, type AccountRoom } from './maestro.ts'
+import { accountRooms, chooseAccount, classifyTask, type AccountRoom } from './maestro.ts'
 import { dueSchedules, nextRun, normalizeWhen } from './schedules.ts'
 import { fileDiff, folderStatus, folderTree, readFile } from './files.ts'
 import { Updates } from './updates.ts'
@@ -19,18 +19,19 @@ import { codexHome, codexLastTurn, findCodexRolloutById, latestCodexRollout, cod
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
-import { statusFromHook, type HookPayload } from './hooks.ts'
+import { fromGeminiHook, statusFromHook, toGeminiHook, type HookPayload } from './hooks.ts'
 import { PaneManager, type PaneSnapshot } from './panes.ts'
-import { acceptanceNote, crewRole, HANDOFF_NUDGE, instructionsNote, leadRole, MAESTRO_RULE, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
+import { acceptanceNote, commandToolsNote, crewRole, HANDOFF_NUDGE, instructionsNote, leadRole, MAESTRO_RULE, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
 import { normalizeSquad } from './squads.ts'
 import { dayKey, Store } from './store.ts'
 
-const CLIS: readonly AgentCli[] = ['claude', 'codex', 'shell']
+const CLIS: readonly AgentCli[] = [...AGENT_CLIS, 'shell']
 const MODES: readonly MissionMode[] = ['livre', 'squad', 'agentica']
-const CLI_LABEL: Record<AgentCli, string> = { claude: 'Claude', codex: 'Codex', shell: 'Terminal' }
+const CLI_LABEL = CLI_NAME
 const HOOK_SCRIPT = process.env.ORBIT_HOOK_SCRIPT ?? fileURLToPath(new URL('../hooks/report.mjs', import.meta.url))
 /** Lives next to the hook script, in dev and in the app bundle. */
 const STATUS_SCRIPT = join(dirname(HOOK_SCRIPT), 'statusline.mjs')
+const ORBIT_CLI_SCRIPT = join(dirname(HOOK_SCRIPT), 'orbit-cli.mjs')
 /** How often live Codex agents' session files are read for usage. */
 const CODEX_POLL_MS = 5000
 /** Time for a CLI to stop its turn after Esc before new orders are typed. */
@@ -41,7 +42,8 @@ const HANDOFF_LABEL: Record<HandoffStatus, string> = { done: 'concluído', block
 const oneLine = (text: string) => text.replace(/\s*\n\s*/g, ' / ').trim()
 /** Sub-helpers a helper may have open at once (they cannot open their own). */
 const MAX_CHILDREN = 2
-const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
+// Claude Code's and Gemini CLI's file-editing tools.
+const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'write_file', 'replace']
 const RESUME_NOTE = 'O Orbit foi reaberto. Continue a tarefa de onde parou e, ao terminar, entregue com handoff_submit.'
 
 export type Broadcast = (message: ServerMessage) => void
@@ -70,7 +72,7 @@ export class OrbitCore {
   private readonly run: Run
   /** Models and effort levels per CLI; null until first loaded. */
   private catalog: Catalog | null = null
-  private readonly clis = new Map<AgentCliForRole, CliStatus>([['claude', blankStatus('claude')], ['codex', blankStatus('codex')]])
+  private readonly clis = new Map<AgentCliForRole, CliStatus>(AGENT_CLIS.map((cli) => [cli, blankStatus(cli)]))
   /** Codex agent → its session file, once found. */
   private readonly codexRollouts = new Map<number, string>()
   /** The last Codex turn already handled per agent, so each turn end is seen once. */
@@ -176,9 +178,22 @@ export class OrbitCore {
     this.broadcast({ type: 'cli.status', clis: [...this.clis.values()] })
   }
 
+  /** Which CLIs are installed and their versions, without asking the network (at startup, for the pickers). */
+  async inspectClis(): Promise<void> {
+    await Promise.all(AGENT_CLIS.map(async (cli) => {
+      if (this.clis.get(cli)!.busy || this.clis.get(cli)!.checkedAt !== null) return
+      try {
+        const found = await inspectCli(this.run, cli)
+        this.setCli(cli, { ...found, checkedAt: Date.now(), ok: found.installed, message: found.installed ? null : 'Não encontrado no PATH do seu shell.' })
+      } catch {
+        // the full check (Ajustes › Agentes e CLIs) says what went wrong
+      }
+    }))
+  }
+
   /** Installed version, install method and latest release of each CLI, plus the catalogs. */
   async checkClis(): Promise<void> {
-    await Promise.all((['claude', 'codex'] as const).map(async (cli) => {
+    await Promise.all(AGENT_CLIS.map(async (cli) => {
       if (this.clis.get(cli)!.busy) return
       this.setCli(cli, { busy: 'checking' })
       try {
@@ -200,7 +215,7 @@ export class OrbitCore {
     const found = await inspectCli(this.run, cli)
     const works = ok && found.installed && found.version !== null
     this.setCli(cli, { ...found, busy: null, ok: works, checkedAt: Date.now(), message: works ? `Atualizado para ${found.version}.` : output || 'A atualização falhou.' })
-    if (cli === 'codex') await this.refreshCatalog()
+    if (cli !== 'claude') await this.refreshCatalog()
   }
 
   // ---- git: a worktree and branch per agent ----
@@ -769,7 +784,7 @@ export class OrbitCore {
   capacity(missionId: string) {
     const mission = this.store.mission(missionId)
     const live = this.liveByAccount()
-    return (mission?.allowedClis ?? ['claude', 'codex']).map((cli) => {
+    return (mission?.allowedClis ?? AGENT_CLIS).map((cli) => {
       const rooms = this.rooms(cli, live)
       return {
         cli,
@@ -854,7 +869,7 @@ export class OrbitCore {
         void this.checkClis()
         return
       case 'cli.update':
-        if (message.cli !== 'claude' && message.cli !== 'codex') throw new Error('CLI desconhecida')
+        if (!AGENT_CLIS.includes(message.cli)) throw new Error('CLI desconhecida')
         void this.updateCli(message.cli)
         return
       case 'account.save':
@@ -1258,7 +1273,7 @@ export class OrbitCore {
     // Out of budget, stopping is what we want: no chasing for a handoff.
     if (!this.owesHandoff(pane) || this.budgetBlocks(pane.missionId)) return null
     if (canBlock) return HANDOFF_NUDGE
-    if (pane.cli === 'codex' && !this.nudged.has(pane.id)) {
+    if (pane.cli !== 'shell' && !AGENT_INFO[pane.cli].hooks && !this.nudged.has(pane.id)) {
       this.nudged.add(pane.id)
       this.panes.submit(pane.id, `[Orbit] ${HANDOFF_NUDGE}`)
       return null
@@ -1472,6 +1487,12 @@ export class OrbitCore {
 
   /** Status from Claude's hooks; for PreToolUse, a refusal when the tool is switched off. */
   hookReport(paneId: number, payload: HookPayload): object | null {
+    // Gemini CLI's hooks speak a dialect of Claude Code's: translated in, answered back in its terms.
+    if (this.store.pane(paneId)?.cli === 'gemini') return toGeminiHook(this.handleHook(paneId, fromGeminiHook(payload)))
+    return this.handleHook(paneId, payload)
+  }
+
+  private handleHook(paneId: number, payload: HookPayload): object | null {
     const stopping = payload.hook_event_name === 'Stop' ? this.store.pane(paneId) : undefined
     if (stopping) {
       const reason = this.turnEnded(stopping, payload.last_assistant_message ?? null, payload.stop_hook_active !== true)
@@ -1554,12 +1575,14 @@ export class OrbitCore {
       if (!allowedHere.includes(request.cli) && allowedHere[0] && request.role !== 'lead') move(allowedHere[0], 'a missão não usa essa CLI')
       const live = this.liveByAccount()
       let choice = chooseAccount(this.rooms(request.cli as AgentCliForRole, live))
-      const other = otherCli(request.cli as AgentCliForRole)
-      if (choice.exhausted && request.role !== 'lead' && allowedHere.includes(other)) {
-        const alt = chooseAccount(this.rooms(other, live))
-        if (!alt.exhausted) {
+      // Used up: the next CLI the mission allows that is installed and has room.
+      if (choice.exhausted && request.role !== 'lead') {
+        for (const other of allowedHere.filter((c) => c !== request.cli)) {
+          const alt = chooseAccount(this.rooms(other, live))
+          if (alt.exhausted) continue
           move(other, `todas as contas do ${CLI_LABEL[request.cli]} estão no limite`)
           choice = alt
+          break
         }
       }
       if (choice.exhausted || !choice.account) {
@@ -1615,8 +1638,9 @@ export class OrbitCore {
       statusCommand: hookCommand(process.execPath, STATUS_SCRIPT),
       apiKeyHelper: account ? this.accountFiles.apiKeyHelper(account) : undefined,
       addDirs: folder ? workspace.folders.filter((f) => f !== folder && (!mission.git || f !== workspace.path)) : workspace.folders.slice(1),
-      rolePrompt: workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, { boss: options.boss ?? lead, children: options.children ?? 0 }, squadRole, taskType)),
+      rolePrompt: commandToolsNote(request.cli) + workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy) + (request.role === 'lead' ? leadRole(mission, { id }, squad, routing) : crewRole(mission, { id }, { boss: options.boss ?? lead, children: options.children ?? 0 }, squadRole, taskType)),
       task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
+      orbitCommand: hookCommand(process.execPath, ORBIT_CLI_SCRIPT),
     })
 
     if (request.cli === 'codex') launch.disabledMcp = codexDisabledMcp(this.store.disabledCatalog())
@@ -1632,7 +1656,7 @@ export class OrbitCore {
         cwd,
         launch,
         branch,
-        hookDriven: request.cli === 'claude',
+        hookDriven: request.cli !== 'shell' && AGENT_INFO[request.cli].hooks,
         accountId: account?.id ?? null,
         env: {
           ...(account ? this.accountFiles.env(account) : {}),
@@ -1641,6 +1665,7 @@ export class OrbitCore {
           ORBIT_PANE_TOKEN: token,
           ORBIT_HOOK_URL: `${this.endpoint}/hooks`,
           ORBIT_STATUS_URL: `${this.endpoint}/status`,
+          ORBIT_MCP_URL: `${this.endpoint}/mcp`,
           // Several agents updating the same CLI install at once can leave it broken.
           DISABLE_AUTOUPDATER: '1',
         },
@@ -1782,7 +1807,7 @@ function validFolders(input: unknown): string[] {
 
 /** CLIs a mission allows; both when none (or nothing valid) was given. */
 function allowedClis(input: unknown): AgentCliForRole[] {
-  const list = (Array.isArray(input) ? input : []).filter((c): c is AgentCliForRole => c === 'claude' || c === 'codex')
+  const list = (Array.isArray(input) ? input : []).filter((c): c is AgentCliForRole => AGENT_CLIS.includes(c))
   return list.length ? [...new Set(list)] : ['claude', 'codex']
 }
 

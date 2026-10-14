@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { ACCOUNT_FULL_PERCENT, ACCOUNT_LIMITS, MODEL_ID, type Account, type AccountInput, type AccountLimits, type AccountStatus, type AgentCliForRole } from '@orbit/protocol'
@@ -9,17 +9,37 @@ import type { Run } from './clis.ts'
 export const BUILTIN_ACCOUNTS: readonly Account[] = [
   { id: 'claude', cli: 'claude', name: 'Claude deste Mac', kind: 'assinatura', builtin: true, baseUrl: null, model: null, keyHint: null, auto: true, createdAt: 0 },
   { id: 'codex', cli: 'codex', name: 'Codex deste Mac', kind: 'assinatura', builtin: true, baseUrl: null, model: null, keyHint: null, auto: true, createdAt: 0 },
+  { id: 'gemini', cli: 'gemini', name: 'Gemini deste Mac', kind: 'assinatura', builtin: true, baseUrl: null, model: null, keyHint: null, auto: true, createdAt: 0 },
+  { id: 'antigravity', cli: 'antigravity', name: 'Antigravity deste Mac', kind: 'assinatura', builtin: true, baseUrl: null, model: null, keyHint: null, auto: true, createdAt: 0 },
 ]
+
+/** CLIs that can have extra accounts besides this Mac's own login. */
+export const MULTI_ACCOUNT: readonly AgentCliForRole[] = ['claude', 'codex', 'gemini']
 
 /** What the person set up in their own config folders, shared with every extra account (logins are not). */
 const SHARED: Record<AgentCliForRole, string[]> = {
   claude: ['settings.json', 'CLAUDE.md', 'agents', 'skills', 'commands', 'plugins', 'output-styles'],
   codex: ['config.toml', 'AGENTS.md', 'prompts', 'skills'],
+  gemini: ['settings.json', 'GEMINI.md', 'extensions', 'skills', 'commands', 'policies', 'trustedFolders.json'],
+  antigravity: [],
 }
 
+/** Where the CLI keeps its config on this Mac (Gemini: the `.gemini` folder under its home). */
 export function userConfigDir(cli: AgentCliForRole): string {
-  return cli === 'claude' ? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude') : process.env.CODEX_HOME ?? join(homedir(), '.codex')
+  switch (cli) {
+    case 'claude':
+      return process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude')
+    case 'codex':
+      return process.env.CODEX_HOME ?? join(homedir(), '.codex')
+    case 'gemini':
+      return join(process.env.GEMINI_CLI_HOME ?? homedir(), '.gemini')
+    case 'antigravity':
+      return join(homedir(), '.gemini', 'antigravity-cli')
+  }
 }
+
+/** Environment variable that moves the CLI's config folder (Gemini's is a home with `.gemini` inside). */
+const CONFIG_ENV: Partial<Record<AgentCliForRole, string>> = { claude: 'CLAUDE_CONFIG_DIR', codex: 'CODEX_HOME', gemini: 'GEMINI_CLI_HOME' }
 
 export function blankAccountStatus(accountId: string): AccountStatus {
   return { accountId, loggedIn: null, method: null, email: null, plan: null, checkedAt: null, busy: null, loginPaneId: null, message: null }
@@ -27,7 +47,7 @@ export function blankAccountStatus(accountId: string): AccountStatus {
 
 /** Validates what the UI sent; `existing` is the account being edited, if any. */
 export function normalizeAccount(input: AccountInput, existing: Account | undefined, id: string): Omit<Account, 'keyHint'> {
-  if (input.cli !== 'claude' && input.cli !== 'codex') throw new Error('CLI desconhecida')
+  if (!MULTI_ACCOUNT.includes(input.cli)) throw new Error(input.cli === 'antigravity' ? 'O Antigravity usa só a conta deste Mac' : 'CLI desconhecida')
   if (input.kind !== 'assinatura' && input.kind !== 'api') throw new Error('Tipo de conta desconhecido')
   if (existing && (existing.cli !== input.cli || existing.kind !== input.kind)) throw new Error('A CLI e o tipo de uma conta não mudam; crie outra')
   const name = (typeof input.name === 'string' ? input.name.trim() : '').slice(0, ACCOUNT_LIMITS.name)
@@ -117,9 +137,12 @@ export class AccountFiles {
     if (!dir) return
     mkdirSync(dir, { recursive: true, mode: 0o700 })
     const source = userConfigDir(account.cli)
+    // Gemini reads `<GEMINI_CLI_HOME>/.gemini`.
+    const target = account.cli === 'gemini' ? join(dir, '.gemini') : dir
+    mkdirSync(target, { recursive: true, mode: 0o700 })
     for (const name of SHARED[account.cli]) {
       const from = join(source, name)
-      const to = join(dir, name)
+      const to = join(target, name)
       if (!existsSync(from) || existsSync(to)) continue
       try {
         symlinkSync(from, to)
@@ -149,7 +172,10 @@ export class AccountFiles {
   env(account: Account): Record<string, string> {
     const env: Record<string, string> = {}
     const dir = this.configDir(account)
-    if (dir) env[account.cli === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'] = dir
+    const variable = CONFIG_ENV[account.cli]
+    if (dir && variable) env[variable] = dir
+    // Gemini takes its key from the environment; it is the agent's own key, as in Codex's login.
+    if (account.cli === 'gemini' && account.kind === 'api' && this.hasKey(account)) env.GEMINI_API_KEY = readFileSync(this.keyPath(account), 'utf8').trim()
     if (account.cli === 'claude' && account.kind === 'api') {
       if (account.baseUrl) env.ANTHROPIC_BASE_URL = account.baseUrl
       if (account.model) {
@@ -179,8 +205,26 @@ export class AccountFiles {
 
   /** Asks the CLI about this account's login. */
   async check(run: Run, account: Account): Promise<Partial<AccountStatus>> {
-    if (account.cli === 'claude' && account.kind === 'api') {
+    if ((account.cli === 'claude' || account.cli === 'gemini') && account.kind === 'api') {
       return { loggedIn: this.hasKey(account), method: account.baseUrl ? `chave · ${new URL(account.baseUrl).host}` : 'chave de API', email: null, plan: null }
+    }
+    if (account.cli === 'gemini') {
+      // Gemini CLI has no status command: its Google login leaves this file behind.
+      const home = this.configDir(account) ?? process.env.GEMINI_CLI_HOME ?? homedir()
+      if (account.builtin && process.env.GEMINI_API_KEY) return { loggedIn: true, method: 'chave de API (ambiente)', email: null, plan: null, message: null }
+      // A Google login is there, but Google moved personal accounts from Gemini CLI to
+      // Antigravity: only company (Code Assist) and Vertex logins still work, and Orbit cannot tell.
+      if (existsSync(join(home, '.gemini', 'oauth_creds.json'))) {
+        return { loggedIn: null, method: 'conta Google', email: null, plan: null, message: 'O login Google do Gemini CLI só vale para contas de empresa ou Vertex; contas pessoais passaram para o Antigravity. Com conta pessoal, use uma chave do Google AI Studio (Nova conta › Gemini › Chave de API).' }
+      }
+      return { loggedIn: false, method: null, message: 'Use uma chave do Google AI Studio (Nova conta › Gemini › Chave de API) ou entre com conta Google de empresa pelo botão Entrar.' }
+    }
+    if (account.cli === 'antigravity') {
+      const result = await run('agy models', 30_000)
+      const text = `${result.stdout}\n${result.stderr}`
+      if (/command not found|not found: agy/i.test(text)) return { loggedIn: false, method: null, message: 'O Antigravity CLI (agy) não está instalado.' }
+      if (/sign in/i.test(text)) return { loggedIn: false, method: null, message: 'Entre pelo botão Entrar (abre o Antigravity CLI).' }
+      return result.code === 0 ? { loggedIn: true, method: 'conta Google', email: null, plan: null, message: null } : { loggedIn: null, message: text.trim().slice(-300) || 'O Antigravity não respondeu.' }
     }
     if (account.cli === 'claude') {
       const result = await run(`${this.envPrefix(account)}claude auth status`, 30_000)
@@ -207,7 +251,7 @@ export class AccountFiles {
 
   /** Signs the CLI out of an extra account before its folder goes away (Claude keeps logins in the Keychain). */
   async logout(run: Run, account: Account): Promise<void> {
-    if (account.builtin || (account.kind === 'api' && account.cli === 'claude')) return
+    if (account.builtin || account.cli !== 'codex' && (account.kind === 'api' || account.cli !== 'claude')) return
     await run(`${this.envPrefix(account)}${account.cli === 'claude' ? 'claude auth logout' : 'codex logout'}`, 30_000)
   }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { UsageEntry } from '@orbit/protocol'
+import { AGENT_CLIS, type UsageEntry } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { accountLabel, CLI_LABEL, costText, tokensText } from '../orbit/labels.ts'
 import { budgetShare } from './Budget.tsx'
@@ -57,15 +57,15 @@ export function UsagePanel() {
     return map.set(key, g)
   }, new Map<string, { name: string; tokens: number; costUsd: number }>()).values()].sort((a, b) => b.tokens - a.tokens)
 
-  // One bar per day of the month, Claude and Codex stacked.
+  // One bar per day of the month, the CLIs stacked.
   const [y, m] = month.split('-').map(Number) as [number, number]
   const days = new Date(y, m, 0).getDate()
+  const used = AGENT_CLIS.filter((cli) => list.some((e) => e.cli === cli))
   const perDay = Array.from({ length: days }, (_, i) => {
     const day = `${month}-${String(i + 1).padStart(2, '0')}`
-    const of = (cli: UsageEntry['cli']) => list.filter((e) => e.day === day && e.cli === cli).reduce((s, e) => s + e.tokens, 0)
-    return { day: i + 1, claude: of('claude'), codex: of('codex') }
+    return { day: i + 1, by: used.map((cli) => ({ cli, tokens: list.filter((e) => e.day === day && e.cli === cli).reduce((s, e) => s + e.tokens, 0) })) }
   })
-  const peak = Math.max(1, ...perDay.map((d) => d.claude + d.codex))
+  const peak = Math.max(1, ...perDay.map((d) => d.by.reduce((s, x) => s + x.tokens, 0)))
 
   const budgets = missions.filter((x) => x.status === 'active' && x.budget)
 
@@ -105,13 +105,12 @@ export function UsagePanel() {
 
           <div className="usage__chart" role="img" aria-label={`Tokens por dia em ${monthName(month)}`}>
             {perDay.map((d) => (
-              <div key={d.day} className="usage__day" title={`dia ${d.day}: ${tokensText(d.claude)} Claude, ${tokensText(d.codex)} Codex`}>
-                <span className="usage__bar usage__bar--codex" style={{ height: `${(d.codex / peak) * 100}%` }} />
-                <span className="usage__bar usage__bar--claude" style={{ height: `${(d.claude / peak) * 100}%` }} />
+              <div key={d.day} className="usage__day" title={`dia ${d.day}: ${d.by.map((x) => `${tokensText(x.tokens)} ${CLI_LABEL[x.cli]}`).join(', ')}`}>
+                {d.by.map((x) => <span key={x.cli} className={`usage__bar usage__bar--${x.cli}`} style={{ height: `${(x.tokens / peak) * 100}%` }} />)}
               </div>
             ))}
           </div>
-          <p className="usage__legend muted"><span className="usage__swatch usage__bar--claude" /> Claude <span className="usage__swatch usage__bar--codex" /> Codex</p>
+          <p className="usage__legend muted">{used.map((cli) => <span key={cli}><span className={`usage__swatch usage__bar--${cli}`} /> {CLI_LABEL[cli]} </span>)}</p>
 
           <div className="segmented" role="group" aria-label="Agrupar por">
             {GROUPS.map(([key, name]) => <button key={key} type="button" aria-pressed={groupBy === key} onClick={() => setGroupBy(key)}>{name}</button>)}

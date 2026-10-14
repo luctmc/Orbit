@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type UsageEntry, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type OrbitSettings, type RoutingProposal, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
+import { AGENT_CLIS, EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type UsageEntry, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type OrbitSettings, type RoutingProposal, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
 import { BUILTIN_ACCOUNTS, migrateLimits } from './accounts.ts'
 import { DEFAULT_ROUTING, FACTORY_METHODS } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
@@ -61,6 +61,7 @@ export class Store {
     this.state.usageLog ??= []
     for (const template of this.state.templates) template.budget ??= null
     this.state.usageDays ??= []
+    for (const day of this.state.usageDays) for (const cli of AGENT_CLIS) day[cli] ??= 0
     this.state.limits = migrateLimits(this.state.limits ?? [])
     this.state.customAccounts ??= []
     this.state.builtinAuto ??= {}
@@ -117,7 +118,7 @@ export class Store {
     const key = dayKey(at)
     let day = this.state.usageDays.find((d) => d.day === key)
     if (!day) {
-      day = { day: key, claude: 0, codex: 0 }
+      day = { day: key, ...Object.fromEntries(AGENT_CLIS.map((c) => [c, 0])) } as UsageDay
       this.state.usageDays.push(day)
       // A year and a bit is all the activity map shows.
       this.state.usageDays = this.state.usageDays.slice(-400)

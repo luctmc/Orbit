@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { MODEL_ID, ROUTING_LIMITS, type AgentCliForRole, type Routing, type TaskType } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL } from '../orbit/labels.ts'
-import { EffortCycle, ModelInput, SkillsField } from './agentPickers.tsx'
+import { CliSelect, EffortCycle, ModelSelect, SkillsField } from './agentPickers.tsx'
 import { AccountsPanel } from './AccountsPanel.tsx'
 import { ClisPanel } from './ClisPanel.tsx'
 import { SkillsPanel } from './SkillsPanel.tsx'
@@ -10,7 +10,6 @@ import { NoticesPanel } from './NoticesPanel.tsx'
 import { UsagePanel } from './UsagePanel.tsx'
 import { CloseIcon, PlusIcon } from './icons.tsx'
 
-const CLIS: AgentCliForRole[] = ['claude', 'codex']
 
 const blankRow = (): TaskType => ({ id: '', name: '', description: '', cli: 'claude', model: null, effort: 'medium', skills: [], onlySkills: false, method: '', readOnly: false })
 
@@ -25,13 +24,6 @@ function validate(draft: Routing): string | null {
   return null
 }
 
-function CliToggle({ value, onChange, label }: { value: AgentCliForRole; onChange: (cli: AgentCliForRole) => void; label: string }) {
-  return (
-    <div className="segmented" role="group" aria-label={label}>
-      {CLIS.map((cli) => <button key={cli} type="button" aria-pressed={value === cli} onClick={() => onChange(cli)}>{CLI_LABEL[cli]}</button>)}
-    </div>
-  )
-}
 
 /** Settings › "Quem faz cada tarefa": the table an agentic lead uses to staff its helpers. */
 type SettingsTab = 'routing' | 'skills' | 'contas' | 'uso' | 'avisos' | 'clis'
@@ -115,8 +107,8 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
           <fieldset className="routing__lead">
             <legend>Líder padrão das missões agênticas</legend>
             <div className="squads__row">
-              <CliToggle label="Agente do líder" value={draft.lead.cli} onChange={(cli) => edit({ ...draft, lead: { ...draft.lead, cli, model: null } })} />
-              <ModelInput id={`${uid}-lead`} className="routing__model" label="Modelo do líder" cli={draft.lead.cli} value={draft.lead.model} onChange={(model) => edit({ ...draft, lead: { ...draft.lead, model } })} />
+              <CliSelect id={`${uid}-lead-cli`} label="Agente do líder" value={draft.lead.cli} onChange={(cli) => edit({ ...draft, lead: { cli, model: null, effort: null } })} />
+              <ModelSelect id={`${uid}-lead`} className="routing__model" label="Modelo do líder" compact cli={draft.lead.cli} value={draft.lead.model} onChange={(model) => edit({ ...draft, lead: { ...draft.lead, model } })} />
               <EffortCycle label="Líder" cli={draft.lead.cli} model={draft.lead.model} value={draft.lead.effort} onChange={(effort) => edit({ ...draft, lead: { ...draft.lead, effort } })} />
             </div>
           </fieldset>
@@ -154,8 +146,8 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
                         </label>
                       </details>
                     </td>
-                    <td><CliToggle label={`Agente de ${t.name || `tipo ${i + 1}`}`} value={t.cli} onChange={(cli) => patchRow(i, { cli, model: null })} /></td>
-                    <td><ModelInput id={`${uid}-m${i}`} className="routing__model" label={`Modelo de ${t.name || `tipo ${i + 1}`}`} cli={t.cli} value={t.model} onChange={(model) => patchRow(i, { model })} /></td>
+                    <td><CliSelect id={`${uid}-c${i}`} label={`Agente de ${t.name || `tipo ${i + 1}`}`} value={t.cli} onChange={(cli) => patchRow(i, { cli, model: null, effort: null })} /></td>
+                    <td><ModelSelect id={`${uid}-m${i}`} className="routing__model" compact label={`Modelo de ${t.name || `tipo ${i + 1}`}`} cli={t.cli} value={t.model} onChange={(model) => patchRow(i, { model })} /></td>
                     <td><EffortCycle label={t.name || `Tipo ${i + 1}`} cli={t.cli} model={t.model} value={t.effort} onChange={(effort) => patchRow(i, { effort })} /></td>
                     <td>
                       <SkillsField id={`${uid}-s${i}`} cli={t.cli} skills={t.skills} only={t.onlySkills} label={`Skills de ${t.name || `tipo ${i + 1}`}`}

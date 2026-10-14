@@ -114,5 +114,3 @@ export function chooseAccount(rooms: AccountRoom[]): AccountChoice {
   return { account: null, reason: rooms.length ? 'todas as contas estão no limite' : 'nenhuma conta disponível para uso automático', exhausted: true, backAt }
 }
 
-const OTHER: Record<AgentCliForRole, AgentCliForRole> = { claude: 'codex', codex: 'claude' }
-export const otherCli = (cli: AgentCliForRole) => OTHER[cli]

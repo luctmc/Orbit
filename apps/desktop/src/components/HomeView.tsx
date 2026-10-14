@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Mission, Pane, UsageDay, Workspace } from '@orbit/protocol'
+import { AGENT_CLIS, type Mission, type Pane, type UsageDay, type Workspace } from '@orbit/protocol'
 import { useOrbit } from '../orbit/context.tsx'
 import { CLI_LABEL, MODE_LABEL, STATUS, tokensText } from '../orbit/labels.ts'
 import { pathText } from '../orbit/labels.ts'
@@ -211,23 +211,24 @@ function ActivityMap({ days }: { days: UsageDay[] }) {
       const d = perDay.get(dayKey(day.getTime()))
       if (d) counted.push(d)
     }
-    const split = { claude: counted.reduce((n, d) => n + d.claude, 0), codex: counted.reduce((n, d) => n + d.codex, 0) }
-    const max = Math.max(1, ...counted.map((d) => d.claude + d.codex))
+    const sum = (d: UsageDay) => AGENT_CLIS.reduce((n, cli) => n + (d[cli] ?? 0), 0)
+    const split = AGENT_CLIS.map((cli) => ({ cli, tokens: counted.reduce((n, d) => n + (d[cli] ?? 0), 0) })).filter((x) => x.tokens > 0)
+    const max = Math.max(1, ...counted.map(sum))
     const cells: Array<{ key: string; level: number; label: string }> = []
     const months: Array<{ column: number; label: string }> = []
     const day = new Date(first)
     for (let i = 0; day.getTime() <= today; i++, day.setDate(day.getDate() + 1)) {
       const key = dayKey(day.getTime())
       const d = perDay.get(key)
-      const count = d ? d.claude + d.codex : 0
+      const count = d ? sum(d) : 0
       // Square root, so one heavy day does not wash out the rest.
       const level = count === 0 ? 0 : Math.max(1, Math.min(4, Math.ceil(Math.sqrt(count / max) * 4)))
       const date = day.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
-      const parts = d ? [d.claude && `Claude ${tokensText(d.claude)}`, d.codex && `Codex ${tokensText(d.codex)}`].filter(Boolean).join(', ') : ''
+      const parts = d ? AGENT_CLIS.filter((cli) => d[cli]).map((cli) => `${CLI_LABEL[cli]} ${tokensText(d[cli])}`).join(', ') : ''
       cells.push({ key, level, label: count ? `${date}: ${tokensText(count)} tokens (${parts})` : `${date}: nenhum token` })
       if (day.getDate() === 1) months.push({ column: Math.floor(i / 7) + 1, label: day.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') })
     }
-    return { cells, total: split.claude + split.codex, split, months }
+    return { cells, total: split.reduce((n, x) => n + x.tokens, 0), split, months }
   }, [days])
 
   return (
@@ -236,7 +237,7 @@ function ActivityMap({ days }: { days: UsageDay[] }) {
         <h2 id="home-activity" className="eyebrow">Atividade · 12 meses</h2>
         <span className="muted">
           <strong className="home__total">{tokensText(total)}</strong> tokens
-          {total > 0 && ` · Claude ${tokensText(split.claude)} · Codex ${tokensText(split.codex)}`}
+          {split.map((x) => ` · ${CLI_LABEL[x.cli]} ${tokensText(x.tokens)}`).join('')}
         </span>
       </div>
       <div className="activity">

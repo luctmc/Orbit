@@ -1,4 +1,4 @@
-import { EFFORT_LABEL, type Mission, type MissionGit, type Pane, type Routing, type Squad, type SquadRole, type TaskType } from '@orbit/protocol'
+import { CLI_NAME, EFFORT_LABEL, type AgentCli, type Mission, type MissionGit, type Pane, type Routing, type Squad, type SquadRole, type TaskType } from '@orbit/protocol'
 
 /** Role instructions Orbit gives its agents. They only describe how to use Orbit's tools. */
 
@@ -13,7 +13,7 @@ const BROWSER_NOTE = 'Para ver uma página (a aplicação rodando, por exemplo),
 function routingTable(routing: Routing): string {
   return routing.taskTypes
     .map((t) => {
-      const who = [t.cli === 'claude' ? 'Claude' : 'Codex', t.model, t.effort && `esforço ${EFFORT_LABEL[t.effort]}`].filter(Boolean).join(', ')
+      const who = [CLI_NAME[t.cli], t.model, t.effort && `esforço ${EFFORT_LABEL[t.effort]}`].filter(Boolean).join(', ')
       return `- kind "${t.id}" (${t.name}): ${t.description || 'sem descrição'} → ${who}`
     })
     .join('\n')
@@ -54,7 +54,8 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
   }
 
   if (mission.mode !== 'agentica') return [...base, 'Só abra ajudantes quando o usuário pedir ou quando isso claramente acelerar o trabalho.'].join('\n\n')
-  const clis = mission.allowedClis.map((c) => (c === 'claude' ? 'Claude' : 'Codex')).join(' e ')
+  const names = mission.allowedClis.map((c) => CLI_NAME[c])
+  const clis = names.length > 1 ? `${names.slice(0, -1).join(', ')} e ${names.at(-1)}` : names.join('')
   return [
     ...base,
     `Esta é uma missão agêntica: o usuário descreveu o objetivo e você é o maestro. Os ajudantes podem ser ${clis}, em qualquer das contas do usuário; quem decide CLI, modelo, esforço e conta é o Orbit, pela tabela abaixo e pela folga das contas.`,
@@ -98,6 +99,22 @@ export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, context: Crew
 /** The acceptance criteria a lead gave, appended to the helper's task. */
 export function acceptanceNote(criteria: string[]): string {
   return criteria.length ? `\n\nCritérios de aceite (ao entregar com done, responda a cada um em criteria):\n${criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}` : ''
+}
+
+/**
+ * Told first to agents whose CLI cannot be given Orbit's MCP server per session: the same tools
+ * are the `orbit` command in their terminal.
+ */
+export function commandToolsNote(cli: AgentCli): string {
+  if (cli !== 'antigravity') return ''
+  return [
+    'As ferramentas do Orbit citadas abaixo (handoff_submit, agent_send, agent_spawn, board_update, mission_status…) não estão no seu MCP: elas são o comando `orbit` no seu terminal, e você as usa rodando-o.',
+    '- `orbit` lista as ferramentas e os campos de cada uma.',
+    '- `orbit <ferramenta> \'<json>\'` chama, por exemplo: `orbit handoff_submit \'{"summary":"Feito: …","status":"done","evidence":"npm test: 9 passam"}\'`.',
+    'O resultado volta na saída do comando. Mensagens de outros agentes chegam digitadas no seu terminal, começando por "[Orbit]".',
+    '',
+    '',
+  ].join('\n')
 }
 
 /** Told to every agent of a multi-folder workspace, before its role. Empty for a single folder. */

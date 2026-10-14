@@ -1,4 +1,4 @@
-import { CARD_COLUMN_LABEL, CARD_COLUMNS, type Card, type FolderStatus, type GitSummary, type Mission, type MissionEvent, type Pane, type PrStatus, type Squad, type Workspace } from '@orbit/protocol'
+import { CARD_COLUMN_LABEL, CARD_COLUMNS, CLI_NAME, type Card, type FolderStatus, type GitSummary, type Mission, type MissionEvent, type Pane, type PrStatus, type Squad, type Workspace } from '@orbit/protocol'
 
 export interface ReportInput {
   mission: Mission
@@ -18,7 +18,7 @@ export interface ReportInput {
 }
 
 const MODE = { livre: 'Livre', squad: 'Squad', agentica: 'Agêntica' } as const
-const CLI = { claude: 'Claude', codex: 'Codex', shell: 'Terminal' } as const
+const CLI = CLI_NAME
 
 const tokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi` : n >= 1e3 ? `${Math.round(n / 1e3).toLocaleString('pt-BR')} mil` : String(n))
 const when = (at: number) => new Date(at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })

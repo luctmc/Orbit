@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
-import { BROWSER_KEYS, BROWSER_VIEWPORT, CARD_COLUMNS, CARD_LIMITS, EFFORTS, MODEL_ID, type CardColumn, type Effort, type HandoffStatus, type Pane } from '@orbit/protocol'
+import { AGENT_CLIS, BROWSER_KEYS, type AgentCliForRole, BROWSER_VIEWPORT, CARD_COLUMNS, CARD_LIMITS, EFFORTS, MODEL_ID, type CardColumn, type Effort, type HandoffStatus, type Pane } from '@orbit/protocol'
 import type { OrbitCore } from './core.ts'
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
@@ -41,7 +41,7 @@ const agentView = (p: Pane) => ({
 
 const ACCEPT = z.array(z.string().min(1).max(300)).max(8).optional().describe('Critérios de aceite: o que precisa ser verdade para a entrega valer. O ajudante só entrega done respondendo a cada um')
 
-type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: 'claude' | 'codex'; model?: string; effort?: Effort; accept?: string[]; folder?: string }
+type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: AgentCliForRole; model?: string; effort?: Effort; accept?: string[]; folder?: string }
 
 /** In a workspace with several folders, a helper can start in the one its work is in. */
 function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
@@ -102,7 +102,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       title: z.string().max(120).optional().describe('Função curta do ajudante, ex.: "Mapear leituras do token" (padrão: nome do papel ou do tipo)'),
       task: z.string().min(1).max(20000).describe('A tarefa completa e autocontida: contexto, arquivos, o que entregar, como verificar e o que não tocar'),
       ...roleField,
-      agent: z.enum(['claude', 'codex']).optional().describe(agentic ? 'Só se o usuário pediu uma CLI específica; sem isso o Orbit escolhe pela tabela' : 'Qual CLI usar sem papel nem tipo (padrão: claude)'),
+      agent: z.enum(AGENT_CLIS as unknown as [AgentCliForRole, ...AgentCliForRole[]]).optional().describe(agentic ? 'Só se o usuário pediu uma CLI específica; sem isso o Orbit escolhe pela tabela' : 'Qual CLI usar sem papel nem tipo (padrão: claude)'),
       model: z.string().regex(MODEL_ID).optional().describe('Só se o usuário pediu um modelo específico'),
       effort: z.enum(EFFORTS as [Effort, ...Effort[]]).optional().describe('Só se o usuário pediu. Claude: low…max; Codex: depende do modelo (low a ultra)'),
       accept: ACCEPT,
@@ -195,14 +195,14 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       description: 'Propõe ao usuário mudar uma linha da tabela "quem faz cada tarefa" (CLI, modelo, esforço, como fazer, só leitura), com o motivo, quando a experiência da missão mostrar que outra escolha seria melhor. O usuário aceita ou recusa nos Ajustes, e a resposta chega no seu terminal. Não muda nada antes disso.',
       inputSchema: {
         kind: z.enum(kinds.map((t) => t.id) as [string, ...string[]]).describe('A linha da tabela'),
-        agent: z.enum(['claude', 'codex']).optional(),
+        agent: z.enum(AGENT_CLIS as unknown as [AgentCliForRole, ...AgentCliForRole[]]).optional(),
         model: z.union([z.string().regex(MODEL_ID), z.null()]).optional().describe('Modelo, ou null para o padrão da CLI'),
         effort: z.union([z.enum(EFFORTS as [Effort, ...Effort[]]), z.null()]).optional(),
         method: z.string().max(1500).optional().describe('Novo "como fazer" (substitui o atual)'),
         readOnly: z.boolean().optional(),
         reason: z.string().min(1).max(600).describe('O que nesta missão mostrou que a mudança vale a pena'),
       },
-    }, guarded(({ kind, agent, model, effort, method, readOnly, reason }: { kind: string; agent?: 'claude' | 'codex'; model?: string | null; effort?: Effort | null; method?: string; readOnly?: boolean; reason: string }) => {
+    }, guarded(({ kind, agent, model, effort, method, readOnly, reason }: { kind: string; agent?: AgentCliForRole; model?: string | null; effort?: Effort | null; method?: string; readOnly?: boolean; reason: string }) => {
       core.proposeRouting(caller, { kind, change: { cli: agent, model, effort, method, readOnly }, reason })
       return 'Proposta enviada ao usuário. A resposta chega no seu terminal; até lá a tabela não muda.'
     }))
