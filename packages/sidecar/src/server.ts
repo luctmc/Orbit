@@ -1,3 +1,4 @@
+import { createReadStream } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { WebSocketServer, type WebSocket } from 'ws'
@@ -74,7 +75,8 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
 
   let port = options.port
   const http: Server = createServer((req, res) => {
-    handleAgentRequest(core, port, req, res).catch((error) => {
+    const handler = (req.url ?? '').startsWith('/update/') ? handleUpdateRequest(core, port, options.token, req, res) : handleAgentRequest(core, port, req, res)
+    handler.catch((error) => {
       if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain' })
       res.end(error instanceof Error ? error.message : 'erro')
     })
@@ -131,6 +133,33 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
       for (const ws of clients.keys()) ws.terminate()
       await new Promise<void>((resolve) => wss.close(() => http.close(() => resolve())))
     },
+  }
+}
+
+/**
+ * GET /update/latest.json and /update/files/<tag>/<name>, for the app's updater plugin. It sends
+ * the per-run UI token in a header; browsers (any Origin) are refused like on the agent routes.
+ */
+async function handleUpdateRequest(core: OrbitCore, port: number, token: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const host = req.headers.host ?? ''
+  if (req.headers.origin || (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`)) return void res.writeHead(403).end()
+  const given = req.headers['x-orbit-token']
+  if (!tokenMatches(typeof given === 'string' ? given : null, token)) return void res.writeHead(401).end()
+  if (req.method !== 'GET') return void res.writeHead(405, { allow: 'GET' }).end()
+  const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname
+  try {
+    if (path === '/update/latest.json') {
+      const manifest = await core.updateManifest(`http://127.0.0.1:${port}`)
+      if (!manifest) return void res.writeHead(204).end()
+      return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(manifest))
+    }
+    const file = /^\/update\/files\/([^/]+)\/([^/]+)$/.exec(path)
+    if (!file) return void res.writeHead(404).end()
+    const { path: local, size } = await core.updates.file(decodeURIComponent(file[1]!), decodeURIComponent(file[2]!))
+    res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': size })
+    createReadStream(local).pipe(res)
+  } catch (error) {
+    res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' }).end(error instanceof Error ? error.message : String(error))
   }
 }
 

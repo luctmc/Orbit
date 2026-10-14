@@ -10,9 +10,10 @@ import { WorkspaceDialog } from './components/WorkspaceDialog.tsx'
 import { SquadsDialog } from './components/SquadsDialog.tsx'
 import { HomeView } from './components/HomeView.tsx'
 import { RoutingDialog } from './components/RoutingDialog.tsx'
+import { UpdaterProvider, useUpdater } from './orbit/updater.ts'
 import { OrbitMark, PlusIcon } from './components/icons.tsx'
 
-type DialogKind = 'workspace' | 'workspace-edit' | 'mission' | 'agent' | 'squads' | 'routing' | null
+type DialogKind = 'workspace' | 'workspace-edit' | 'mission' | 'agent' | 'squads' | 'routing' | 'about' | null
 
 const BOOT_AT = Date.now()
 
@@ -36,6 +37,7 @@ function remember(key: string, value: unknown): void {
 export function App() {
   const state = useOrbit()
   const client = useOrbitClient()
+  const updater = useUpdater()
   const [workspaceId, setWorkspaceId] = useState<string | null>(() => remembered('workspace', null))
   const [missionId, setMissionId] = useState<string | null>(() => remembered('mission', null))
   const [paneId, setPaneId] = useState<number | null>(null)
@@ -87,8 +89,9 @@ export function App() {
   }
 
   return (
+    <UpdaterProvider value={updater}>
     <div className="app">
-      <TitleBar connection={state.connection} liveAgents={liveAgents} limits={state.limits} accounts={state.accounts} />
+      <TitleBar connection={state.connection} liveAgents={liveAgents} limits={state.limits} accounts={state.accounts} onAbout={() => setDialog('about')} />
       <WorkspaceTabs
         workspaces={workspaces}
         activeId={view === 'mission' ? workspace?.id ?? null : null}
@@ -164,6 +167,8 @@ export function App() {
       {dialog === 'agent' && mission && <AddAgentDialog missionId={mission.id} onClose={() => setDialog(null)} />}
       {dialog === 'squads' && <SquadsDialog onClose={() => setDialog(null)} />}
       {dialog === 'routing' && <RoutingDialog onClose={() => setDialog(null)} />}
+      {dialog === 'about' && <RoutingDialog initialTab="clis" onClose={() => setDialog(null)} />}
     </div>
+    </UpdaterProvider>
   )
 }

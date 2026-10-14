@@ -61,6 +61,11 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Atualizações**: o app procura uma versão nova ao abrir e a cada 6 h (a versão na barra de
+  título vira "0.1.0 → 0.2.0"; o cartão Orbit em Ajustes › Agentes e CLIs instala e reinicia). As
+  releases ficam no repositório privado; o sidecar as lê com o seu `gh` e entrega ao plugin de
+  atualização do Tauri em loopback (com o token da sessão), e o plugin só instala o que estiver
+  assinado com a chave do projeto (a pública está no `tauri.conf.json`).
 - **Arquivos** (painel na missão): **Mudanças** mostra, por pasta do workspace, a branch, o que
   está à frente ou atrás e cada arquivo que difere do último commit (modificado, novo, apagado,
   renomeado, conflito), com linhas a mais e a menos e o agente que editou (pelos hooks de Edit e
@@ -130,5 +135,16 @@ Para cada agente o sidecar escreve em `~/.orbit/panes/<id>/` (modo 0600): `mcp.j
 prompt; texto livre nunca vai direto para a linha de comando. O token do agente só existe no
 ambiente dele (`ORBIT_PANE_TOKEN`) e o auto-update do Claude fica desligado nos agentes, para
 vários processos não atualizarem a mesma instalação ao mesmo tempo.
+
+### Publicar uma versão
+
+```bash
+npm run release -- 0.2.0 --notes "O que mudou"            # build assinado em dist-release/v0.2.0
+npm run release -- 0.2.0 --notes "O que mudou" --publish  # e cria a release no GitHub (gh)
+```
+
+A chave privada fica em `~/.tauri/orbit-updater.key` (fora do repositório). Sem ela não dá para
+assinar versões novas, e os apps já instalados recusam qualquer outra: guarde uma cópia segura.
+Para testar uma versão antes de publicar, abra o app com `ORBIT_UPDATE_DIR=dist-release/v0.2.0`.
 
 Próximos passos: assinatura e notarização do `.app` (com a entitlement de microfone do hardened runtime); build para Macs Intel.

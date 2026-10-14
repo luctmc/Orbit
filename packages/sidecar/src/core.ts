@@ -7,6 +7,7 @@ import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
 import { fileDiff, folderStatus, folderTree, readFile } from './files.ts'
+import { Updates } from './updates.ts'
 import { normalizeRouting } from './routing.ts'
 import { codexHome, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
@@ -64,6 +65,8 @@ export class OrbitCore {
   private readonly loginPanes = new Map<number, string>()
   /** One headless page per mission, shared by its agents and the person. */
   readonly browser: BrowserHost
+  /** New releases of Orbit itself, read with the person's gh login. */
+  readonly updates: Updates
   /** Installed skills, subagents and MCP servers; empty until the first scan. */
   private catalogItems: CatalogItem[] = []
   private catalogScannedAt: number | null = null
@@ -79,6 +82,7 @@ export class OrbitCore {
     this.dataDir = dataDir
     this.store = new Store(dataDir)
     this.accountFiles = new AccountFiles(dataDir)
+    this.updates = new Updates(this.run, join(dataDir, 'updates'))
     this.browser = new BrowserHost(join(dataDir, 'browser'), browser === undefined ? findBrowser() : browser)
     this.browser.on('state', (state) => this.broadcast({ type: 'browser.state', browser: state }))
     this.browser.on('closed', (missionId) => this.broadcast({ type: 'browser.closed', missionId }))
@@ -128,6 +132,7 @@ export class OrbitCore {
       { type: 'cli.status', clis: [...this.clis.values()] },
       { type: 'account.status', statuses: this.statuses() },
       this.skillsMessage(),
+      { type: 'update.status', status: this.updates.status },
       { type: 'browser.engine', name: this.browser.engine?.name ?? null },
       ...this.browser.states().map((browser): ServerMessage => ({ type: 'browser.state', browser })),
     ]
@@ -171,6 +176,17 @@ export class OrbitCore {
     const works = ok && found.installed && found.version !== null
     this.setCli(cli, { ...found, busy: null, ok: works, checkedAt: Date.now(), message: works ? `Atualizado para ${found.version}.` : output || 'A atualização falhou.' })
     if (cli === 'codex') await this.refreshCatalog()
+  }
+
+  // ---- updates ----
+
+  /** The manifest the updater plugin asks for; null = nothing newer published. */
+  async updateManifest(base: string): Promise<Record<string, unknown> | null> {
+    try {
+      return await this.updates.manifest(base)
+    } finally {
+      this.broadcast({ type: 'update.status', status: this.updates.status })
+    }
   }
 
   // ---- files and changes ----

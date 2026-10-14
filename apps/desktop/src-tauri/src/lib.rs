@@ -1,4 +1,5 @@
 mod sidecar;
+mod update;
 
 use sidecar::{Connection, Sidecar};
 use tauri::{Manager, RunEvent};
@@ -15,12 +16,14 @@ async fn orbit_connection(sidecar: tauri::State<'_, Sidecar>) -> Result<Connecti
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(update::Pending::default())
         .setup(|app| {
             let sidecar = Sidecar::start(app.handle())?;
             app.manage(sidecar);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![orbit_connection])
+        .invoke_handler(tauri::generate_handler![orbit_connection, update::orbit_update_check, update::orbit_update_install])
         .build(tauri::generate_context!())
         .expect("falha ao montar o Orbit");
 
