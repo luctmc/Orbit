@@ -82,6 +82,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   const [squadId, setSquadId] = useState<string | null>(null)
   const [lead, setLead] = useState<AgentChoice>(DEFAULT_AGENT)
   const [worktrees, setWorktrees] = useState(false)
+  const [clis, setClis] = useState<Array<'claude' | 'codex'>>(['claude', 'codex'])
   const [error, setError] = useState<string | null>(null)
 
   /** A template fills the whole form; everything stays editable. */
@@ -113,7 +114,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
       if (!title.trim()) return setError('Dê um título para a missão.')
       if (mode === 'squad' && !squadId) return setError('Escolha o squad da missão.')
       if (invalidModel(lead)) return setError('Modelo inválido: use só letras, números, ponto, hífen, barra ou dois-pontos.')
-      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, cards, lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
+      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, cards, allowedClis: clis, lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
       onClose()
     }}>
       {templates.length > 0 && (
@@ -171,6 +172,20 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
         </fieldset>
       )}
       <AgentFields value={lead} onChange={setLead} label={mode === 'livre' ? 'Agente' : 'Líder'} />
+      {mode === 'agentica' && (
+        <fieldset className="field">
+          <legend>O maestro pode usar</legend>
+          <div className="segmented" role="group" aria-label="CLIs dos ajudantes">
+            {(['claude', 'codex'] as const).map((cli) => (
+              <button key={cli} type="button" aria-pressed={clis.includes(cli)}
+                onClick={() => setClis((list) => (list.includes(cli) ? (list.length > 1 ? list.filter((c) => c !== cli) : list) : [...list, cli]))}>
+                {CLI_LABEL[cli]}
+              </button>
+            ))}
+          </div>
+          <p className="note">Para cada atividade o Orbit escolhe a CLI pela tabela, o modelo, o esforço e a conta com mais folga, e troca de CLI quando todas as contas de uma estão no limite.</p>
+        </fieldset>
+      )}
       {mode === 'agentica' && (
         <p className="note">
           O líder recebe o objetivo e abre os ajudantes sozinho, cada um com o agente da tabela{' '}

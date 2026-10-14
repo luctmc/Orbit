@@ -155,6 +155,15 @@ npm test
   no Claude, `default_tools_approval_mode = "approve"` no Codex): só coordenam a missão, e pedir
   permissão a cada retorno travaria agentes em modo manual (ou recusaria tudo no Codex com
   política `never`).
+- **Maestro** (missão agêntica): você escolhe só o líder. Ele orquestra e não executa: o Orbit
+  recusa as ferramentas de edição do líder Claude e reforça a regra a cada mensagem; depois de
+  delegar ele encerra o turno e espera os retornos, e só fecha um ajudante que ainda não entregou
+  com `force`. Para cada atividade o Orbit escolhe a CLI (pela tabela, que vem misturando Claude e
+  Codex; sem `kind` ele classifica sozinho), o modelo, o esforço e a conta: a assinatura com mais
+  folga contando os agentes que já estão nela, para espalhar o trabalho pelas suas contas; se todas
+  as contas de uma CLI estão no limite, passa para a outra (se a missão permitir) e, sem nenhuma,
+  recusa dizendo quando a primeira volta. Cada abertura devolve um recibo (tipo, troca de CLI,
+  conta e motivo). O líder também tem `agent_spawn_many` e `accounts_status`.
 - Missão **agêntica**: o líder recebe o objetivo e as instruções de papel e monta o time sozinho,
   classificando cada atividade na tabela **Quem faz cada tarefa** (Ajustes): cada tipo de tarefa
   define agente, modelo, esforço (`--effort` no Claude, `model_reasoning_effort` no Codex) e

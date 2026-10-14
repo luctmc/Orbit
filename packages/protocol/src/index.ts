@@ -112,6 +112,8 @@ export interface Mission {
   git: MissionGit | null
   /** The schedule that started it by itself, if any. */
   scheduleId: string | null
+  /** CLIs the maestro may give helpers (and fall back to when one is used up). */
+  allowedClis: AgentCliForRole[]
   status: MissionStatus
   createdAt: number
   updatedAt: number
@@ -512,7 +514,7 @@ export type ClientMessage =
   /** Rename, replace the folder list or the instructions (new agents get them). */
   | { type: 'workspace.update'; workspaceId: string; name?: string; folders?: string[]; instructions?: string }
   /** `isolation: 'worktrees'` gives every agent its own git worktree and branch. */
-  | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'>; cards?: string[] }
+  | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'>; cards?: string[]; allowedClis?: AgentCliForRole[] }
   /** The mission's report in Markdown (answered to this connection). */
   | { type: 'report.get'; missionId: string }
   /** Writes the report to a .md file the person picked. */

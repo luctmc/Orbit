@@ -80,28 +80,49 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
         ? { kind: z.enum(taskTypes.map((t) => t.id) as [string, ...string[]]).optional().describe(`Tipo de tarefa (${taskTypes.map((t) => `${t.id} = ${t.name}`).join(', ')}). Com tipo, o agente, o modelo e o esforço vêm da tabela "quem faz cada tarefa".`) }
         : {}
 
+    const agentic = core.mission(caller.missionId)?.mode === 'agentica'
+    const helperFields = {
+      title: z.string().max(120).optional().describe('Função curta do ajudante, ex.: "Mapear leituras do token" (padrão: nome do papel ou do tipo)'),
+      task: z.string().min(1).max(20000).describe('A tarefa completa e autocontida: contexto, arquivos, o que entregar, como verificar e o que não tocar'),
+      ...roleField,
+      agent: z.enum(['claude', 'codex']).optional().describe(agentic ? 'Só se o usuário pediu uma CLI específica; sem isso o Orbit escolhe pela tabela' : 'Qual CLI usar sem papel nem tipo (padrão: claude)'),
+      model: z.string().regex(MODEL_ID).optional().describe('Só se o usuário pediu um modelo específico'),
+      effort: z.enum(EFFORTS as [Effort, ...Effort[]]).optional().describe('Só se o usuário pediu. Claude: low…max; Codex: depende do modelo (low a ultra)'),
+    }
+    type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: 'claude' | 'codex'; model?: string; effort?: Effort }
+    const open = (h: HelperInput) => {
+      const { pane, receipt } = core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null })
+      return `#${pane.id} ${pane.title}\n${receipt.map((line) => `  ▸ ${line}`).join('\n')}`
+    }
+
     server.registerTool('agent_spawn', {
-      description: 'Abre um ajudante num terminal visível ao usuário, na mesma pasta, já com a tarefa. A tarefa deve ser autocontida: contexto, arquivos, o que entregar e como verificar. O ajudante devolve o resultado com handoff_submit e ele chega a você como "[Orbit] Retorno de #N".',
-      inputSchema: {
-        title: z.string().max(120).optional().describe('Função curta do ajudante, ex.: "Mapear leituras do token" (padrão: nome do papel)'),
-        task: z.string().min(1).max(20000).describe('A tarefa completa para o ajudante'),
-        ...roleField,
-        agent: z.enum(['claude', 'codex']).optional().describe('Qual CLI usar sem papel nem tipo (padrão: claude)'),
-        model: z.string().regex(MODEL_ID).optional().describe('Modelo sem papel nem tipo, ex.: claude-sonnet-5-5'),
-        effort: z.enum(EFFORTS as [Effort, ...Effort[]]).optional().describe('Esforço sem papel nem tipo. Claude: low, medium, high, xhigh, max. Codex: depende do modelo (low a ultra).'),
-      },
-    }, guarded(({ title, task, role, kind, agent, model, effort }: { title?: string; task: string; role?: string; kind?: string; agent?: 'claude' | 'codex'; model?: string; effort?: Effort }) => {
-      const pane = core.spawnHelper(caller, { title: title ?? '', task, cli: agent ?? 'claude', model: model ?? null, effort: effort ?? null, squadRoleId: role ?? null, taskTypeId: kind ?? null })
-      const what = pane.squadRole ?? pane.taskType ?? 'Ajudante'
-      const how = [pane.model, pane.effort && `esforço ${pane.effort}`].filter(Boolean).join(', ')
-      return `${what} #${pane.id} aberto (${pane.title}${how ? `; ${how}` : ''}). Ele vai mandar o retorno quando terminar.`
+      description: 'Abre um ajudante num terminal visível ao usuário, já com a tarefa. O Orbit escolhe a CLI (Claude ou Codex), o modelo, o esforço e a conta com mais folga pelo tipo da tarefa, e devolve um recibo dizendo o que escolheu e por quê. O ajudante entrega com handoff_submit, e o retorno chega sozinho ao seu terminal como "[Orbit] Retorno de #N": depois de delegar, encerre o seu turno e espere.',
+      inputSchema: helperFields,
+    }, guarded((h: HelperInput) => `Aberto:\n${open(h)}\n\nAgora encerre o turno: o retorno chega sozinho.`))
+
+    server.registerTool('agent_spawn_many', {
+      description: 'Abre vários ajudantes de uma vez (até 8), para atividades independentes que podem andar em paralelo. Mesmo funcionamento de agent_spawn para cada um.',
+      inputSchema: { helpers: z.array(z.object(helperFields)).min(1).max(8) },
+    }, guarded(({ helpers }: { helpers: HelperInput[] }) => {
+      const lines = helpers.map((h, i) => {
+        try {
+          return open(h)
+        } catch (error) {
+          return `${i + 1}. não abriu (${h.title ?? h.task.slice(0, 40)}): ${error instanceof Error ? error.message : String(error)}`
+        }
+      })
+      return `Abertos:\n${lines.join('\n')}\n\nAgora encerre o turno: os retornos chegam sozinhos.`
     }))
 
+    server.registerTool('accounts_status', {
+      description: 'Contas do Claude e do Codex que esta missão pode usar: quanto do limite cada uma já usou, quantos agentes estão nela agora e se dá para abrir mais. O Orbit já distribui sozinho; use para explicar ao usuário ou decidir se vale abrir agora.',
+    }, guarded(() => core.capacity(caller.missionId)))
+
     server.registerTool('agent_close', {
-      description: 'Fecha um ajudante da missão (encerra o processo e tira o terminal da tela). Use depois de integrar o retorno dele, ou se ele travou.',
-      inputSchema: { agent: z.number().int().describe('Número do ajudante') },
-    }, guarded(({ agent }: { agent: number }) => {
-      core.closeHelper(caller, agent)
+      description: 'Fecha um ajudante (encerra o processo e tira o terminal da tela) depois que você integrou o retorno dele. Não fecha quem ainda não entregou, a menos que force seja true (ajudante realmente travado).',
+      inputSchema: { agent: z.number().int().describe('Número do ajudante'), force: z.boolean().optional().describe('Fechar mesmo sem retorno (só se travou)') },
+    }, guarded(({ agent, force }: { agent: number; force?: boolean }) => {
+      core.closeHelper(caller, agent, force === true)
       return `Ajudante #${agent} fechado.`
     }))
 

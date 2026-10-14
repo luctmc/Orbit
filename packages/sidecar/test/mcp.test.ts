@@ -49,7 +49,7 @@ test('lead and helper coordinate through MCP, handoffs and hooks', async () => {
     clients.push(leadMcp, crewMcp)
 
     const leadTools = (await leadMcp.listTools()).tools.map((t) => t.name).sort()
-    assert.deepEqual(leadTools, ['agent_close', 'agent_list', 'agent_read', 'agent_send', 'agent_spawn', 'board_add', 'board_list', 'board_update', 'browser_click', 'browser_console', 'browser_key', 'browser_open', 'browser_screenshot', 'browser_scroll', 'browser_text', 'browser_type', 'handoff_list', 'mission_status', 'whoami'])
+    assert.deepEqual(leadTools, ['accounts_status', 'agent_close', 'agent_list', 'agent_read', 'agent_send', 'agent_spawn', 'agent_spawn_many', 'board_add', 'board_list', 'board_update', 'browser_click', 'browser_console', 'browser_key', 'browser_open', 'browser_screenshot', 'browser_scroll', 'browser_text', 'browser_type', 'handoff_list', 'mission_status', 'whoami'])
     const crewTools = (await crewMcp.listTools()).tools.map((t) => t.name).sort()
     assert.ok(crewTools.includes('handoff_submit') && !crewTools.includes('agent_spawn'))
 

@@ -92,7 +92,7 @@ test('a squad mission briefs the lead with the script and opens helpers by role'
     assert.deepEqual((spawn.inputSchema.properties as Record<string, { enum?: string[] }>).role?.enum, ['batedor', 'construtor', 'revisor'])
 
     const result = await mcp.callTool({ name: 'agent_spawn', arguments: { role: 'revisor', task: 'Revise src/login.ts' } })
-    assert.match((result.content as Array<{ text: string }>)[0]!.text, /^Revisor #\d+ aberto/)
+    assert.match((result.content as Array<{ text: string }>)[0]!.text, /^Aberto:\n#\d+ Revisor\n/)
     const { pane: reviewer } = await ui.next('pane.updated', (m) => m.pane.squadRole === 'Revisor')
     assert.equal(reviewer.title, 'Revisor')
     assert.equal(reviewer.model, 'claude-opus-5-5', 'the role decides the model')
