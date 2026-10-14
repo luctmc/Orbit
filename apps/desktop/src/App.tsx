@@ -11,6 +11,7 @@ import { SquadsDialog } from './components/SquadsDialog.tsx'
 import { HomeView } from './components/HomeView.tsx'
 import { RoutingDialog } from './components/RoutingDialog.tsx'
 import { UpdaterProvider, useUpdater } from './orbit/updater.ts'
+import { useNotifications } from './orbit/notify.ts'
 import { OrbitMark, PlusIcon } from './components/icons.tsx'
 
 type DialogKind = 'workspace' | 'workspace-edit' | 'mission' | 'agent' | 'squads' | 'routing' | 'about' | null
@@ -87,6 +88,14 @@ export function App() {
     setPaneId(null)
     setView('mission')
   }
+
+  // Notifications, the Dock badge, and opening the agent a notification was about.
+  useNotifications((targetMission, targetPane) => {
+    const found = state.missions.find((m) => m.id === targetMission)
+    if (!found) return
+    openMission(found)
+    setPaneId(targetPane)
+  })
 
   return (
     <UpdaterProvider value={updater}>

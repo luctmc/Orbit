@@ -6,6 +6,7 @@ import { EffortCycle, ModelInput, SkillsField } from './agentPickers.tsx'
 import { AccountsPanel } from './AccountsPanel.tsx'
 import { ClisPanel } from './ClisPanel.tsx'
 import { SkillsPanel } from './SkillsPanel.tsx'
+import { NoticesPanel } from './NoticesPanel.tsx'
 import { CloseIcon, PlusIcon } from './icons.tsx'
 
 const CLIS: AgentCliForRole[] = ['claude', 'codex']
@@ -32,8 +33,8 @@ function CliToggle({ value, onChange, label }: { value: AgentCliForRole; onChang
 }
 
 /** Settings › "Quem faz cada tarefa": the table an agentic lead uses to staff its helpers. */
-type SettingsTab = 'routing' | 'skills' | 'contas' | 'clis'
-const TAB_TITLE: Record<SettingsTab, string> = { routing: 'Quem faz cada tarefa', skills: 'Skills e MCP', contas: 'Contas', clis: 'Agentes e CLIs' }
+type SettingsTab = 'routing' | 'skills' | 'contas' | 'avisos' | 'clis'
+const TAB_TITLE: Record<SettingsTab, string> = { routing: 'Quem faz cada tarefa', skills: 'Skills e MCP', contas: 'Contas', avisos: 'Avisos', clis: 'Agentes e CLIs' }
 
 export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: () => void; initialTab?: SettingsTab }) {
   const [tab, setTab] = useState<SettingsTab>(initialTab)
@@ -85,6 +86,7 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
           <button type="button" aria-pressed={tab === 'routing'} onClick={() => setTab('routing')}>Quem faz cada tarefa</button>
           <button type="button" aria-pressed={tab === 'skills'} onClick={() => setTab('skills')}>Skills e MCP</button>
           <button type="button" aria-pressed={tab === 'contas'} onClick={() => setTab('contas')}>Contas</button>
+          <button type="button" aria-pressed={tab === 'avisos'} onClick={() => setTab('avisos')}>Avisos</button>
           <button type="button" aria-pressed={tab === 'clis'} onClick={() => setTab('clis')}>Agentes e CLIs</button>
         </div>
         <button type="button" className="icon-btn" aria-label="Fechar" onClick={onClose}><CloseIcon /></button>
@@ -96,6 +98,8 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
         <AccountsPanel />
       ) : tab === 'skills' ? (
         <SkillsPanel />
+      ) : tab === 'avisos' ? (
+        <NoticesPanel />
       ) : !draft ? (
         <div className="dialog__body"><p className="muted">Carregando a tabela…</p></div>
       ) : (
