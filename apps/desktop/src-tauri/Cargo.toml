@@ -1,6 +1,6 @@
 [package]
 name = "orbit-desktop"
-version = "0.2.3"
+version = "0.2.4"
 description = "Orbit — orquestrador de agentes de código"
 edition = "2021"
 publish = false
