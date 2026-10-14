@@ -6,6 +6,7 @@ import { ACCOUNT_LIMITS, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, T
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
+import { accountRooms, chooseAccount, classifyTask, otherCli, type AccountRoom } from './maestro.ts'
 import { dueSchedules, nextRun, normalizeWhen } from './schedules.ts'
 import { fileDiff, folderStatus, folderTree, readFile } from './files.ts'
 import { Updates } from './updates.ts'
@@ -19,7 +20,7 @@ import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
 import { statusFromHook, type HookPayload } from './hooks.ts'
 import { PaneManager, type PaneSnapshot } from './panes.ts'
-import { crewRole, instructionsNote, leadRole, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
+import { crewRole, instructionsNote, leadRole, MAESTRO_RULE, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
 import { normalizeSquad } from './squads.ts'
 import { Store } from './store.ts'
 
@@ -277,6 +278,7 @@ export class OrbitCore {
       objective: (message.objective ?? '').trim().slice(0, 4000),
       mode: message.mode,
       squadId: squad?.id ?? null,
+      allowedClis: allowedClis(message.allowedClis),
     }, git, schedule?.id ?? null)
     this.broadcast({ type: 'mission.updated', mission })
     const opening = squad ? `Squad ${squad.name}. ${mission.objective || 'Sem objetivo descrito.'}` : mission.objective || 'Sem objetivo descrito.'
@@ -680,6 +682,40 @@ export class OrbitCore {
     this.setAccountStatus(accountId, { busy: 'login', loginPaneId: id, message: null })
   }
 
+  /** Agents running now, per account (every mission counts: they share the account's limits). */
+  private liveByAccount(): Map<string, number> {
+    const live = new Map<string, number>()
+    for (const pane of this.store.snapshot().panes) {
+      if (pane.accountId && this.panes.isAlive(pane.id)) live.set(pane.accountId, (live.get(pane.accountId) ?? 0) + 1)
+    }
+    return live
+  }
+
+  private rooms(cli: AgentCliForRole, live = this.liveByAccount()): AccountRoom[] {
+    return accountRooms(cli, this.store.accounts(), this.statuses(), this.store.limits(), live)
+  }
+
+  /** What the lead sees with accounts_status: every usable account of each CLI the mission allows. */
+  capacity(missionId: string) {
+    const mission = this.store.mission(missionId)
+    const live = this.liveByAccount()
+    return (mission?.allowedClis ?? ['claude', 'codex']).map((cli) => {
+      const rooms = this.rooms(cli, live)
+      return {
+        cli,
+        accounts: rooms.map((r) => ({
+          account: r.account.builtin ? `${CLI_LABEL[cli]} deste Mac` : r.account.name,
+          kind: r.account.kind,
+          used: r.used === null ? 'sem leitura ainda' : `${Math.round(r.used)}%`,
+          agentsNow: r.live,
+          full: r.full,
+          backIn: r.resetsAt ? untilText(r.resetsAt) : null,
+        })),
+        canOpen: !chooseAccount(rooms).exhausted,
+      }
+    })
+  }
+
   /** The account a new agent runs as: the one asked for, or the one with the most room left. */
   private accountFor(cli: AgentCli, requested: string | null | undefined): Account | null {
     if (cli === 'shell') return null
@@ -935,8 +971,25 @@ export class OrbitCore {
     return squadId ? this.store.squad(squadId) : undefined
   }
 
-  spawnHelper(caller: Pane, input: { title: string; task: string; cli: AgentCli; model: string | null; effort?: Effort | null; squadRoleId?: string | null; taskTypeId?: string | null }): Pane {
-    return this.spawn({ missionId: caller.missionId, role: 'crew', ...input })
+  /**
+   * A helper opened by an agent. In agentic missions an activity without a role, type or explicit
+   * CLI is classified by the maestro; the receipt says what was chosen and why.
+   */
+  spawnHelper(caller: Pane, input: { title: string; task: string; cli?: AgentCli; model: string | null; effort?: Effort | null; squadRoleId?: string | null; taskTypeId?: string | null }): { pane: Pane; receipt: string[] } {
+    const receipt: string[] = []
+    const mission = this.store.mission(caller.missionId)
+    let taskTypeId = input.taskTypeId ?? null
+    if (mission?.mode === 'agentica' && !taskTypeId && !input.squadRoleId && !input.cli && !input.model) {
+      const { type, via } = classifyTask(`${input.title}\n${input.task}`, this.store.routing().taskTypes)
+      taskTypeId = type.id
+      receipt.push(`tipo: ${type.name} (o maestro classificou; ${via})`)
+    } else if (taskTypeId) {
+      const type = this.store.routing().taskTypes.find((t) => t.id === taskTypeId)
+      if (type) receipt.push(`tipo: ${type.name} (escolhido pelo líder)`)
+    }
+    const pane = this.spawn({ missionId: caller.missionId, role: 'crew', ...input, cli: input.cli ?? 'claude', taskTypeId }, { receipt })
+    receipt.push(`abriu: ${[CLI_LABEL[pane.cli], pane.model ?? 'modelo padrão', pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}`)
+    return { pane, receipt }
   }
 
   /** Sends text to another agent of the same mission, as if typed by a person. */
@@ -946,8 +999,11 @@ export class OrbitCore {
   }
 
   /** The lead closes a helper of its own mission (kills the process, removes the pane). */
-  closeHelper(caller: Pane, targetId: number): void {
+  closeHelper(caller: Pane, targetId: number, force = false): void {
     const target = this.sameMission(caller, targetId)
+    if (!force && target.deliveredAt === null && this.panes.isAlive(target.id) && target.cli !== 'shell') {
+      throw new Error(`#${targetId} ainda não entregou o retorno. Espere: ele chega sozinho no seu terminal. Se o ajudante travou de verdade, confira com agent_read e feche com force: true.`)
+    }
     if (target.role === 'lead') throw new Error('O líder não pode ser fechado por aqui')
     this.closePane(target.id)
   }
@@ -1101,6 +1157,14 @@ export class OrbitCore {
     const pane = this.store.pane(paneId)
     if (pane) this.noteEdit(pane, payload)
     if (typeof payload.session_id === 'string' && SESSION_ID.test(payload.session_id)) this.panes.setSession(paneId, payload.session_id)
+    // The lead of an agentic or squad mission orchestrates: reminded at every message, kept from editing.
+    const mission = pane && pane.role === 'lead' ? this.store.mission(pane.missionId) : undefined
+    if (mission && (mission.mode === 'agentica' || mission.mode === 'squad')) {
+      if (payload.hook_event_name === 'UserPromptSubmit') return { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: MAESTRO_RULE } }
+      if (payload.hook_event_name === 'PreToolUse' && ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(payload.tool_name ?? '')) {
+        return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'Você é o maestro desta missão e não edita arquivos. Abra um ajudante com agent_spawn para essa mudança.' } }
+      }
+    }
     const reason = gateTool(payload, new Set(this.store.disabledCatalog()), this.skillPolicies.get(paneId))
     return reason ? { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } } : null
   }
@@ -1116,7 +1180,8 @@ export class OrbitCore {
   // ---- internals ----
 
   /** `resume` continues that conversation of the CLI; `opened` replaces the flow's "Agente #N aberto". */
-  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string } } = {}): Pane {
+  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[] } = {}): Pane {
+    const receipt = options.receipt ?? []
     const mission = this.store.mission(input.missionId)
     if (!mission || mission.status !== 'active') throw new Error('Missão inexistente ou arquivada')
     const workspace = this.store.workspace(mission.workspaceId)
@@ -1141,13 +1206,44 @@ export class OrbitCore {
         : { ...input }
     if (!CLIS.includes(request.cli)) throw new Error(`Agente inválido: ${request.cli}`)
     if (request.effort && !EFFORTS.includes(request.effort)) throw new Error(`Esforço inválido: ${request.effort}`)
+
+    // The maestro's seat: the CLI the mission allows and the account with the most room, moving to
+    // the other CLI when every account of the first one is used up.
+    let chosen: Account | null = null
+    if (request.cli !== 'shell' && !request.accountId) {
+      const allowedHere = mission.allowedClis
+      const move = (to: AgentCliForRole, why: string) => {
+        receipt.push(`${CLI_LABEL[request.cli]} → ${CLI_LABEL[to]}: ${why}`)
+        request.cli = to
+        request.model = null
+        // Keep the effort only if the other CLI's default model takes it.
+        if (request.effort && !effortsFor(this.catalog, to, null).includes(request.effort)) request.effort = null
+      }
+      if (!allowedHere.includes(request.cli) && allowedHere[0] && request.role !== 'lead') move(allowedHere[0], 'a missão não usa essa CLI')
+      const live = this.liveByAccount()
+      let choice = chooseAccount(this.rooms(request.cli as AgentCliForRole, live))
+      const other = otherCli(request.cli as AgentCliForRole)
+      if (choice.exhausted && request.role !== 'lead' && allowedHere.includes(other)) {
+        const alt = chooseAccount(this.rooms(other, live))
+        if (!alt.exhausted) {
+          move(other, `todas as contas do ${CLI_LABEL[request.cli]} estão no limite`)
+          choice = alt
+        }
+      }
+      if (choice.exhausted || !choice.account) {
+        const back = choice.backAt ? ` A primeira volta ${untilText(choice.backAt)}.` : ''
+        throw new Error(`Não há conta do ${CLI_LABEL[request.cli]} com folga para abrir o agente: ${choice.reason}.${back}`)
+      }
+      chosen = choice.account
+      receipt.push(`conta: ${choice.reason}`)
+    }
     // Each model accepts its own levels (Codex lists them; Claude takes low…max).
     const allowed = effortsFor(this.catalog, request.cli, request.model)
     if (request.effort && request.cli !== 'shell' && !allowed.includes(request.effort)) {
       throw new Error(`Esforço "${EFFORT_LABEL[request.effort]}" não vale para ${request.model ?? `o modelo padrão do ${CLI_LABEL[request.cli]}`}; use ${allowed.map((e) => EFFORT_LABEL[e]).join(', ')}`)
     }
 
-    const account = this.accountFor(request.cli, request.accountId)
+    const account = chosen ?? this.accountFor(request.cli, request.accountId)
     if (account && !request.model && account.model) request.model = account.model
     if (account) this.accountFiles.prepare(account)
 
@@ -1318,6 +1414,18 @@ function validFolders(input: unknown): string[] {
     if (!folders.includes(path)) folders.push(path)
   }
   return folders
+}
+
+/** CLIs a mission allows; both when none (or nothing valid) was given. */
+function allowedClis(input: unknown): AgentCliForRole[] {
+  const list = (Array.isArray(input) ? input : []).filter((c): c is AgentCliForRole => c === 'claude' || c === 'codex')
+  return list.length ? [...new Set(list)] : ['claude', 'codex']
+}
+
+/** "em 2 h 10 min" — when a used-up account frees up. */
+function untilText(at: number): string {
+  const minutes = Math.max(1, Math.round((at - Date.now()) / 60_000))
+  return minutes < 60 ? `em ${minutes} min` : `em ${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${minutes % 60} min` : ''}`
 }
 
 function safe<T>(fn: () => T, fallback: T): T {

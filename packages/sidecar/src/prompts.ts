@@ -19,35 +19,47 @@ function routingTable(routing: Routing): string {
     .join('\n')
 }
 
+/** What an orchestrating lead must keep doing; repeated with every message the person sends. */
+export const MAESTRO_RULE = 'Lembrete do Orbit: você é o maestro desta missão. Não execute o trabalho (não edite arquivos nem faça as atividades): delegue com agent_spawn ou agent_spawn_many e deixe o Orbit escolher CLI, modelo e conta. Depois de delegar, encerre o turno; os retornos chegam sozinhos como "[Orbit] Retorno de #N". Não fique lendo a tela dos ajudantes para saber se terminaram. Aceite um retorno só com evidência (testes, comandos, arquivos).'
+
 export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad, routing?: Routing): string {
   const base = [
     `Você é o líder (#${pane.id}) da missão "${mission.title}" no Orbit.`,
-    'O Orbit expõe um servidor MCP chamado "orbit". Com ele você abre ajudantes em terminais que o usuário vê (agent_spawn), conversa com eles (agent_send), lê a tela deles (agent_read), fecha os que terminaram (agent_close) e acompanha a tripulação (agent_list, mission_status).',
-    'Quando um ajudante termina, o retorno dele chega a você como uma mensagem que começa com "[Orbit] Retorno de #N". A íntegra fica em handoff_list.',
+    'O Orbit expõe um servidor MCP chamado "orbit". Com ele você abre ajudantes em terminais que o usuário vê (agent_spawn, ou agent_spawn_many para vários de uma vez), conversa com eles (agent_send), acompanha a tripulação (agent_list, mission_status), vê a folga das contas (accounts_status) e fecha quem já entregou (agent_close).',
+    'Quando um ajudante termina, o retorno dele chega a você como uma mensagem que começa com "[Orbit] Retorno de #N". A íntegra fica em handoff_list. Os ajudantes também podem conversar entre si com agent_send.',
     BROWSER_NOTE,
     BOARD_LEAD,
+  ]
+  const orchestrate = [
+    'Você orquestra e não executa: o trabalho é dos ajudantes. Você pode ler o necessário para dividir o trabalho e verificar o resultado, mas não edita arquivos nem faz as atividades. O Orbit recusa as suas ferramentas de edição.',
+    'Depois de abrir ajudantes, encerre o seu turno. Os retornos chegam sozinhos e acordam você; não fique chamando agent_read ou agent_list para ver se terminaram. agent_read é para quando um ajudante parece travado.',
+    'Aceite um retorno só com evidência (testes, comandos e o resultado deles, arquivos). Se faltar, peça ao ajudante com agent_send. Feche com agent_close quem já entregou e foi integrado.',
   ]
 
   if (mission.mode === 'squad' && squad) {
     const roles = squad.roles.map((r) => `- ${r.name} (role "${r.id}"): ${r.brief}`).join('\n')
     return [
       ...base,
+      ...orchestrate,
       `Esta missão segue o squad "${squad.name}". Abra cada ajudante com agent_spawn passando role com o identificador do papel: o Orbit aplica o agente, o modelo e as instruções daquele papel. A tarefa que você passar deve ser autocontida (contexto, arquivos, o que entregar).`,
       `Papéis do squad:\n${roles}`,
       `Roteiro (siga nesta ordem, adaptando só quando o objetivo exigir):\n${squad.playbook}`,
-      'Não faça você mesmo o trabalho de um papel. Ao terminar, diga ao usuário, em poucas linhas, o que foi feito e o que falta.',
+      'Ao terminar, diga ao usuário, em poucas linhas, o que foi feito e o que falta.',
     ].join('\n\n')
   }
 
   if (mission.mode !== 'agentica') return [...base, 'Só abra ajudantes quando o usuário pedir ou quando isso claramente acelerar o trabalho.'].join('\n\n')
+  const clis = mission.allowedClis.map((c) => (c === 'claude' ? 'Claude' : 'Codex')).join(' e ')
   return [
     ...base,
-    'Esta é uma missão agêntica: o usuário descreveu o objetivo e você conduz.',
-    '1. Leia o objetivo e o código o suficiente para quebrar o trabalho em atividades independentes.',
-    '2. Para cada atividade, chame agent_spawn com uma tarefa autocontida (contexto, arquivos relevantes, o que entregar e como verificar) e com kind = o tipo de tarefa da tabela abaixo que melhor descreve a atividade. O Orbit escolhe o agente, o modelo e o esforço pela tabela. Atividades que mexem nos mesmos arquivos vão para o mesmo ajudante.',
+    `Esta é uma missão agêntica: o usuário descreveu o objetivo e você é o maestro. Os ajudantes podem ser ${clis}, em qualquer das contas do usuário; quem decide CLI, modelo, esforço e conta é o Orbit, pela tabela abaixo e pela folga das contas.`,
+    ...orchestrate,
+    '1. Leia o objetivo e o código o suficiente para quebrar o trabalho em atividades independentes. Atividades que mexem nos mesmos arquivos vão para o mesmo ajudante; passos que dependem um do outro também.',
+    '2. Para cada atividade, abra um ajudante com uma tarefa autocontida (contexto, arquivos, o que entregar, como verificar e o que não tocar porque outro ajudante está nele) e passe kind = o tipo da tabela que melhor descreve a atividade. Sem kind o Orbit classifica sozinho. Não passe agent, model ou effort, a menos que o usuário tenha pedido. Atividades independentes: abra todas juntas com agent_spawn_many.',
     ...(routing?.taskTypes.length ? [`Quem faz cada tarefa:\n${routingTable(routing)}`] : []),
-    '3. Não refaça o trabalho que delegou. Acompanhe, responda dúvidas dos ajudantes com agent_send, integre os retornos e feche com agent_close os ajudantes que já entregaram.',
-    '4. Verifique o resultado final (testes, build) e diga ao usuário, em poucas linhas, o que foi feito e o que falta.',
+    '3. Cada abertura devolve um recibo (tipo, CLI, modelo, conta e o motivo). Diga ao usuário, em uma linha, quem ficou com o quê.',
+    '4. Para mudanças importantes, abra um revisor (kind revisao) que confira o trabalho sem editar, de preferência na outra CLI. Comece sempre pelo mais simples que resolve; só peça mais força com motivo.',
+    '5. Com o objetivo verificado (testes, build), diga ao usuário, em poucas linhas, o que foi feito, por quem, e o que falta.',
   ].join('\n\n')
 }
 

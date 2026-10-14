@@ -1,8 +1,8 @@
 import { EFFORTS, MODEL_ID, ROUTING_LIMITS, SLUG, type AgentCliForRole, type Effort, type Routing, type TaskType } from '@orbit/protocol'
 import { slugify } from './squads.ts'
 
-const row = (id: string, name: string, description: string, model: string, effort: Effort, skills: string[] = []): TaskType =>
-  ({ id, name, description, cli: 'claude', model, effort, skills, onlySkills: false })
+const row = (id: string, name: string, description: string, model: string | null, effort: Effort, cli: AgentCliForRole = 'claude'): TaskType =>
+  ({ id, name, description, cli, model, effort, skills: [], onlySkills: false })
 
 /** The table Orbit ships with; the user edits a copy in Settings. */
 export const DEFAULT_ROUTING: Routing = {
@@ -10,10 +10,11 @@ export const DEFAULT_ROUTING: Routing = {
   taskTypes: [
     row('bug', 'Correção de bug', 'Algo quebrou: erro, regressão, comportamento errado.', 'claude-sonnet-5-5', 'medium'),
     row('funcionalidade', 'Funcionalidade', 'Comportamento novo: tela, fluxo, endpoint, opção.', 'claude-sonnet-5-5', 'medium'),
-    row('refatoracao', 'Refatoração', 'Mudar a estrutura sem mudar o comportamento.', 'claude-sonnet-5-5', 'medium'),
-    row('testes', 'Testes', 'Escrever ou consertar testes, aumentar cobertura.', 'claude-sonnet-5-5', 'low'),
+    row('refatoracao', 'Refatoração', 'Mudar a estrutura sem mudar o comportamento.', null, 'medium', 'codex'),
+    row('testes', 'Testes', 'Escrever ou consertar testes, aumentar cobertura.', null, 'medium', 'codex'),
     row('investigacao', 'Investigação', 'Descobrir o porquê, medir, auditar. Não edita código.', 'claude-opus-5-5', 'high'),
     row('documentacao', 'Documentação', 'README, comentários, guias e notas de versão.', 'claude-haiku-5-5', 'low'),
+    row('revisao', 'Revisão', 'Conferir o trabalho de outro agente: diff, testes, riscos. Não edita; aponta o que corrigir.', null, 'high', 'codex'),
   ],
 }
 

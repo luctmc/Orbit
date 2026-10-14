@@ -50,7 +50,7 @@ test('an agentic lead routes helpers through the table; the table is saved and r
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
     assert.equal(lead.effort, 'high')
     const leadRole = readFileSync(join(dataDir, 'panes', String(lead.id), 'role.md'), 'utf8')
-    assert.match(leadRole, /kind = o tipo de tarefa/)
+    assert.match(leadRole, /kind = o tipo da tabela/)
     assert.match(leadRole, /kind "testes" \(Testes\).*Codex, gpt-6\.1, esforço alto/)
 
     ui.send({ type: 'pane.input', paneId: lead.id, data: 'echo "TOKEN:$ORBIT_PANE_TOKEN:"\r' })
@@ -63,7 +63,9 @@ test('an agentic lead routes helpers through the table; the table is saved and r
     assert.equal(props.role, undefined, 'no squad, no roles')
 
     const result = await mcp.callTool({ name: 'agent_spawn', arguments: { kind: 'testes', task: 'Cubra o login com testes' } })
-    assert.match((result.content as Array<{ text: string }>)[0]!.text, /^Testes #\d+ aberto \(Testes; gpt-6\.1, esforço high\)/)
+    const receipt = (result.content as Array<{ text: string }>)[0]!.text
+    assert.match(receipt, /^Aberto:\n#\d+ Testes\n  ▸ tipo: Testes \(escolhido pelo líder\)\n  ▸ conta: Codex deste Mac|conta deste Mac/)
+    assert.match(receipt, /▸ abriu: Codex · gpt-6\.1 · esforço alto/)
     const { pane: helper } = await ui.next('pane.updated', (m) => m.pane.taskType === 'Testes')
     assert.deepEqual([helper.cli, helper.model, helper.effort], ['codex', 'gpt-6.1', 'high'])
     await ui.next('pane.data', (m) => m.paneId === helper.id && m.data.includes('FAKE codex gpt-6.1 high'))
@@ -72,7 +74,7 @@ test('an agentic lead routes helpers through the table; the table is saved and r
     assert.match(crewRole, /skills .*: prova-antes/)
 
     ui.send({ type: 'routing.reset' })
-    const { routing: reset } = await ui.next('routing.updated', (m) => m.routing.taskTypes.find((t) => t.id === 'testes')!.cli === 'claude')
+    const { routing: reset } = await ui.next('routing.updated', (m) => m.routing.taskTypes.find((t) => t.id === 'testes')!.model === null)
     assert.deepEqual(reset, DEFAULT_ROUTING)
   } finally {
     await mcp?.close()

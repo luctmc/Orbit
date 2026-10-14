@@ -59,6 +59,7 @@ export class Store {
       mission.usage ??= { ...EMPTY_USAGE }
       mission.git ??= null
       mission.scheduleId ??= null
+      mission.allowedClis ??= ['claude', 'codex']
     }
     // Processes do not survive a sidecar restart.
     for (const pane of this.state.panes) {
@@ -227,10 +228,10 @@ export class Store {
     return this.state.workspaces.find((w) => w.id === id)
   }
 
-  createMission(input: { workspaceId: string; title: string; objective: string; mode: MissionMode; squadId: string | null }, git: (id: string) => Mission['git'] = () => null, scheduleId: string | null = null): Mission {
+  createMission(input: { workspaceId: string; title: string; objective: string; mode: MissionMode; squadId: string | null; allowedClis?: Mission['allowedClis'] }, git: (id: string) => Mission['git'] = () => null, scheduleId: string | null = null): Mission {
     const now = Date.now()
     const id = randomUUID()
-    const mission: Mission = { id, status: 'active', createdAt: now, updatedAt: now, usage: { ...EMPTY_USAGE }, git: git(id), scheduleId, ...input }
+    const mission: Mission = { id, status: 'active', createdAt: now, updatedAt: now, usage: { ...EMPTY_USAGE }, git: git(id), scheduleId, ...input, allowedClis: input.allowedClis?.length ? input.allowedClis : ['claude', 'codex'] }
     this.state.missions.push(mission)
     this.save()
     return { ...mission }
