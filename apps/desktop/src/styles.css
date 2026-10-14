@@ -139,6 +139,13 @@ h1, h2, p { margin: 0; }
 .pane--selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(197 224 75 / 0.12); }
 .pane--waiting { border-color: var(--wait); box-shadow: 0 0 0 3px rgb(255 159 67 / 0.14); }
 .attention { flex: none; padding: 8px 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid #5a3a17; background: #21170c; }
+.routing__options { display: grid; gap: 6px; margin: 4px 0 14px; }
+.count-badge { margin-left: 6px; min-width: 16px; padding: 0 5px; border-radius: 8px; background: var(--accent); color: #0b0b0b; font-size: 10.5px; font-weight: 600; line-height: 16px; display: inline-block; text-align: center; }
+.proposals { border: 1px solid var(--accent-line); background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; }
+.proposals ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.proposal { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.proposal__text { flex: 1 1 320px; min-width: 0; font-size: 13px; }
+.proposal__text .muted { display: block; font-size: 12px; }
 .routing__method { margin-top: 6px; font-size: 12px; }
 .routing__method summary { cursor: pointer; color: var(--muted); }
 .routing__method textarea { width: 100%; margin: 6px 0; font-size: 12px; }

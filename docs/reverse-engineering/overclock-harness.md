@@ -370,8 +370,11 @@ Missão agêntica num Orbit separado. O usuário escolheu só o líder (Claude H
 - Item 32: o recibo de cada abertura (tipo, troca de CLI, conta e folga) fica no fluxo da missão.
 - Item 33: retomar mantém o número do agente e o que ele deve; ao abrir o Orbit, os agentes que rodavam voltam na mesma conversa (opção ligada por padrão), e o Codex retomado volta a ser acompanhado pelo arquivo da sessão dele.
 
+### Fase 4, tabela viva
+
+- Item 34: decisor por modelo. A classificação passou a pontuar as palavras de cada tipo (título com peso maior; `.md` conta como documentação). Sem palavra, ou com dois tipos próximos, o Claude Haiku decide entre os ids da tabela com saída em JSON Schema, rodando sem hooks, MCP, ferramentas nem sessão salva; se falhar, vale a palavra. Medido: cerca de 4 s e US$ 0,001 por decisão. O teste ao vivo mostrou o porquê: "Notas" (escrever NOTAS.md) caía em Testes só porque o texto citava os testes.
+- Item 31: o líder propõe mudar uma linha (`routing_propose`: CLI, modelo, esforço, como fazer, só leitura, com o motivo). A proposta é validada contra a tabela, aparece em Ajustes com selo e aviso, e o usuário aceita ou recusa; a resposta chega no terminal do líder. No Overclock o orquestrador também aplica direto; aqui só o usuário aplica.
+
 ### Ainda abertos
 
-- Item 31: tabela editada pelo agente com proposta. Baixo impacto.
-- Item 34: decisor LLM. A classificação por regra tem se mostrado suficiente nos testes ao vivo; fica para quando errar.
-- Folga das contas do Claude sem agente rodando: o Claude só informa os limites pela status line de uma sessão aberta.
+- Folga das contas do Claude sem sessão aberta: o Claude só informa os limites pela status line de uma sessão. Ler a API de uso exigiria o token OAuth do usuário, o que o Orbit não faz.

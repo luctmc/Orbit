@@ -2,7 +2,7 @@ import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_LIMITS, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
@@ -14,6 +14,7 @@ import { missionReport } from './report.ts'
 import { addWorktree, BRANCH, commitsAhead, dirtyFiles, filesChanged, hasRemote, pushBranch, removeWorktree, repoInfo } from './git.ts'
 import { slugify } from './squads.ts'
 import { normalizeRouting } from './routing.ts'
+import { decideTaskType } from './decider.ts'
 import { codexHome, codexLastTurn, findCodexRolloutById, latestCodexRollout, codexSessionId, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
@@ -860,6 +861,9 @@ export class OrbitCore {
       case 'browser.close':
         void this.browser.close(message.missionId)
         return
+      case 'proposal.decide':
+        this.decideProposal(message.proposalId, message.accept === true)
+        return
       case 'settings.save':
         this.broadcast({ type: 'settings.updated', settings: this.store.saveSettings(message.settings) })
         return
@@ -1017,7 +1021,7 @@ export class OrbitCore {
    * A helper opened by an agent. In agentic missions an activity without a role, type or explicit
    * CLI is classified by the maestro; the receipt says what was chosen and why.
    */
-  spawnHelper(caller: Pane, input: { title: string; task: string; cli?: AgentCli; model: string | null; effort?: Effort | null; squadRoleId?: string | null; taskTypeId?: string | null; accept?: string[]; folder?: string | null }): { pane: Pane; receipt: string[] } {
+  async spawnHelper(caller: Pane, input: { title: string; task: string; cli?: AgentCli; model: string | null; effort?: Effort | null; squadRoleId?: string | null; taskTypeId?: string | null; accept?: string[]; folder?: string | null }): Promise<{ pane: Pane; receipt: string[] }> {
     const receipt: string[] = []
     const mission = this.store.mission(caller.missionId)
     if (caller.role === 'crew') {
@@ -1026,7 +1030,16 @@ export class OrbitCore {
     }
     let taskTypeId = input.taskTypeId ?? null
     if ((mission?.mode === 'agentica' || caller.role === 'crew') && !taskTypeId && !input.squadRoleId && !input.cli && !input.model) {
-      const { type, via } = classifyTask(`${input.title}\n${input.task}`, this.store.routing().taskTypes)
+      const text = `${input.title}\n${input.task}`
+      const types = this.store.routing().taskTypes
+      let { type, via, sure } = classifyTask(text, types, input.title)
+      // No keyword, or two types close: a small model reads the activity against the table; the
+      // keywords' answer stands if it fails.
+      if (!sure && this.store.settings().smartClassify) {
+        const decided = await decideTaskType(this.run, join(this.dataDir, 'decisor'), text, types).catch(() => null)
+        if (decided) ({ type, via } = { type: decided.type, via: `decidido pelo Haiku${via === 'padrão' ? '' : ` (as palavras: ${via})`}: ${decided.why}` })
+        else via = `${via}; o decisor não respondeu`
+      }
       taskTypeId = type.id
       receipt.push(`tipo: ${type.name} (o maestro classificou; ${via})`)
     } else if (taskTypeId) {
@@ -1044,6 +1057,45 @@ export class OrbitCore {
     const pane = this.store.pane(opened.id) ?? opened
     receipt.push(`abriu: ${[CLI_LABEL[pane.cli], pane.model ?? 'modelo padrão', pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}`)
     return { pane, receipt }
+  }
+
+  /** A lead suggests changing a row of the task table; the person decides in Settings. */
+  proposeRouting(caller: Pane, input: { kind: string; change: RoutingChange; reason: string }): RoutingProposal {
+    if (caller.role !== 'lead') throw new Error('Só o líder propõe mudanças na tabela')
+    const routing = this.store.routing()
+    const row = routing.taskTypes.find((t) => t.id === input.kind)
+    if (!row) throw new Error(`Tipo "${input.kind}" não existe na tabela`)
+    const change = Object.fromEntries(Object.entries(input.change).filter(([, v]) => v !== undefined)) as RoutingChange
+    if (Object.keys(change).length === 0) throw new Error('Diga o que mudar: agent, model, effort, method ou readOnly')
+    const reason = input.reason.trim().slice(0, 600)
+    if (!reason) throw new Error('Explique o motivo: o usuário decide com base nele')
+    // Must make a valid table (a model of the right CLI, an effort it takes…).
+    normalizeRouting({ ...routing, taskTypes: routing.taskTypes.map((t) => (t.id === row.id ? { ...t, ...change, ...(change.cli && change.cli !== t.cli && !('model' in change) ? { model: null } : {}) } : t)) })
+    if (this.store.proposals().filter((p) => p.missionId === caller.missionId && p.status === 'pendente').length >= 5) throw new Error('Já há 5 propostas desta missão esperando o usuário')
+    const proposal = this.store.addProposal({ missionId: caller.missionId, paneId: caller.id, kind: row.id, change, reason })
+    this.broadcast({ type: 'proposals', proposals: this.store.proposals() })
+    this.event(caller.missionId, 'proposal', `Proposta para a tabela: ${row.name}`, `${describeChange(row, change)}\n\nMotivo: ${reason}\n\nDecida em Ajustes › Quem faz cada tarefa.`, caller.id)
+    return proposal
+  }
+
+  /** The person's answer to a proposal: applied to the table when accepted; the lead is told. */
+  private decideProposal(id: string, accept: boolean): void {
+    const proposal = this.store.proposal(id)
+    if (!proposal) throw new Error('Proposta não encontrada')
+    if (proposal.status !== 'pendente') throw new Error('Essa proposta já foi decidida')
+    const routing = this.store.routing()
+    const row = routing.taskTypes.find((t) => t.id === proposal.kind)
+    if (accept) {
+      if (!row) throw new Error('O tipo dessa proposta saiu da tabela')
+      const { change } = proposal
+      this.store.saveRouting(normalizeRouting({ ...routing, taskTypes: routing.taskTypes.map((t) => (t.id === row.id ? { ...t, ...change, ...(change.cli && change.cli !== t.cli && !('model' in change) ? { model: null } : {}) } : t)) }))
+      this.broadcast({ type: 'routing.updated', routing: this.store.routing() })
+    }
+    this.store.decideProposal(id, accept ? 'aceita' : 'recusada')
+    this.broadcast({ type: 'proposals', proposals: this.store.proposals() })
+    const name = row?.name ?? proposal.kind
+    this.event(proposal.missionId, 'proposal', `Proposta ${accept ? 'aceita' : 'recusada'}: ${name}`, describeChange(row, proposal.change), proposal.paneId)
+    if (this.panes.isAlive(proposal.paneId)) this.panes.submit(proposal.paneId, `[Orbit] O usuário ${accept ? 'aceitou' : 'recusou'} sua proposta para a tabela (${name}: ${oneLine(describeChange(row, proposal.change))}).${accept ? ' Vale para os próximos ajudantes.' : ''}`)
   }
 
   /** How many more sub-helpers a helper may open now (only helpers the lead opened may). */
@@ -1644,6 +1696,18 @@ export class OrbitCore {
   private event(missionId: string, kind: MissionEventKind, title: string, body: string, paneId: number | null): void {
     this.broadcast({ type: 'event.added', event: this.store.addEvent({ missionId, kind, title, body, paneId }) })
   }
+}
+
+/** "Codex → Claude; esforço médio → alto": what a proposal changes in a row. */
+function describeChange(row: TaskType | undefined, change: RoutingChange): string {
+  const parts: string[] = []
+  const was = <K extends keyof RoutingChange>(key: K) => row?.[key]
+  if (change.cli) parts.push(`agente ${CLI_LABEL[was('cli') ?? change.cli]} → ${CLI_LABEL[change.cli]}`)
+  if ('model' in change) parts.push(`modelo ${was('model') ?? 'padrão'} → ${change.model ?? 'padrão'}`)
+  if ('effort' in change) parts.push(`esforço ${was('effort') ? EFFORT_LABEL[was('effort')!] : 'padrão'} → ${change.effort ? EFFORT_LABEL[change.effort] : 'padrão'}`)
+  if (change.readOnly !== undefined) parts.push(change.readOnly ? 'passa a ser só leitura' : 'deixa de ser só leitura')
+  if (change.method !== undefined) parts.push(`como fazer: ${change.method.trim().slice(0, 400) || '(vazio)'}`)
+  return parts.join('; ')
 }
 
 /** Absolute, existing, distinct folders; at least one, at most WORKSPACE_LIMITS.folders. */

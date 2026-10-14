@@ -5,6 +5,7 @@ import type { NoticePrefs } from '../orbit/notices.ts'
 const EVENTS: Array<[keyof NoticePrefs, string, string]> = [
   ['waiting', 'Um agente espera você', 'Pedido de permissão ou pergunta no terminal dele.'],
   ['ready', 'A missão ficou pronta', 'O líder declarou o objetivo cumprido, com o resumo.'],
+  ['proposal', 'Um líder propôs mudar a tabela', 'Uma sugestão para "quem faz cada tarefa", que você aceita ou recusa nos Ajustes.'],
   ['handoff', 'Um ajudante entregou o retorno', 'O resumo que chegou ao líder.'],
   ['finished', 'Um agente terminou', 'Um agente do Claude parou depois de trabalhar mais de 30 s.'],
   ['exited', 'Um agente encerrou', 'O processo do agente terminou (inclusive com erro).'],

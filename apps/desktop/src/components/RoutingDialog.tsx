@@ -117,6 +117,7 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
             </div>
           </fieldset>
 
+          <Proposals />
           <ResumeOnStart />
 
           <div className="routing__table-wrap">
@@ -189,15 +190,59 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
   )
 }
 
-/** Saved on its own, apart from the table: bring the crews back when Orbit opens. */
+/** Saved on its own, apart from the table: how the maestro works between missions. */
 function ResumeOnStart() {
   const client = useOrbitClient()
   const { settings } = useOrbit()
   if (!settings) return null
+  const save = (patch: Partial<typeof settings>) => client.send({ type: 'settings.save', settings: { ...settings, ...patch } })
   return (
-    <label className="check routing__resume">
-      <input type="checkbox" checked={settings.resumeOnStart} onChange={(e) => client.send({ type: 'settings.save', settings: { ...settings, resumeOnStart: e.target.checked } })} />
-      <span>Ao abrir o Orbit, retomar os agentes das missões em andamento na mesma conversa (quem estava devendo uma entrega recebe um aviso para continuar)</span>
-    </label>
+    <div className="routing__options">
+      <label className="check">
+        <input type="checkbox" checked={settings.smartClassify} onChange={(e) => save({ smartClassify: e.target.checked })} />
+        <span>Quando nenhuma palavra diz o tipo da atividade, o Claude Haiku decide pela tabela (alguns segundos e uma fração de centavo; sem ele, vale o tipo padrão)</span>
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={settings.resumeOnStart} onChange={(e) => save({ resumeOnStart: e.target.checked })} />
+        <span>Ao abrir o Orbit, retomar os agentes das missões em andamento na mesma conversa (quem estava devendo uma entrega recebe um aviso para continuar)</span>
+      </label>
+    </div>
+  )
+}
+
+/** Leads' suggestions for the table, waiting for the person. */
+function Proposals() {
+  const client = useOrbitClient()
+  const { proposals, routing, missions } = useOrbit()
+  const pending = proposals.filter((p) => p.status === 'pendente')
+  if (pending.length === 0) return null
+  const what = (p: (typeof pending)[number]) => {
+    const row = routing?.taskTypes.find((t) => t.id === p.kind)
+    const c = p.change
+    return [
+      c.cli && `agente → ${CLI_LABEL[c.cli]}`,
+      'model' in c && `modelo → ${c.model ?? 'padrão'}`,
+      'effort' in c && `esforço → ${c.effort ?? 'padrão'}`,
+      c.readOnly !== undefined && (c.readOnly ? 'só leitura' : 'pode editar'),
+      c.method !== undefined && 'novo "como fazer"',
+    ].filter(Boolean).join(', ') + ` em ${row?.name ?? p.kind}`
+  }
+  return (
+    <section className="proposals" aria-label="Propostas dos líderes">
+      <div className="eyebrow">Propostas dos líderes</div>
+      <ul>
+        {pending.map((p) => (
+          <li key={p.id} className="proposal">
+            <div className="proposal__text">
+              <strong>{what(p)}</strong>
+              <span className="muted">#{p.paneId}, missão {missions.find((m) => m.id === p.missionId)?.title ?? '?'}: {p.reason}</span>
+              {p.change.method !== undefined && <span className="muted">Como fazer proposto: {p.change.method}</span>}
+            </div>
+            <button type="button" className="btn btn--primary btn--sm" onClick={() => client.send({ type: 'proposal.decide', proposalId: p.id, accept: true })}>Aceitar</button>
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => client.send({ type: 'proposal.decide', proposalId: p.id, accept: false })}>Recusar</button>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }

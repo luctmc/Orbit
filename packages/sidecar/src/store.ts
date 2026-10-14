@@ -1,13 +1,14 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type OrbitSettings, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
+import { EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type OrbitSettings, type RoutingProposal, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
 import { BUILTIN_ACCOUNTS, migrateLimits } from './accounts.ts'
 import { DEFAULT_ROUTING, FACTORY_METHODS } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
 
 const EVENTS_PER_MISSION = 200
-const DEFAULT_SETTINGS: OrbitSettings = { resumeOnStart: true }
+const DEFAULT_SETTINGS: OrbitSettings = { resumeOnStart: true, smartClassify: true }
+const PROPOSALS_KEPT = 50
 
 interface PersistedState extends Omit<Snapshot, 'squads' | 'routing' | 'accounts'> {
   // usageDays and limits are persisted as they are sent.
@@ -48,7 +49,8 @@ export class Store {
       row.method ??= FACTORY_METHODS[row.id]?.method ?? ''
       row.readOnly ??= FACTORY_METHODS[row.id]?.readOnly ?? false
     }
-    this.state.settings ??= { ...DEFAULT_SETTINGS }
+    this.state.settings = { ...DEFAULT_SETTINGS, ...this.state.settings }
+    this.state.proposals ??= []
     this.state.disabledCatalog ??= []
     this.state.paneSpecs ??= {}
     this.state.cards ??= []
@@ -94,8 +96,8 @@ export class Store {
   }
 
   snapshot(): Snapshot {
-    const { workspaces, missions, panes, events, usageDays, limits, cards, templates, schedules } = this.state
-    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing(), usageDays, limits, accounts: this.accounts(), cards, templates, schedules, settings: this.settings() })
+    const { workspaces, missions, panes, events, usageDays, limits, cards, templates, schedules, proposals } = this.state
+    return structuredClone({ workspaces, missions, panes, events, squads: this.squads(), routing: this.routing(), usageDays, limits, accounts: this.accounts(), cards, templates, schedules, settings: this.settings(), proposals })
   }
 
   /**
@@ -184,9 +186,35 @@ export class Store {
   }
 
   saveSettings(settings: OrbitSettings): OrbitSettings {
-    this.state.settings = { resumeOnStart: settings?.resumeOnStart === true }
+    this.state.settings = { resumeOnStart: settings?.resumeOnStart === true, smartClassify: settings?.smartClassify === true }
     this.save()
     return this.settings()
+  }
+
+  proposals(): RoutingProposal[] {
+    return structuredClone(this.state.proposals)
+  }
+
+  proposal(id: string): RoutingProposal | undefined {
+    return this.state.proposals.find((p) => p.id === id)
+  }
+
+  addProposal(input: Omit<RoutingProposal, 'id' | 'status' | 'createdAt'>): RoutingProposal {
+    const proposal: RoutingProposal = { ...input, id: randomUUID(), status: 'pendente', createdAt: Date.now() }
+    // Decided ones age out; pending ones stay until decided.
+    const decided = this.state.proposals.filter((p) => p.status !== 'pendente')
+    const drop = new Set(decided.slice(0, Math.max(0, this.state.proposals.length + 1 - PROPOSALS_KEPT)).map((p) => p.id))
+    this.state.proposals = [...this.state.proposals.filter((p) => !drop.has(p.id)), proposal]
+    this.save()
+    return proposal
+  }
+
+  decideProposal(id: string, status: 'aceita' | 'recusada'): RoutingProposal | undefined {
+    const proposal = this.proposal(id)
+    if (!proposal) return undefined
+    proposal.status = status
+    this.save()
+    return { ...proposal }
   }
 
   saveRouting(routing: Routing | null): void {
@@ -452,7 +480,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
-    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [], paneSpecs: {}, cards: [], templates: [], schedules: [], settings: { ...DEFAULT_SETTINGS } }
+    return { version: 1, nextPaneId: 1, workspaces: [], missions: [], panes: [], events: [], customSquads: [], routing: null, usageDays: [], limits: [], customAccounts: [], builtinAuto: {}, disabledCatalog: [], paneSpecs: {}, cards: [], templates: [], schedules: [], settings: { ...DEFAULT_SETTINGS }, proposals: [] }
   }
 }
 

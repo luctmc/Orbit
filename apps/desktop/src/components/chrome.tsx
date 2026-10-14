@@ -74,7 +74,7 @@ function LimitMeter({ limits, name: label }: { limits: AccountLimits; name: stri
   )
 }
 
-export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSelect, onOpen, onNewMission, onSquads, onSettings }: {
+export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSelect, onOpen, onNewMission, onSquads, onSettings, pendingProposals = 0 }: {
   workspaces: Workspace[]
   activeId: string | null
   homeActive: boolean
@@ -84,6 +84,8 @@ export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSele
   onNewMission: (() => void) | null
   onSquads: () => void
   onSettings: () => void
+  /** Leads' table proposals waiting for the person. */
+  pendingProposals?: number
 }) {
   return (
     <nav className="tabs" aria-label="Workspaces">
@@ -97,7 +99,9 @@ export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSele
         <button className="icon-btn" aria-label="Novo workspace" onClick={onOpen}><PlusIcon size={15} /></button>
       </div>
       <button className="btn btn--ghost btn--sm" onClick={onSquads}>Squads</button>
-      <button className="btn btn--ghost btn--sm" onClick={onSettings} title="Quem faz cada tarefa">Ajustes</button>
+      <button className="btn btn--ghost btn--sm" onClick={onSettings} aria-label={pendingProposals ? `Ajustes, ${pendingProposals} ${pendingProposals === 1 ? 'proposta' : 'propostas'} para a tabela` : 'Ajustes'} title="Quem faz cada tarefa">
+        Ajustes{pendingProposals > 0 && <span className="count-badge" aria-hidden="true">{pendingProposals}</span>}
+      </button>
       {onNewMission && (
         <button className="btn btn--primary btn--sm" onClick={onNewMission}><PlusIcon size={14} />Nova missão</button>
       )}
