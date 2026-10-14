@@ -1,4 +1,4 @@
-import { statSync } from 'node:fs'
+import { realpathSync, statSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -6,6 +6,7 @@ import { ACCOUNT_LIMITS, EFFORT_LABEL, EFFORTS, WORKSPACE_LIMITS, effortsFor, ty
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
+import { fileDiff, folderStatus, folderTree, readFile } from './files.ts'
 import { normalizeRouting } from './routing.ts'
 import { codexHome, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
@@ -69,6 +70,8 @@ export class OrbitCore {
   private scanning: Promise<void> | null = null
   /** Agents limited to their role's skills. */
   private readonly skillPolicies = new Map<number, SkillPolicy>()
+  /** Files Claude agents edited (real path → who, in order), from their PostToolUse hooks. */
+  private readonly touched = new Map<string, Array<{ paneId: number; missionId: string }>>()
 
   constructor({ dataDir, shell, broadcast, agentCommand, run, browser }: CoreOptions) {
     this.broadcast = broadcast
@@ -168,6 +171,47 @@ export class OrbitCore {
     const works = ok && found.installed && found.version !== null
     this.setCli(cli, { ...found, busy: null, ok: works, checkedAt: Date.now(), message: works ? `Atualizado para ${found.version}.` : output || 'A atualização falhou.' })
     if (cli === 'codex') await this.refreshCatalog()
+  }
+
+  // ---- files and changes ----
+
+  /** Answers the asking connection about a workspace's folders: git status, tree, diffs, contents. */
+  private async files(message: Extract<ClientMessage, { type: `files.${string}` }>, reply: (message: ServerMessage) => void): Promise<void> {
+    const workspace = this.store.workspace(message.workspaceId)
+    if (!workspace) throw new Error('Workspace desconhecido')
+    if (message.type === 'files.status') {
+      const missionId = message.missionId ?? null
+      const by = (absolute: string) => {
+        const seen = this.touched.get(realPath(absolute)) ?? []
+        return [...new Set(seen.filter((t) => !missionId || t.missionId === missionId).map((t) => t.paneId))]
+      }
+      const folders = await Promise.all(workspace.folders.map((folder) => folderStatus(folder, by).catch((error) => ({
+        folder, git: false, branch: null, ahead: 0, behind: 0, changes: [], error: error instanceof Error ? error.message : String(error),
+      }))))
+      reply({ type: 'files.status', workspaceId: workspace.id, folders })
+      return
+    }
+    if (!workspace.folders.includes(message.folder)) throw new Error('Essa pasta não é do workspace')
+    if (message.type === 'files.tree') {
+      reply({ type: 'files.tree', workspaceId: workspace.id, folder: message.folder, ...(await folderTree(message.folder)) })
+    } else if (message.type === 'files.diff') {
+      reply({ type: 'files.diff', workspaceId: workspace.id, folder: message.folder, path: message.path, ...(await fileDiff(message.folder, message.path)) })
+    } else {
+      reply({ type: 'files.content', workspaceId: workspace.id, folder: message.folder, path: message.path, ...readFile(message.folder, message.path) })
+    }
+  }
+
+  /** Remembers which agent edited a file (Claude's Edit, Write, MultiEdit, NotebookEdit). */
+  private noteEdit(pane: Pane, payload: HookPayload): void {
+    if (payload.hook_event_name !== 'PostToolUse' || !['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(payload.tool_name ?? '')) return
+    const input = (payload.tool_input ?? {}) as { file_path?: unknown; notebook_path?: unknown }
+    const path = typeof input.file_path === 'string' ? input.file_path : typeof input.notebook_path === 'string' ? input.notebook_path : null
+    if (!path || !path.startsWith('/')) return
+    const key = realPath(path)
+    const list = (this.touched.get(key) ?? []).filter((t) => t.paneId !== pane.id)
+    list.push({ paneId: pane.id, missionId: pane.missionId })
+    this.touched.set(key, list.slice(-6))
+    if (this.touched.size > 5000) this.touched.delete(this.touched.keys().next().value!)
   }
 
   // ---- skills, subagents and MCP servers ----
@@ -325,8 +369,14 @@ export class OrbitCore {
     return this.panes.snapshot(paneId)
   }
 
-  handle(message: ClientMessage): void {
+  handle(message: ClientMessage, reply: (message: ServerMessage) => void = this.broadcast): void {
     switch (message.type) {
+      case 'files.status':
+      case 'files.tree':
+      case 'files.diff':
+      case 'files.read':
+        void this.files(message, reply).catch((error) => reply({ type: 'files.error', message: error instanceof Error ? error.message : String(error) }))
+        return
       case 'workspace.open': {
         const [path] = validFolders([message.path])
         this.broadcast({ type: 'workspace.updated', workspace: this.store.openWorkspace(path!) })
@@ -647,6 +697,8 @@ export class OrbitCore {
   hookReport(paneId: number, payload: HookPayload): object | null {
     const next = statusFromHook(payload)
     if (next) this.panes.report(paneId, next.status, next.attention)
+    const pane = this.store.pane(paneId)
+    if (pane) this.noteEdit(pane, payload)
     const reason = gateTool(payload, new Set(this.store.disabledCatalog()), this.skillPolicies.get(paneId))
     return reason ? { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } } : null
   }
@@ -815,6 +867,15 @@ function validFolders(input: unknown): string[] {
     if (!folders.includes(path)) folders.push(path)
   }
   return folders
+}
+
+/** Symlinks resolved (/tmp vs /private/tmp), or the path as given when it is gone. */
+function realPath(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    return path
+  }
 }
 
 function workspaceName(value: unknown): string {

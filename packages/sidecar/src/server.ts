@@ -104,7 +104,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
           if (message.on) client.watching.add(message.missionId)
           else client.watching.delete(message.missionId)
           core.browser.watch(message.missionId, client.id, message.on)
-        } else core.handle(message)
+        } else core.handle(message, (answer) => send(ws, answer))
       } catch (error) {
         send(ws, { type: 'error', message: error instanceof Error ? error.message : String(error) })
       }

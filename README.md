@@ -61,6 +61,13 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Arquivos** (painel na missão): **Mudanças** mostra, por pasta do workspace, a branch, o que
+  está à frente ou atrás e cada arquivo que difere do último commit (modificado, novo, apagado,
+  renomeado, conflito), com linhas a mais e a menos e o agente que editou (pelos hooks de Edit e
+  Write do Claude); clicar abre o diff. **Todos** mostra a árvore (o que o git vê, sem o que o
+  `.gitignore` esconde) e abre os arquivos só para leitura. O sidecar roda `git` com lista de
+  argumentos (nunca por shell) e `GIT_OPTIONAL_LOCKS=0`, e nada fora das pastas do workspace pode
+  ser lido, nem por link simbólico.
 - **Skills e MCP** (Ajustes › Skills e MCP): lista as skills, subagentes e servidores MCP que o
   Claude Code e o Codex têm instalados (pessoais, de plugins e das pastas dos workspaces; dos
   servidores MCP só o nome e o transporte, nunca env ou cabeçalhos). Desligar um item vale só para

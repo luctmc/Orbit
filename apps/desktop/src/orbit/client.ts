@@ -56,6 +56,8 @@ export class OrbitClient {
   private readonly views = new Map<number, Map<PaneView, { ready: boolean }>>()
   private readonly attaching = new Set<number>()
   private readonly frameViews = new Map<string, Set<BrowserFrameView>>()
+  /** One-off answers (files.*) go to whoever asked, not into the shared state. */
+  private readonly answers = new Set<(message: ServerMessage) => void>()
   private ws: WebSocket | null = null
   private retryMs = 500
   private readonly resolveUrl: () => Promise<string>
@@ -95,6 +97,28 @@ export class OrbitClient {
       views.delete(view)
       if (views.size === 0) this.views.delete(paneId)
     }
+  }
+
+  /**
+   * Sends a files.* question and resolves with the first answer that matches; a files.error
+   * rejects it.
+   */
+  ask<T extends ServerMessage['type']>(message: ClientMessage, type: T, match: (m: Extract<ServerMessage, { type: T }>) => boolean = () => true, timeoutMs = 20_000): Promise<Extract<ServerMessage, { type: T }>> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => finish(() => reject(new Error('O motor não respondeu a tempo'))), timeoutMs)
+      const listener = (m: ServerMessage) => {
+        if (m.type === type && match(m as Extract<ServerMessage, { type: T }>)) finish(() => resolve(m as Extract<ServerMessage, { type: T }>))
+        else if (m.type === 'files.error') finish(() => reject(new Error(m.message)))
+      }
+      const finish = (settle: () => void) => {
+        clearTimeout(timer)
+        this.answers.delete(listener)
+        settle()
+      }
+      this.answers.add(listener)
+      if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(message))
+      else finish(() => reject(new Error('Sem conexão com o motor do Orbit')))
+    })
   }
 
   /** Receives the mission page's frames while mounted (the sidecar only streams while watched). */
@@ -151,6 +175,10 @@ export class OrbitClient {
   }
 
   private receive(message: ServerMessage): void {
+    if (message.type.startsWith('files.')) {
+      for (const answer of [...this.answers]) answer(message)
+      return
+    }
     switch (message.type) {
       case 'snapshot':
         // Open pages follow as browser.state messages.

@@ -4,7 +4,8 @@ import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { dictationAvailable, joinText, useDictation } from '../orbit/dictation.ts'
 import { costText, MODE_LABEL, tokensText } from '../orbit/labels.ts'
 import { BrowserPanel } from './BrowserPanel.tsx'
-import { ArchiveIcon, GlobeIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
+import { FilesPanel } from './FilesPanel.tsx'
+import { ArchiveIcon, FolderIcon, GlobeIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
 import { PaneView } from './PaneView.tsx'
 
 export type Layout = 'grade' | 'foco'
@@ -19,10 +20,14 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   onAddAgent: () => void
 }) {
   const client = useOrbitClient()
-  const { squads, browsers } = useOrbit()
+  const { squads, browsers, workspaces } = useOrbit()
   const squad = squads.find((s) => s.id === mission.squadId)
+  const workspace = workspaces.find((w) => w.id === mission.workspaceId)
   const page = browsers.find((b) => b.missionId === mission.id)
-  const [browserOpen, setBrowserOpen] = useState(false)
+  /** One side panel at a time, next to the agents. */
+  const [side, setSide] = useState<'arquivos' | 'navegador' | null>(null)
+  const browserOpen = side === 'navegador'
+  const toggleSide = (panel: 'arquivos' | 'navegador') => setSide((open) => (open === panel ? null : panel))
   const [command, setCommand] = useState('')
   const commandInput = useRef<HTMLInputElement>(null)
   /** What was typed before dictating, plus each phrase already recognized. */
@@ -74,7 +79,12 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
             <button type="button" aria-pressed={layout === 'grade'} onClick={() => onLayout('grade')}>Grade</button>
             <button type="button" aria-pressed={layout === 'foco'} onClick={() => onLayout('foco')}>Foco</button>
           </div>
-          <button className="btn btn--ghost btn--sm browser-toggle" aria-pressed={browserOpen} onClick={() => setBrowserOpen((open) => !open)}
+          {workspace && (
+            <button className="btn btn--ghost btn--sm" aria-pressed={side === 'arquivos'} onClick={() => toggleSide('arquivos')} title="O que os agentes mudaram e os arquivos do workspace">
+              <FolderIcon size={14} />Arquivos
+            </button>
+          )}
+          <button className="btn btn--ghost btn--sm browser-toggle" aria-pressed={browserOpen} onClick={() => toggleSide('navegador')}
             title={page ? `Página aberta: ${page.title || page.url}` : 'Navegador da missão'}>
             <GlobeIcon size={14} />Navegador{page && !browserOpen && <span className="dot dot--live" aria-label="(página aberta)" />}
           </button>
@@ -100,7 +110,8 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
             {visible.map((p) => <PaneView key={p.id} pane={p} selected={p.id === selected?.id} onSelect={() => onSelectPane(p.id)} />)}
           </div>
         )}
-        {browserOpen && <BrowserPanel missionId={mission.id} archived={archived} onClose={() => setBrowserOpen(false)} />}
+        {browserOpen && <BrowserPanel missionId={mission.id} archived={archived} onClose={() => setSide(null)} />}
+        {side === 'arquivos' && workspace && <FilesPanel workspace={workspace} missionId={mission.id} onClose={() => setSide(null)} />}
       </div>
 
       {selected && selected.status !== 'exited' && (

@@ -306,6 +306,35 @@ export interface CatalogItem {
 
 export const catalogId = (cli: AgentCliForRole, kind: CatalogKind, name: string) => `${cli}:${kind}:${name}`
 
+/** A file that differs from the last commit. */
+export interface FileChange {
+  /** Relative to its folder. */
+  path: string
+  /** Former path, for renames. */
+  from: string | null
+  kind: 'modificado' | 'novo' | 'apagado' | 'renomeado' | 'conflito'
+  /** Already in the index (git add). */
+  staged: boolean
+  added: number | null
+  removed: number | null
+  /** Agents seen editing it (Claude's Edit/Write), newest last. */
+  by: number[]
+}
+
+/** Git state of one workspace folder. */
+export interface FolderStatus {
+  folder: string
+  /** False when the folder is not inside a git repository. */
+  git: boolean
+  branch: string | null
+  ahead: number
+  behind: number
+  changes: FileChange[]
+  error: string | null
+}
+
+export const FILES_LIMITS = { tree: 5000, read: 512 * 1024, diff: 400 * 1024 } as const
+
 export type MissionEventKind = 'mission.created' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser'
 
 export interface MissionEvent {
@@ -380,6 +409,11 @@ export type ClientMessage =
   | { type: 'account.check' }
   /** Opens a terminal running the CLI's login for this account. */
   | { type: 'account.login'; accountId: string }
+  /** Git status of each folder of the workspace (answered to this connection only). */
+  | { type: 'files.status'; workspaceId: string; missionId?: string | null }
+  | { type: 'files.tree'; workspaceId: string; folder: string }
+  | { type: 'files.diff'; workspaceId: string; folder: string; path: string }
+  | { type: 'files.read'; workspaceId: string; folder: string; path: string }
   /** Read the installed skills, agents and MCP servers again. */
   | { type: 'catalog.scan' }
   /** Lets Orbit's agents use an item, or not. */
@@ -416,6 +450,14 @@ export type ServerMessage =
   | { type: 'cli.status'; clis: CliStatus[] }
   | { type: 'accounts'; accounts: Account[] }
   | { type: 'account.status'; statuses: AccountStatus[] }
+  | { type: 'files.status'; workspaceId: string; folders: FolderStatus[] }
+  /** A files.* question failed (answered to the asking connection). */
+  | { type: 'files.error'; message: string }
+  /** Files of a folder (tracked and new, without what .gitignore hides). */
+  | { type: 'files.tree'; workspaceId: string; folder: string; files: string[]; truncated: boolean }
+  | { type: 'files.diff'; workspaceId: string; folder: string; path: string; diff: string; truncated: boolean }
+  /** `text` is null for binary or oversized files. */
+  | { type: 'files.content'; workspaceId: string; folder: string; path: string; text: string | null; size: number; reason: string | null }
   /** Installed skills, agents and MCP servers, and which ones Orbit's agents may not use. */
   | { type: 'skills'; items: CatalogItem[]; disabled: string[]; scannedAt: number | null }
   /** Which installed Chromium browser Orbit drives; null = none found. */
