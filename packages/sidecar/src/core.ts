@@ -8,6 +8,7 @@ import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccoun
 import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
 import { fileDiff, folderStatus, folderTree, readFile } from './files.ts'
 import { Updates } from './updates.ts'
+import { missionReport } from './report.ts'
 import { addWorktree, BRANCH, commitsAhead, dirtyFiles, filesChanged, hasRemote, pushBranch, removeWorktree, repoInfo } from './git.ts'
 import { slugify } from './squads.ts'
 import { normalizeRouting } from './routing.ts'
@@ -247,6 +248,32 @@ export class OrbitCore {
       if (!safe(() => removeWorktree(git.repo, path), false)) kept.push(entry === 'lider' ? 'do líder' : `de #${entry}`)
     }
     if (kept.length) this.event(missionId, 'pane.exited', 'Cópias mantidas', `Ficaram mudanças sem commit nas cópias ${kept.join(', ')}, em ${root}. Os branches continuam no repositório.`, null)
+  }
+
+  // ---- mission report ----
+
+  /** Everything the mission did, as Markdown: setup, numbers, agents, board, deliveries, code. */
+  async report(missionId: string): Promise<string> {
+    const mission = this.store.mission(missionId)
+    if (!mission) throw new Error('Missão desconhecida')
+    const workspace = this.store.workspace(mission.workspaceId)
+    const git = mission.git ? safe(() => this.gitSummary(missionId), null) : null
+    const pr = mission.git?.pr ? await this.prStatus(missionId).catch(() => null) : null
+    const by = (absolute: string) => [...new Set((this.touched.get(realPath(absolute)) ?? []).filter((t) => t.missionId === missionId).map((t) => t.paneId))]
+    const folders = !mission.git && workspace ? await Promise.all(workspace.folders.map((f) => folderStatus(f, by).catch(() => null))) : []
+    const accountNames = Object.fromEntries(this.store.accounts().filter((a) => !a.builtin).map((a) => [a.id, a.name]))
+    return missionReport({
+      mission,
+      workspace,
+      squad: this.missionSquad(missionId),
+      panes: this.missionPanes(missionId).sort((a, b) => (a.role === b.role ? a.id - b.id : a.role === 'lead' ? -1 : 1)),
+      accountNames,
+      cards: this.store.cards(missionId),
+      events: this.missionEvents(missionId),
+      git,
+      pr,
+      folders: folders.filter((f): f is NonNullable<typeof f> => f !== null),
+    })
   }
 
   // ---- mission templates ----
@@ -725,6 +752,21 @@ export class OrbitCore {
       case 'git.pr.status':
         void this.prStatus(message.missionId)
           .then((status) => reply({ type: 'git.pr', missionId: message.missionId, status }))
+          .catch((error) => reply({ type: 'files.error', message: error instanceof Error ? error.message : String(error) }))
+        return
+      case 'report.get':
+        void this.report(message.missionId)
+          .then((markdown) => reply({ type: 'report', missionId: message.missionId, markdown }))
+          .catch((error) => reply({ type: 'files.error', message: error instanceof Error ? error.message : String(error) }))
+        return
+      case 'report.save':
+        void this.report(message.missionId)
+          .then((markdown) => {
+            const path = typeof message.path === 'string' ? message.path : ''
+            if (!isAbsolute(path) || !path.toLowerCase().endsWith('.md') || !isDirectory(dirname(path))) throw new Error('Escolha um arquivo .md numa pasta que exista')
+            writeFileSync(path, markdown, { mode: 0o644 })
+            reply({ type: 'report.saved', missionId: message.missionId, path })
+          })
           .catch((error) => reply({ type: 'files.error', message: error instanceof Error ? error.message : String(error) }))
         return
       case 'template.save': {

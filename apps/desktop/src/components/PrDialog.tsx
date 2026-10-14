@@ -112,7 +112,10 @@ export function PrDialog({ mission, onClose }: { mission: Mission; onClose: () =
                   <input id={`${uid}-t`} value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} />
                 </div>
                 <div className="field">
-                  <label htmlFor={`${uid}-b`}>Descrição</label>
+                  <label htmlFor={`${uid}-b`} className="legend-row">
+                    <span>Descrição</span>
+                    <button type="button" className="link-btn" onClick={() => client.ask({ type: 'report.get', missionId: mission.id }, 'report', (m) => m.missionId === mission.id, 60_000).then((m) => setBody(m.markdown), (e: Error) => setError(e.message))}>Usar o relatório da missão</button>
+                  </label>
                   <textarea id={`${uid}-b`} rows={8} value={body} onChange={(e) => setBody(e.target.value)} />
                 </div>
                 <label className="check"><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /><span>Abrir como rascunho</span></label>
