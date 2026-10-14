@@ -526,3 +526,30 @@ h1, h2, p { margin: 0; }
 .pane-grid--cols-1 { grid-template-columns: minmax(0, 1fr); }
 .pane-grid--cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .pane-grid--cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+/* Mission › Quadro */
+.board__summary { font-size: 13px; }
+.board .side-panel__body { padding: 10px; }
+.board__columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start; min-height: 100%; }
+.board__column { min-height: 160px; padding: 6px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.board__column-head { display: flex; align-items: center; gap: 6px; padding: 2px 4px; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.board__column--fazendo .board__column-head span:first-child { color: var(--accent); }
+.board__cards { display: flex; flex-direction: column; gap: 6px; }
+.board__cards li.drop-before { box-shadow: 0 -2px 0 var(--accent); border-radius: 8px; }
+.board__cards li.drop-after { box-shadow: 0 2px 0 var(--accent); border-radius: 8px; }
+.board__empty { font-size: 12px; padding: 4px; }
+.card { padding: 8px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--surface); display: flex; flex-direction: column; gap: 6px; cursor: grab; }
+.card:active { cursor: grabbing; }
+.board__column--feito .card { opacity: 0.7; }
+.card__open { display: flex; gap: 6px; align-items: baseline; padding: 0; border: 0; background: transparent; text-align: left; font-size: 13px; color: var(--text); }
+.card__number { flex: none; font: 600 11px var(--mono); color: var(--muted); }
+.card__title { min-width: 0; overflow-wrap: anywhere; line-height: 1.35; }
+.card__meta { display: flex; align-items: center; gap: 6px; font-size: 11.5px; min-height: 18px; }
+.card__who { font-size: 11px; padding: 0 5px; }
+.card__move { display: inline-flex; align-items: center; gap: 2px; padding: 1px 4px; border: 0; border-radius: 5px; background: transparent; font-size: 11px; color: var(--muted); }
+.card__move:hover, .card__move:focus-visible { background: var(--surface-3); color: var(--accent); }
+.card--new { cursor: default; }
+.card--new input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--accent-line); background: var(--bg); font-size: 13px; }
+.card-editor { display: flex; flex-direction: column; gap: 14px; padding: 4px; }
+.card-editor__head { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; }
+.card-editor__actions { display: flex; align-items: center; gap: 8px; }

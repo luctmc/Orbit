@@ -346,6 +346,30 @@ export interface UpdateStatus {
   error: string | null
 }
 
+/** The mission's board: what is planned, in progress and done. */
+export type CardColumn = 'afazer' | 'fazendo' | 'feito'
+export const CARD_COLUMNS: readonly CardColumn[] = ['afazer', 'fazendo', 'feito']
+export const CARD_COLUMN_LABEL: Record<CardColumn, string> = { afazer: 'A fazer', fazendo: 'Fazendo', feito: 'Feito' }
+export const CARD_LIMITS = { perMission: 200, title: 140, notes: 4000 } as const
+
+export interface Card {
+  id: string
+  missionId: string
+  /** Short number in the mission (T1, T2…) that people and agents use. */
+  number: number
+  title: string
+  notes: string
+  column: CardColumn
+  /** Position inside the column, ascending. */
+  order: number
+  /** Agent working on it. */
+  assignee: number | null
+  /** "você" or "#3". */
+  createdBy: string
+  createdAt: number
+  updatedAt: number
+}
+
 export type MissionEventKind = 'mission.created' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser'
 
 export interface MissionEvent {
@@ -368,6 +392,7 @@ export interface Snapshot {
   usageDays: UsageDay[]
   limits: AccountLimits[]
   accounts: Account[]
+  cards: Card[]
 }
 
 export interface SpawnPaneRequest {
@@ -410,6 +435,11 @@ export type ClientMessage =
   | { type: 'pane.restart'; paneId: number; resume: boolean }
   /** Another helper with the same settings, without a task. */
   | { type: 'pane.duplicate'; paneId: number }
+  | { type: 'card.add'; missionId: string; title: string; notes?: string; column?: CardColumn; assignee?: number | null }
+  | { type: 'card.update'; cardId: string; title?: string; notes?: string; assignee?: number | null }
+  /** To `column`, at `index` among its cards (end when omitted). */
+  | { type: 'card.move'; cardId: string; column: CardColumn; index?: number }
+  | { type: 'card.delete'; cardId: string }
   /** Creates or replaces a custom squad (builtins cannot be changed). */
   | { type: 'squad.save'; squad: SquadInput }
   | { type: 'squad.delete'; squadId: string }
@@ -468,6 +498,8 @@ export type ServerMessage =
   | { type: 'account.status'; statuses: AccountStatus[] }
   | { type: 'files.status'; workspaceId: string; folders: FolderStatus[] }
   | { type: 'update.status'; status: UpdateStatus }
+  | { type: 'card.updated'; card: Card }
+  | { type: 'card.removed'; cardId: string }
   /** A files.* question failed (answered to the asking connection). */
   | { type: 'files.error'; message: string }
   /** Files of a folder (tracked and new, without what .gitignore hides). */

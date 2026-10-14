@@ -3,9 +3,10 @@ import type { Mission, Pane } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { dictationAvailable, joinText, useDictation } from '../orbit/dictation.ts'
 import { costText, MODE_LABEL, tokensText } from '../orbit/labels.ts'
+import { BoardPanel } from './BoardPanel.tsx'
 import { BrowserPanel } from './BrowserPanel.tsx'
 import { FilesPanel } from './FilesPanel.tsx'
-import { ArchiveIcon, FolderIcon, GlobeIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
+import { ArchiveIcon, BoardIcon, FolderIcon, GlobeIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
 import { PaneView } from './PaneView.tsx'
 
 export type Layout = 'grade' | 'foco'
@@ -31,14 +32,17 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   onAddAgent: () => void
 }) {
   const client = useOrbitClient()
-  const { squads, browsers, workspaces } = useOrbit()
+  const { squads, browsers, workspaces, cards } = useOrbit()
+  const missionCards = cards.filter((c) => c.missionId === mission.id)
+  const cardsDone = missionCards.filter((c) => c.column === 'feito').length
   const squad = squads.find((s) => s.id === mission.squadId)
   const workspace = workspaces.find((w) => w.id === mission.workspaceId)
   const page = browsers.find((b) => b.missionId === mission.id)
   /** One side panel at a time, next to the agents. */
-  const [side, setSide] = useState<'arquivos' | 'navegador' | null>(null)
+  type Side = 'quadro' | 'arquivos' | 'navegador'
+  const [side, setSide] = useState<Side | null>(null)
   const browserOpen = side === 'navegador'
-  const toggleSide = (panel: 'arquivos' | 'navegador') => setSide((open) => (open === panel ? null : panel))
+  const toggleSide = (panel: Side) => setSide((open) => (open === panel ? null : panel))
   const [command, setCommand] = useState('')
   const commandInput = useRef<HTMLInputElement>(null)
   const [columns, setColumns] = useState<Columns>(rememberedColumns)
@@ -132,6 +136,9 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
               </select>
             </label>
           )}
+          <button className="btn btn--ghost btn--sm" aria-pressed={side === 'quadro'} onClick={() => toggleSide('quadro')} title="O que está planejado, em andamento e feito">
+            <BoardIcon size={14} />Quadro{missionCards.length > 0 && <span className="muted"> {cardsDone}/{missionCards.length}</span>}
+          </button>
           {workspace && (
             <button className="btn btn--ghost btn--sm" aria-pressed={side === 'arquivos'} onClick={() => toggleSide('arquivos')} title="O que os agentes mudaram e os arquivos do workspace">
               <FolderIcon size={14} />Arquivos
@@ -164,6 +171,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
           </div>
         )}
         {browserOpen && <BrowserPanel missionId={mission.id} archived={archived} onClose={() => setSide(null)} />}
+        {side === 'quadro' && <BoardPanel missionId={mission.id} panes={panes} archived={archived} onClose={() => setSide(null)} />}
         {side === 'arquivos' && workspace && <FilesPanel workspace={workspace} missionId={mission.id} onClose={() => setSide(null)} />}
       </div>
 
