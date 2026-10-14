@@ -71,7 +71,7 @@ test('the maestro picks CLI and account by itself, falls back when one is used u
   try {
     await ui.opened
     ui.send({ type: 'account.save', account: { cli: 'codex', name: 'Codex trabalho', kind: 'assinatura' } })
-    const work = (await ui.next('accounts', (m) => m.accounts.length === 3)).accounts[2]!
+    const work = (await ui.next('accounts', (m) => m.accounts.some((a) => a.name === 'Codex trabalho'))).accounts.find((a) => a.name === 'Codex trabalho')!
     await ui.next('account.status', (m) => m.statuses.some((s) => s.accountId === work.id && s.loggedIn === true))
 
     ui.send({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-'))) })

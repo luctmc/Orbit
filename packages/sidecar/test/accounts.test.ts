@@ -68,13 +68,13 @@ test('accounts: each runs in its own folder, keys stay in the sidecar, logins op
   try {
     await ui.opened
     const { snapshot } = await ui.next('snapshot')
-    assert.deepEqual(snapshot.accounts.map((a) => a.id), ['claude', 'codex'])
+    assert.deepEqual(snapshot.accounts.map((a) => a.id), ['claude', 'codex', 'gemini', 'antigravity'])
     await ui.next('account.status', (m) => m.statuses.find((s) => s.accountId === 'claude')?.email === 'pessoa@exemplo.dev')
 
     // A Claude account on an Anthropic-compatible provider.
     ui.send({ type: 'account.save', account: { cli: 'claude', name: 'OpenRouter', kind: 'api', baseUrl: 'https://openrouter.ai/api', model: 'anthropic/claude-sonnet-5.5', key: KEY } })
-    const { accounts } = await ui.next('accounts', (m) => m.accounts.length === 3)
-    const openrouter = accounts[2]!
+    const { accounts } = await ui.next('accounts', (m) => m.accounts.length === 5)
+    const openrouter = accounts[4]!
     assert.equal(openrouter.keyHint, '…9f3k')
     const keyFile = join(dataDir, 'accounts', openrouter.id, 'key')
     assert.equal(statSync(keyFile).mode & 0o777, 0o600)
@@ -97,7 +97,7 @@ test('accounts: each runs in its own folder, keys stay in the sidecar, logins op
 
     // A second Codex subscription: logged out until the person logs in through a terminal.
     ui.send({ type: 'account.save', account: { cli: 'codex', name: 'Codex trabalho', kind: 'assinatura' } })
-    const work = (await ui.next('accounts', (m) => m.accounts.length === 4)).accounts[3]!
+    const work = (await ui.next('accounts', (m) => m.accounts.length === 6)).accounts[5]!
     await ui.next('account.status', (m) => m.statuses.some((s) => s.accountId === work.id && s.loggedIn === false))
     ui.send({ type: 'account.login', accountId: work.id })
     const { statuses } = await ui.next('account.status', (m) => m.statuses.some((s) => s.accountId === work.id && s.loginPaneId !== null))
@@ -119,14 +119,14 @@ test('accounts: each runs in its own folder, keys stay in the sidecar, logins op
 
     // A Codex API key is handed to `codex login` from the file, never on a command line.
     ui.send({ type: 'account.save', account: { cli: 'codex', name: 'OpenAI', kind: 'api', key: KEY } })
-    await ui.next('accounts', (m) => m.accounts.length === 5)
+    await ui.next('accounts', (m) => m.accounts.length === 7)
     await new Promise((r) => setTimeout(r, 200))
     assert.ok(ran.some((c) => c.includes('codex login --with-api-key <')))
     assert.ok(!ran.some((c) => c.includes(KEY)), 'the key never reaches a command line')
     assert.ok(!JSON.stringify(ui.inbox).includes(KEY), 'the key never goes back to the UI')
 
     ui.send({ type: 'account.delete', accountId: work.id })
-    await ui.next('accounts', (m) => !m.accounts.some((a) => a.id === work.id) && m.accounts.length === 4)
+    await ui.next('accounts', (m) => !m.accounts.some((a) => a.id === work.id) && m.accounts.length === 6)
     await new Promise((r) => setTimeout(r, 200))
     assert.ok(ran.some((c) => c.endsWith('codex logout') && c.includes(work.id)))
     assert.ok(!existsSync(join(dataDir, 'accounts', work.id)))

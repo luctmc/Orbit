@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { MODEL_ID, SLUG, SQUAD_LIMITS, type AgentCliForRole, type Squad, type SquadInput, type SquadRole } from '@orbit/protocol'
+import { AGENT_CLIS, MODEL_ID, SLUG, SQUAD_LIMITS, type AgentCliForRole, type Squad, type SquadInput, type SquadRole } from '@orbit/protocol'
 import { skillList } from './routing.ts'
 
 const OPUS = 'claude-opus-5-5'
@@ -71,7 +71,7 @@ export const BUILTIN_SQUADS: readonly Squad[] = [
   },
 ]
 
-const CLIS: readonly AgentCliForRole[] = ['claude', 'codex']
+const CLIS: readonly AgentCliForRole[] = AGENT_CLIS
 
 /** Validates a squad coming from the UI and returns the normalized custom squad. */
 export function normalizeSquad(input: SquadInput, existingIds: ReadonlySet<string>): Squad {

@@ -1,4 +1,4 @@
-import { EFFORTS, MODEL_ID, ROUTING_LIMITS, SLUG, type AgentCliForRole, type Effort, type Routing, type TaskType } from '@orbit/protocol'
+import { AGENT_CLIS, EFFORTS, MODEL_ID, ROUTING_LIMITS, SLUG, type AgentCliForRole, type Effort, type Routing, type TaskType } from '@orbit/protocol'
 import { slugify } from './squads.ts'
 
 /**
@@ -32,7 +32,7 @@ export const DEFAULT_ROUTING: Routing = {
   ],
 }
 
-const CLIS: readonly AgentCliForRole[] = ['claude', 'codex']
+const CLIS: readonly AgentCliForRole[] = AGENT_CLIS
 
 /** Validates a routing table from the UI. Row ids stay stable so leads can keep using them. */
 export function normalizeRouting(input: Routing): Routing {

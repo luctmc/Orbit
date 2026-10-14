@@ -1,12 +1,20 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
-import { ACCOUNT_LIMITS, MODEL_ID, type Account, type AccountKind, type AccountLimits, type AccountStatus, type AgentCliForRole } from '@orbit/protocol'
+import { AGENT_CLIS, ACCOUNT_LIMITS, MODEL_ID, type Account, type AccountKind, type AccountLimits, type AccountStatus, type AgentCliForRole } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { accountLabel, CLI_LABEL } from '../orbit/labels.ts'
 import { untilTime } from '../orbit/time.ts'
 import { PlusIcon } from './icons.tsx'
 import { Terminal } from './Terminal.tsx'
 
-const CLIS: AgentCliForRole[] = ['claude', 'codex']
+/** CLIs that take extra accounts; Antigravity runs only as this Mac's own login. */
+const CLIS: AgentCliForRole[] = ['claude', 'codex', 'gemini']
+const SUBSCRIPTION: Record<string, string> = { claude: 'Assinatura Claude', codex: 'Conta ChatGPT', gemini: 'Conta Google' }
+const LOGIN_HINT: Record<AgentCliForRole, string> = {
+  claude: 'O Claude Code abre o navegador para você entrar; se pedir, cole o código aqui no terminal.',
+  codex: 'O Codex abre o navegador para você entrar com a conta do ChatGPT.',
+  gemini: 'O Gemini CLI pergunta como entrar: escolha "Login with Google" e conclua no navegador. Depois feche com /quit.',
+  antigravity: 'O Antigravity CLI abre o login da conta Google; conclua no navegador e depois feche o terminal.',
+}
 
 /** Anthropic-compatible endpoints for Claude API accounts. */
 const PROVIDERS = [
@@ -92,7 +100,7 @@ function AccountCard({ account, status, limits, liveAgents, onEdit }: { account:
       {loginPane !== null && (
         <div className="account__login">
           <p className="note">
-            {account.cli === 'claude' ? 'O Claude Code abre o navegador para você entrar; se pedir, cole o código aqui no terminal.' : 'O Codex abre o navegador para você entrar com a conta do ChatGPT.'}
+            {LOGIN_HINT[account.cli]}
           </p>
           <div className="account__terminal"><Terminal paneId={loginPane} interactive /></div>
           <div className="account__login-actions">
@@ -142,7 +150,7 @@ function AccountForm({ initial, onDone }: { initial: Draft; onDone: () => void }
           <fieldset className="field">
             <legend>Tipo</legend>
             <div className="segmented">
-              <button type="button" aria-pressed={draft.kind === 'assinatura'} onClick={() => patch({ kind: 'assinatura', auto: true })}>{draft.cli === 'claude' ? 'Assinatura Claude' : 'Conta ChatGPT'}</button>
+              <button type="button" aria-pressed={draft.kind === 'assinatura'} onClick={() => patch({ kind: 'assinatura', auto: true })}>{SUBSCRIPTION[draft.cli]}</button>
               <button type="button" aria-pressed={draft.kind === 'api'} onClick={() => patch({ kind: 'api', auto: false })}>Chave de API</button>
             </div>
           </fieldset>
@@ -175,7 +183,7 @@ function AccountForm({ initial, onDone }: { initial: Draft; onDone: () => void }
       {draft.kind === 'api' && (
         <div className="field">
           <label htmlFor={`${uid}-key`}>Chave de API {editing && <span className="muted">(vazio mantém a atual)</span>}</label>
-          <input id={`${uid}-key`} type="password" autoComplete="off" spellCheck={false} maxLength={ACCOUNT_LIMITS.key} value={draft.key} onChange={(e) => patch({ key: e.target.value })} placeholder={draft.cli === 'claude' ? (draft.provider === 'openrouter' ? 'sk-or-…' : 'sk-ant-…') : 'sk-…'} />
+          <input id={`${uid}-key`} type="password" autoComplete="off" spellCheck={false} maxLength={ACCOUNT_LIMITS.key} value={draft.key} onChange={(e) => patch({ key: e.target.value })} placeholder={draft.cli === 'claude' ? (draft.provider === 'openrouter' ? 'sk-or-…' : 'sk-ant-…') : draft.cli === 'gemini' ? 'AIza… (Google AI Studio)' : 'sk-…'} />
           <p className="note">Fica só no seu Mac, num arquivo que só você lê. Os agentes recebem a chave pela CLI; ela não volta para a tela.</p>
         </div>
       )}
@@ -206,13 +214,13 @@ export function AccountsPanel() {
     <div className="dialog__body clis">
       <div className="clis__bar">
         <p className="muted">
-          Cada conta extra roda numa pasta própria do Claude Code ou do Codex, com as suas configurações, instruções e skills compartilhadas. Sem conta escolhida, o Orbit abre o agente na assinatura com mais folga e só passa para uma chave de API quando todas estiverem no limite.
+          Cada conta extra roda numa pasta própria do Claude Code, do Codex ou do Gemini CLI, com as suas configurações, instruções e skills compartilhadas. O Antigravity usa só o login deste Mac. Sem conta escolhida, o Orbit abre o agente na assinatura com mais folga e só passa para uma chave de API quando todas estiverem no limite.
         </p>
         <span className="spacer" />
         {!form && accounts.length < ACCOUNT_LIMITS.accounts && <button className="btn btn--ghost btn--sm" onClick={() => setForm(blankDraft())}><PlusIcon size={14} />Nova conta</button>}
       </div>
       {form && !form.id && <AccountForm initial={form} onDone={() => setForm(null)} />}
-      {CLIS.map((cli) => (
+      {AGENT_CLIS.map((cli) => (
         <section key={cli} className="accounts__group" aria-labelledby={`accounts-${cli}`}>
           <h3 id={`accounts-${cli}`} className="eyebrow">{CLI_LABEL[cli]}</h3>
           {accounts.filter((a) => a.cli === cli).map((account) =>

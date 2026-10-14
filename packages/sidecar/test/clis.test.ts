@@ -4,7 +4,7 @@ import { mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { effortsFor, type CliStatus } from '@orbit/protocol'
-import { blankStatus, CLAUDE_CATALOG, installMethod, parseCodexCatalog, parseVersion, updateCommands, type Run } from '../src/clis.ts'
+import { blankStatus, CLAUDE_CATALOG, installMethod, parseCodexCatalog, parseVersion, updateCommands, type Run, GEMINI_CATALOG, ANTIGRAVITY_FALLBACK } from '../src/clis.ts'
 import { startServer } from '../src/server.ts'
 import { connect, ORIGIN, TOKEN } from './helpers.ts'
 
@@ -34,7 +34,7 @@ test("Codex's catalog keeps the listed models with their own effort levels", () 
   assert.deepEqual(catalog.models[1]!.efforts, ['low', 'medium'])
   assert.equal(catalog.models[0]!.defaultEffort, 'low')
   assert.deepEqual(catalog.efforts, ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
-  const both = { claude: CLAUDE_CATALOG, codex: catalog }
+  const both = { claude: CLAUDE_CATALOG, codex: catalog, gemini: GEMINI_CATALOG, antigravity: ANTIGRAVITY_FALLBACK }
   assert.deepEqual(effortsFor(both, 'codex', 'gpt-6-luna'), ['low', 'medium'])
   assert.deepEqual(effortsFor(both, 'claude', 'opus'), ['low', 'medium', 'high', 'xhigh', 'max'])
   assert.deepEqual(effortsFor(both, 'shell', null), [])
@@ -77,7 +77,8 @@ test('the UI checks and updates the CLIs, and efforts are held to what each mode
     await ui.next('catalog', (m) => m.catalog.codex.source === 'cli')
 
     ui.send({ type: 'cli.check' })
-    const { clis } = await ui.next('cli.status', (m) => m.clis.every((c) => c.checkedAt !== null && c.busy === null))
+    // The light check at startup (no network) comes first; the full one adds the latest versions.
+    const { clis } = await ui.next('cli.status', (m) => m.clis.every((c) => c.checkedAt !== null && c.busy === null) && m.clis.some((c) => c.latest !== null))
     const claude = clis.find((c) => c.cli === 'claude')!
     assert.deepEqual([claude.version, claude.latest, claude.method], ['2.1.296', '2.1.300', 'npm'])
     assert.deepEqual([clis[1]!.version, clis[1]!.latest], ['0.160.1', '0.161.0'])

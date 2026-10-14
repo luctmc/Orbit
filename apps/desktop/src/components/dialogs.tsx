@@ -1,8 +1,8 @@
 import { useCallback, useId, useRef, useState } from 'react'
-import { MODEL_ID, type AgentCli, type Effort, type MissionMode, type Squad } from '@orbit/protocol'
+import { AGENT_CLIS, MODEL_ID, type AgentCli, type AgentCliForRole, type Effort, type MissionMode, type Squad } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, EFFORT_LABEL, MODE_LABEL } from '../orbit/labels.ts'
-import { AccountSelect, EffortChoice, ModelInput } from './agentPickers.tsx'
+import { AccountSelect, AgentChooser, EffortChoice, ModelSelect, useAgentReadiness } from './agentPickers.tsx'
 import { Dialog } from './Dialog.tsx'
 import { BudgetFields, budgetFrom } from './Budget.tsx'
 
@@ -37,19 +37,13 @@ function AgentFields({ value, onChange, label = 'Agente' }: { value: AgentChoice
     <>
       <fieldset className="field">
         <legend>{label}</legend>
-        <div className="segmented">
-          {(Object.keys(CLI_LABEL) as AgentCli[]).map((cli) => (
-            <button key={cli} type="button" aria-pressed={value.cli === cli} onClick={() => onChange({ cli, model: cli === value.cli ? value.model : '', effort: cli === 'shell' ? null : value.effort, accountId: cli === value.cli ? value.accountId : null })}>
-              {CLI_LABEL[cli]}
-            </button>
-          ))}
-        </div>
+        {/* A different agent starts from its own default model, effort and account. */}
+        <AgentChooser label={label} shell value={value.cli} onChange={(cli) => onChange(cli === value.cli ? value : { cli, model: '', effort: null, accountId: null })} />
       </fieldset>
-      {value.cli !== 'shell' && <AccountSelect id={`${id}-account`} cli={value.cli} value={value.accountId} onChange={setAccount} />}
       {value.cli !== 'shell' && (
         <div className="field">
-          <label htmlFor={`${id}-model`}>Modelo <span className="muted">(vazio = padrão do {CLI_LABEL[value.cli]})</span></label>
-          <ModelInput id={`${id}-model`} cli={value.cli} value={value.model || null} onChange={(model) => onChange({ ...value, model: model ?? '' })} />
+          <label htmlFor={`${id}-model`}>Modelo</label>
+          <ModelSelect id={`${id}-model`} cli={value.cli} value={value.model || null} onChange={(model) => onChange({ ...latest.current, model: model ?? '' })} />
         </div>
       )}
       {value.cli !== 'shell' && (
@@ -58,6 +52,7 @@ function AgentFields({ value, onChange, label = 'Agente' }: { value: AgentChoice
           <EffortChoice cli={value.cli} model={value.model || null} value={value.effort} onChange={setEffort} />
         </fieldset>
       )}
+      {value.cli !== 'shell' && <AccountSelect id={`${id}-account`} cli={value.cli} value={value.accountId} onChange={setAccount} />}
     </>
   )
 }
@@ -83,7 +78,8 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   const [squadId, setSquadId] = useState<string | null>(null)
   const [lead, setLead] = useState<AgentChoice>(DEFAULT_AGENT)
   const [worktrees, setWorktrees] = useState(false)
-  const [clis, setClis] = useState<Array<'claude' | 'codex'>>(['claude', 'codex'])
+  const [clis, setClis] = useState<AgentCliForRole[]>(['claude', 'codex'])
+  const readiness = useAgentReadiness()
   const [budgetTokens, setBudgetTokens] = useState('')
   const [budgetCost, setBudgetCost] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -181,10 +177,10 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
         <fieldset className="field">
           <legend>O maestro pode usar</legend>
           <div className="segmented" role="group" aria-label="CLIs dos ajudantes">
-            {(['claude', 'codex'] as const).map((cli) => (
-              <button key={cli} type="button" aria-pressed={clis.includes(cli)}
+            {AGENT_CLIS.map((cli) => (
+              <button key={cli} type="button" aria-pressed={clis.includes(cli)} title={readiness(cli).text}
                 onClick={() => setClis((list) => (list.includes(cli) ? (list.length > 1 ? list.filter((c) => c !== cli) : list) : [...list, cli]))}>
-                {CLI_LABEL[cli]}
+                {CLI_LABEL[cli]}{readiness(cli).ready ? '' : ' ·'}
               </button>
             ))}
           </div>

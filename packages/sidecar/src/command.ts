@@ -28,7 +28,14 @@ export interface AgentLaunch {
   disabledMcp?: string[]
   /** Continue this conversation of the CLI instead of starting one (no first prompt then). */
   resume?: string
+  /** Gemini: settings file with Orbit's MCP server and hooks (GEMINI_CLI_SYSTEM_SETTINGS_PATH). */
+  systemSettingsPath?: string
+  /** Folder with the `orbit` command, put first on the agent's PATH. */
+  binDir?: string
 }
+
+/** What each CLI runs to sign in an account. */
+const LOGIN: Record<Exclude<AgentCli, 'shell'>, string> = { claude: 'claude auth login', codex: 'codex login', gemini: 'gemini', antigravity: 'agy' }
 
 export function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`
@@ -43,14 +50,40 @@ const fromFile = (path: string) => `"$(cat ${shellQuote(path)})"`
  */
 export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
   if (launch.cli === 'shell') return { file: shell, args: ['-l'] }
-  if (launch.login) return { file: shell, args: ['-l', '-c', launch.cli === 'claude' ? 'claude auth login' : 'codex login'] }
+  if (launch.login) return { file: shell, args: ['-l', '-c', LOGIN[launch.cli]] }
   const { model, effort, resume } = launch
   if (model !== null && !MODEL_ID.test(model)) throw new Error(`Modelo inválido: ${model}`)
   if (resume !== undefined && !SESSION_ID.test(resume)) throw new Error('Conversa inválida para retomar')
   if (effort && !EFFORTS.includes(effort)) throw new Error(`Esforço inválido: ${effort}`)
 
   const parts: string[] = []
-  if (launch.cli === 'claude') {
+  // The `orbit` command comes first on the PATH (after the login shell set it up).
+  if (launch.binDir) parts.push(`PATH=${shellQuote(launch.binDir)}:"$PATH"`)
+  const firstPrompt = () => {
+    // On resume the role is already in the conversation; only a new message goes.
+    const files = resume ? [launch.taskPath] : [launch.rolePromptPath, launch.taskPath]
+    const prompt = files.filter((p): p is string => Boolean(p))
+    return prompt.length ? `"$(cat ${prompt.map(shellQuote).join(' ')})"` : null
+  }
+  if (launch.cli === 'gemini') {
+    if (launch.systemSettingsPath) parts.push(`GEMINI_CLI_SYSTEM_SETTINGS_PATH=${shellQuote(launch.systemSettingsPath)}`)
+    parts.push('gemini')
+    if (model) parts.push('-m', model)
+    // Its conversation id comes with every hook; a fixed --session-id would break the restart
+    // Gemini does itself after the folder-trust question.
+    if (resume) parts.push('--resume', resume)
+    if (launch.addDirs?.length) parts.push('--include-directories', shellQuote(launch.addDirs.join(',')))
+    const prompt = firstPrompt()
+    if (prompt) parts.push('-i', prompt)
+  } else if (launch.cli === 'antigravity') {
+    parts.push('agy')
+    if (model) parts.push('--model', model)
+    if (effort) parts.push('--effort', effort)
+    for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
+    if (resume) parts.push('--conversation', resume)
+    const prompt = firstPrompt()
+    if (prompt) parts.push('--prompt-interactive', prompt)
+  } else if (launch.cli === 'claude') {
     parts.push('claude')
     if (resume) parts.push('--resume', resume)
     if (model) parts.push('--model', model)

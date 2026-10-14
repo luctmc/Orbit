@@ -150,9 +150,41 @@ export interface Mission {
   updatedAt: number
 }
 
-export type AgentCli = 'claude' | 'codex' | 'shell'
+export type AgentCli = 'claude' | 'codex' | 'gemini' | 'antigravity' | 'shell'
 /** CLIs that can fill a squad role (a plain terminal cannot follow a brief). */
 export type AgentCliForRole = Exclude<AgentCli, 'shell'>
+
+/** The agent CLIs Orbit can run, in the order it shows them. */
+export const AGENT_CLIS: readonly AgentCliForRole[] = ['claude', 'codex', 'gemini', 'antigravity']
+
+/** What each agent CLI is and how Orbit talks to it. */
+export interface AgentInfo {
+  /** Short name in pickers and chips. */
+  label: string
+  /** The product, for the picker's second line. */
+  product: string
+  /** Executable on the PATH. */
+  bin: string
+  /**
+   * How the agent reaches Orbit's tools: `mcp`, an MCP server given per session; `command`, the
+   * `orbit` command in its terminal (CLIs whose MCP config cannot be given per session).
+   */
+  tools: 'mcp' | 'command'
+  /** Reports its turns and tool calls to Orbit through hooks (status, handoff, refusals). */
+  hooks: boolean
+  /** Can carry on a conversation later. */
+  resume: boolean
+}
+
+export const AGENT_INFO: Record<AgentCliForRole, AgentInfo> = {
+  claude: { label: 'Claude', product: 'Claude Code · Anthropic', bin: 'claude', tools: 'mcp', hooks: true, resume: true },
+  codex: { label: 'Codex', product: 'Codex CLI · OpenAI', bin: 'codex', tools: 'mcp', hooks: false, resume: true },
+  gemini: { label: 'Gemini', product: 'Gemini CLI · Google', bin: 'gemini', tools: 'mcp', hooks: true, resume: true },
+  antigravity: { label: 'Antigravity', product: 'Antigravity CLI · Google', bin: 'agy', tools: 'command', hooks: false, resume: true },
+}
+
+/** "Claude", "Codex", "Gemini", "Antigravity" or "Terminal". */
+export const CLI_NAME: Record<AgentCli, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini', antigravity: 'Antigravity', shell: 'Terminal' }
 export type PaneRole = 'lead' | 'crew'
 /** A helper's own report: finished, stuck, or still at it. */
 export type HandoffStatus = 'done' | 'blocked' | 'progress'
@@ -232,11 +264,8 @@ export interface AccountLimits {
 }
 
 /** Tokens used on one local day (YYYY-MM-DD), per CLI. */
-export interface UsageDay {
-  day: string
-  claude: number
-  codex: number
-}
+/** Tokens of one day, per agent CLI. */
+export type UsageDay = { day: string } & Record<AgentCliForRole, number>
 
 /** One seat in a squad: who fills it and what they are told to do. */
 export interface SquadRole {
@@ -292,6 +321,8 @@ export interface CliCatalog {
   efforts: Effort[]
   /** `cli`: read from the installed CLI; `builtin`: Orbit's list, when the CLI cannot be asked. */
   source: 'cli' | 'builtin'
+  /** The model the CLI uses when none is chosen, when Orbit can tell (Codex's config.toml). */
+  defaultModel?: string | null
 }
 
 export type Catalog = Record<AgentCliForRole, CliCatalog>
@@ -301,7 +332,7 @@ export function effortsFor(catalog: Catalog | null, cli: AgentCli, model: string
   if (cli === 'shell') return []
   if (!catalog) return EFFORTS
   const entry = catalog[cli]
-  return entry.models.find((m) => m.id === model)?.efforts ?? entry.efforts
+  return entry.models.find((m) => m.id === (model ?? entry.defaultModel))?.efforts ?? entry.efforts
 }
 
 /** An installed agent CLI as Orbit sees it. */

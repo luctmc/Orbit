@@ -648,6 +648,8 @@ h1, h2, p { margin: 0; }
 .usage__bar { display: block; width: 100%; }
 .usage__bar--claude { background: var(--accent); }
 .usage__bar--codex { background: var(--text-3); }
+.usage__bar--gemini { background: #7fa6d6; }
+.usage__bar--antigravity { background: #b48ad0; }
 .usage__legend { font-size: 12px; display: flex; align-items: center; gap: 6px; margin: -6px 0 0; }
 .usage__swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 .usage__table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -662,3 +664,22 @@ h1, h2, p { margin: 0; }
 .usage__budget .limit__bar { width: 120px; display: block; }
 .usage__budget[data-level='wait'] .limit__bar span { background: var(--wait); }
 .usage__budget[data-level='danger'] .limit__bar span { background: var(--danger); }
+
+/* Agent and model pickers */
+.agent-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.agent-card { display: grid; gap: 2px; padding: 10px 12px; text-align: left; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface-2); color: var(--text); cursor: pointer; }
+.agent-card:hover { border-color: var(--line-strong); }
+.agent-card[aria-checked='true'] { border-color: var(--accent-line); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.agent-card strong { font-size: 14px; }
+.agent-card__product { font-size: 11.5px; color: var(--muted); }
+.agent-card__state { margin-top: 4px; font: 11px var(--mono); color: var(--accent); }
+.agent-card--off .agent-card__state { color: var(--wait); }
+.agent-card--off strong { color: var(--text-2); }
+.note--warn { color: var(--wait); }
+.model-select { display: grid; gap: 6px; min-width: 0; }
+.model-select select, .model-select input, .cli-select { width: 100%; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); color-scheme: dark; }
+.field .model-select select, .field .model-select input { padding: 9px 12px; }
+.routing__table .cli-select { min-width: 120px; }
+.routing__table .model-select { min-width: 190px; }
+.model-select__note { margin: 0; }
+.effort--none { color: var(--muted); padding: 0 8px; }

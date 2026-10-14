@@ -2,10 +2,9 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { MODEL_ID, SQUAD_LIMITS, type AgentCliForRole, type Squad, type SquadInput, type SquadRole } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL } from '../orbit/labels.ts'
-import { ModelInput, SkillsField } from './agentPickers.tsx'
+import { CliSelect, ModelSelect, SkillsField } from './agentPickers.tsx'
 import { CloseIcon, PlusIcon } from './icons.tsx'
 
-const ROLE_CLIS: AgentCliForRole[] = ['claude', 'codex']
 
 const blankRole = (): SquadRole => ({ id: '', name: '', cli: 'claude', model: null, brief: '', skills: [], onlySkills: false })
 const blankSquad = (): SquadInput => ({ id: '', name: '', description: '', lead: { cli: 'claude', model: null }, playbook: '', roles: [blankRole()] })
@@ -131,11 +130,8 @@ export function SquadsDialog({ onClose }: { onClose: () => void }) {
             <fieldset className="field squads__lead">
               <legend>Líder</legend>
               <div className="squads__row">
-                <div className="segmented" role="group" aria-label="Agente do líder">
-                  {ROLE_CLIS.map((cli) => <button key={cli} type="button" aria-pressed={view.lead.cli === cli} disabled={readOnly} onClick={() => patch({ lead: { cli, model: null } })}>{CLI_LABEL[cli]}</button>)}
-                </div>
-                <label className="sr-only" htmlFor={`${uid}-lead-model`}>Modelo do líder</label>
-                <ModelInput id={`${uid}-lead-model`} cli={view.lead.cli} value={view.lead.model} onChange={(model) => patch({ lead: { ...view.lead, model } })} disabled={readOnly} />
+                <CliSelect id={`${uid}-lead-cli`} label="Agente do líder" value={view.lead.cli} disabled={readOnly} onChange={(cli) => patch({ lead: { cli, model: null } })} />
+                <ModelSelect id={`${uid}-lead-model`} label="Modelo do líder" compact cli={view.lead.cli} value={view.lead.model} onChange={(model) => patch({ lead: { ...view.lead, model } })} disabled={readOnly} />
               </div>
             </fieldset>
 
@@ -152,11 +148,8 @@ export function SquadsDialog({ onClose }: { onClose: () => void }) {
                     <div className="squads__row">
                       <label className="sr-only" htmlFor={`${uid}-r${i}-name`}>Nome do papel {i + 1}</label>
                       <input id={`${uid}-r${i}-name`} className="role-card__name" value={r.name} maxLength={40} placeholder="Revisor" onChange={(e) => patchRole(i, { name: e.target.value })} disabled={readOnly} />
-                      <div className="segmented" role="group" aria-label={`Agente de ${r.name || `papel ${i + 1}`}`}>
-                        {ROLE_CLIS.map((cli) => <button key={cli} type="button" aria-pressed={r.cli === cli} disabled={readOnly} onClick={() => patchRole(i, { cli, model: null })}>{CLI_LABEL[cli]}</button>)}
-                      </div>
-                      <label className="sr-only" htmlFor={`${uid}-r${i}-model`}>Modelo de {r.name || `papel ${i + 1}`}</label>
-                      <ModelInput id={`${uid}-r${i}-model`} cli={r.cli} value={r.model} onChange={(model) => patchRole(i, { model })} disabled={readOnly} />
+                      <CliSelect id={`${uid}-r${i}-cli`} label={`Agente de ${r.name || `papel ${i + 1}`}`} value={r.cli} disabled={readOnly} onChange={(cli) => patchRole(i, { cli, model: null })} />
+                      <ModelSelect id={`${uid}-r${i}-model`} label={`Modelo de ${r.name || `papel ${i + 1}`}`} compact cli={r.cli} value={r.model} onChange={(model) => patchRole(i, { model })} disabled={readOnly} />
                       {editing && view.roles.length > 1 && (
                         <button type="button" className="icon-btn" aria-label={`Remover ${r.name || `papel ${i + 1}`}`} onClick={() => draft && setDraft({ ...draft, roles: draft.roles.filter((_, j) => j !== i) })}><CloseIcon size={14} /></button>
                       )}

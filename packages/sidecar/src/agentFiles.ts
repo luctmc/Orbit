@@ -5,6 +5,8 @@ import { shellQuote, type AgentLaunch } from './command.ts'
 
 /** Claude Code events that move a pane's status. */
 const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Notification', 'Stop'] as const
+/** Gemini CLI's equivalents (BeforeAgent ~ UserPromptSubmit, AfterAgent ~ Stop). */
+const GEMINI_HOOK_EVENTS = ['SessionStart', 'BeforeAgent', 'BeforeTool', 'AfterTool', 'Notification', 'AfterAgent'] as const
 
 export interface AgentFilesInput {
   paneDir: string
@@ -22,6 +24,8 @@ export interface AgentFilesInput {
   apiKeyHelper?: string
   rolePrompt: string | null
   task: string | null
+  /** Command that runs `orbit-cli.mjs`; becomes the `orbit` command on the agent's PATH. */
+  orbitCommand?: string
 }
 
 /**
@@ -42,6 +46,12 @@ export function writeAgentFiles(input: AgentFilesInput): AgentLaunch {
 
   if (input.rolePrompt) launch.rolePromptPath = write('role.md', input.rolePrompt)
   if (input.task) launch.taskPath = write('task.md', input.task)
+  if (input.orbitCommand) {
+    const bin = join(paneDir, 'bin')
+    mkdirSync(bin, { recursive: true, mode: 0o700 })
+    writeFileSync(join(bin, 'orbit'), `#!/bin/sh\nexec ${input.orbitCommand} "$@"\n`, { mode: 0o700 })
+    launch.binDir = bin
+  }
 
   if (cli === 'claude') {
     launch.mcpConfigPath = write('mcp.json', JSON.stringify({
@@ -58,9 +68,19 @@ export function writeAgentFiles(input: AgentFilesInput): AgentLaunch {
     const statusLine = input.statusCommand ? { type: 'command', command: input.statusCommand, padding: 0 } : undefined
     const apiKeyHelper = input.apiKeyHelper ? { apiKeyHelper: input.apiKeyHelper } : {}
     launch.settingsPath = write('settings.json', JSON.stringify({ permissions, hooks, ...(statusLine ? { statusLine } : {}), ...apiKeyHelper }, null, 2))
-  } else {
+  } else if (cli === 'gemini') {
+    // Read on top of the person's own settings (GEMINI_CLI_SYSTEM_SETTINGS_PATH): Orbit's server,
+    // trusted so its coordination tools never stop for approval, and the status hooks.
+    const hook = { type: 'command', command: input.hookCommand, timeout: 5000 }
+    const hooks = Object.fromEntries(GEMINI_HOOK_EVENTS.map((event) => [event, [event === 'BeforeTool' || event === 'AfterTool' ? { matcher: '*', hooks: [hook] } : { hooks: [hook] }]]))
+    launch.systemSettingsPath = write('gemini-settings.json', JSON.stringify({
+      mcpServers: { orbit: { httpUrl: `${input.endpoint}/mcp`, headers: { Authorization: `Bearer ${input.token}` }, trust: true } },
+      hooks,
+    }, null, 2))
+  } else if (cli === 'codex') {
     launch.mcpUrl = `${input.endpoint}/mcp`
   }
+  // Antigravity takes its MCP servers only from global or project files: it uses the `orbit` command.
   return launch
 }
 

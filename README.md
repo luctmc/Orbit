@@ -155,6 +155,17 @@ npm test
   no Claude, `default_tools_approval_mode = "approve"` no Codex): só coordenam a missão, e pedir
   permissão a cada retorno travaria agentes em modo manual (ou recusaria tudo no Codex com
   política `never`).
+- **Agentes**: Claude Code, Codex, Gemini CLI e Antigravity CLI. Você escolhe o agente em cartões
+  que mostram se ele está instalado e com login; o modelo vem da lista daquela CLI (lida da própria
+  CLI quando ela informa: Codex e Antigravity; o padrão do Codex vem do seu `config.toml`), com
+  "outro modelo" para qualquer id; o esforço mostra só os níveis que o modelo aceita, com o padrão
+  dele marcado (o Gemini não tem esforço). O Gemini recebe o servidor do Orbit e os hooks num
+  arquivo de configuração só da sessão (`GEMINI_CLI_SYSTEM_SETTINGS_PATH`), sem mexer no seu
+  `~/.gemini`; o Antigravity, que só lê MCP global ou do projeto, usa o comando `orbit` no terminal
+  (`orbit` lista as ferramentas; `orbit handoff_submit '{"summary":…}'` chama), que todo agente
+  também tem. O Gemini aceita contas extras (pasta própria ou chave do Google AI Studio); o login
+  Google pessoal do Gemini CLI foi encerrado pelo Google em favor do Antigravity. O OpenRouter entra
+  como conta de API do Claude Code (Ajustes › Contas › Provedor OpenRouter).
 - **Maestro** (missão agêntica): você escolhe só o líder. Ele orquestra e não executa: o Orbit
   recusa as ferramentas de edição do líder Claude e reforça a regra a cada mensagem; depois de
   delegar ele encerra o turno e espera os retornos, e só fecha um ajudante que ainda não entregou

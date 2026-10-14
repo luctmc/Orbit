@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { EFFORT_LABEL, type CliStatus } from '@orbit/protocol'
+import { AGENT_CLIS, AGENT_INFO, EFFORT_LABEL, type AgentCliForRole, type CliStatus } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, pathText } from '../orbit/labels.ts'
 import { relativeTime } from '../orbit/time.ts'
@@ -10,6 +10,14 @@ const METHOD_LABEL: Record<CliStatus['method'], string> = {
   native: 'instalador nativo',
   brew: 'instalado pelo Homebrew',
   unknown: 'instalação desconhecida',
+}
+
+/** How to install each CLI, for the person to run (Orbit does not install CLIs by itself). */
+const INSTALL: Record<AgentCliForRole, string> = {
+  claude: 'curl -fsSL https://claude.ai/install.sh | bash',
+  codex: 'npm install -g @openai/codex',
+  gemini: 'brew install gemini-cli',
+  antigravity: 'Instale o Antigravity (antigravity.google): ele traz a CLI agy. Depois rode agy uma vez para entrar.',
 }
 
 /** -1, 0 or 1 comparing dotted versions; prerelease suffixes are ignored. */
@@ -27,13 +35,13 @@ function CliCard({ status, liveAgents }: { status: CliStatus; liveAgents: number
   const client = useOrbitClient()
   const name = CLI_LABEL[status.cli]
   const outdated = status.version && status.latest ? compareVersions(status.latest, status.version) > 0 : false
-  const canUpdate = status.installed && (status.method === 'npm' || status.method === 'native')
+  const canUpdate = status.installed && (status.method === 'npm' || status.method === 'native' || (status.method === 'brew' && status.cli === 'gemini'))
 
   return (
     <article className="cli-card" aria-labelledby={`cli-${status.cli}`}>
       <div className="cli-card__head">
         <div className="cli-card__title">
-          <h3 id={`cli-${status.cli}`}>{name}</h3>
+          <h3 id={`cli-${status.cli}`}>{name} <span className="muted cli-card__product">{AGENT_INFO[status.cli].product}</span></h3>
           {status.busy ? (
             <span className="chip" role="status">{status.busy === 'checking' ? 'Verificando…' : 'Atualizando…'}</span>
           ) : status.checkedAt === null ? null : !status.installed ? (
@@ -61,6 +69,9 @@ function CliCard({ status, liveAgents }: { status: CliStatus; liveAgents: number
       {outdated && status.installed && !canUpdate && <p className="note">{name} não foi instalado por npm nem pelo instalador nativo; atualize pelo meio que você usou.</p>}
       {outdated && canUpdate && liveAgents > 0 && (
         <p className="note">{liveAgents} {liveAgents === 1 ? 'agente aberto continua' : 'agentes abertos continuam'} na versão atual até ser{liveAgents === 1 ? '' : 'em'} reaberto{liveAgents === 1 ? '' : 's'}.</p>
+      )}
+      {status.checkedAt !== null && !status.installed && !status.busy && (
+        <p className="note">Para usar o {name}: {INSTALL[status.cli].includes(' ') && !INSTALL[status.cli].startsWith('Instale') ? <><code>{INSTALL[status.cli]}</code> no seu terminal; depois clique em Verificar de novo.</> : INSTALL[status.cli]}</p>
       )}
       {status.message && <pre className={`cli-card__message${status.ok === false ? ' cli-card__message--error' : ''}`}>{status.message}</pre>}
     </article>
@@ -142,7 +153,7 @@ export function ClisPanel() {
           <p className="muted">Lendo os modelos das CLIs…</p>
         ) : (
           <div className="catalog-grid">
-            {(['claude', 'codex'] as const).map((cli) => (
+            {AGENT_CLIS.map((cli) => (
               <div key={cli} className="catalog-col">
                 <div className="catalog-col__head">
                   <span>{CLI_LABEL[cli]}</span>
