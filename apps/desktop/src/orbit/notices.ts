@@ -14,12 +14,14 @@ export interface NoticePrefs {
   scheduled: boolean
   /** The lead declared the mission ready. */
   ready: boolean
+  /** A lead suggests changing the task table. */
+  proposal: boolean
   /** Only while Orbit is not the app in front. */
   onlyInBackground: boolean
   sound: boolean
 }
 
-export const DEFAULT_PREFS: NoticePrefs = { waiting: true, handoff: true, finished: true, exited: false, scheduled: true, ready: true, onlyInBackground: true, sound: true }
+export const DEFAULT_PREFS: NoticePrefs = { waiting: true, handoff: true, finished: true, exited: false, scheduled: true, ready: true, proposal: true, onlyInBackground: true, sound: true }
 
 export interface Notice {
   title: string
@@ -49,6 +51,7 @@ export class NoticeWatcher {
       if (e.kind === 'pane.waiting' && prefs.waiting) return [{ title: e.title, body: clip(`${where}: ${e.body}`), missionId: e.missionId, paneId: e.paneId }]
       if (e.kind === 'handoff' && prefs.handoff) return [{ title: e.title, body: clip(`${where}: ${e.body.split('\n')[0] ?? ''}`), missionId: e.missionId, paneId: e.paneId }]
       if (e.kind === 'mission.created' && e.title.startsWith('Missão agendada') && prefs.scheduled) return [{ title: e.title, body: clip(where), missionId: e.missionId, paneId: null }]
+      if (e.kind === 'proposal' && e.title.startsWith('Proposta para') && prefs.proposal) return [{ title: e.title, body: clip(`${where}: ${e.body.split('\n')[0] ?? ''}`), missionId: e.missionId, paneId: e.paneId }]
       if (e.kind === 'mission.ready' && prefs.ready) return [{ title: `Missão pronta: ${where}`, body: clip(e.body), missionId: e.missionId, paneId: null }]
       if (e.kind === 'pane.exited' && prefs.exited) return [{ title: e.title, body: clip(`${where}: ${e.body}`), missionId: e.missionId, paneId: e.paneId }]
       return []

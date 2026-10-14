@@ -50,8 +50,8 @@ function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
 }
 
 /** Opens a helper and returns its line of the reply: number, title and the receipt. */
-function openHelper(core: OrbitCore, caller: Pane, h: HelperInput): string {
-  const { pane, receipt } = core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null })
+async function openHelper(core: OrbitCore, caller: Pane, h: HelperInput): Promise<string> {
+  const { pane, receipt } = await core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null })
   return `#${pane.id} ${pane.title}\n${receipt.map((line) => `  ▸ ${line}`).join('\n')}`
 }
 
@@ -113,19 +113,21 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     server.registerTool('agent_spawn', {
       description: 'Abre um ajudante num terminal visível ao usuário, já com a tarefa. O Orbit escolhe a CLI (Claude ou Codex), o modelo, o esforço e a conta com mais folga pelo tipo da tarefa, e devolve um recibo dizendo o que escolheu e por quê. O ajudante entrega com handoff_submit, e o retorno chega sozinho ao seu terminal como "[Orbit] Retorno de #N": depois de delegar, encerre o seu turno e espere.',
       inputSchema: helperFields,
-    }, guarded((h: HelperInput) => `Aberto:\n${open(h)}\n\nAgora encerre o turno: o retorno chega sozinho.`))
+    }, guarded(async (h: HelperInput) => `Aberto:\n${await open(h)}\n\nAgora encerre o turno: o retorno chega sozinho.`))
 
     server.registerTool('agent_spawn_many', {
       description: 'Abre vários ajudantes de uma vez (até 8), para atividades independentes que podem andar em paralelo. Mesmo funcionamento de agent_spawn para cada um.',
       inputSchema: { helpers: z.array(z.object(helperFields)).min(1).max(8) },
-    }, guarded(({ helpers }: { helpers: HelperInput[] }) => {
-      const lines = helpers.map((h, i) => {
+    }, guarded(async ({ helpers }: { helpers: HelperInput[] }) => {
+      // One after the other, so each sees the agents the previous ones put on the accounts.
+      const lines: string[] = []
+      for (const [i, h] of helpers.entries()) {
         try {
-          return open(h)
+          lines.push(await open(h))
         } catch (error) {
-          return `${i + 1}. não abriu (${h.title ?? h.task.slice(0, 40)}): ${error instanceof Error ? error.message : String(error)}`
+          lines.push(`${i + 1}. não abriu (${h.title ?? h.task.slice(0, 40)}): ${error instanceof Error ? error.message : String(error)}`)
         }
-      })
+      }
       return `Abertos:\n${lines.join('\n')}\n\nAgora encerre o turno: os retornos chegam sozinhos.`
     }))
 
@@ -188,6 +190,23 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       return 'Pergunta feita. Encerre o turno: a resposta chega no seu terminal.'
     }))
 
+    const kinds = core.routing().taskTypes
+    server.registerTool('routing_propose', {
+      description: 'Propõe ao usuário mudar uma linha da tabela "quem faz cada tarefa" (CLI, modelo, esforço, como fazer, só leitura), com o motivo, quando a experiência da missão mostrar que outra escolha seria melhor. O usuário aceita ou recusa nos Ajustes, e a resposta chega no seu terminal. Não muda nada antes disso.',
+      inputSchema: {
+        kind: z.enum(kinds.map((t) => t.id) as [string, ...string[]]).describe('A linha da tabela'),
+        agent: z.enum(['claude', 'codex']).optional(),
+        model: z.union([z.string().regex(MODEL_ID), z.null()]).optional().describe('Modelo, ou null para o padrão da CLI'),
+        effort: z.union([z.enum(EFFORTS as [Effort, ...Effort[]]), z.null()]).optional(),
+        method: z.string().max(1500).optional().describe('Novo "como fazer" (substitui o atual)'),
+        readOnly: z.boolean().optional(),
+        reason: z.string().min(1).max(600).describe('O que nesta missão mostrou que a mudança vale a pena'),
+      },
+    }, guarded(({ kind, agent, model, effort, method, readOnly, reason }: { kind: string; agent?: 'claude' | 'codex'; model?: string | null; effort?: Effort | null; method?: string; readOnly?: boolean; reason: string }) => {
+      core.proposeRouting(caller, { kind, change: { cli: agent, model, effort, method, readOnly }, reason })
+      return 'Proposta enviada ao usuário. A resposta chega no seu terminal; até lá a tabela não muda.'
+    }))
+
     server.registerTool('handoff_list', {
       description: 'Íntegra dos retornos que os ajudantes enviaram nesta missão.',
     }, guarded(() => core.missionEvents(caller.missionId, 'handoff').map((e) => ({ from: e.paneId, at: new Date(e.at).toISOString(), text: e.body }))))
@@ -221,7 +240,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
         accept: ACCEPT,
         ...folderField(core, caller),
       },
-    }, guarded((h: HelperInput) => `Aberto:\n${openHelper(core, caller, h)}\n\nContinue a sua parte; o retorno dele chega sozinho.`))
+    }, guarded(async (h: HelperInput) => `Aberto:\n${await openHelper(core, caller, h)}\n\nContinue a sua parte; o retorno dele chega sozinho.`))
 
     server.registerTool('agent_close', {
       description: 'Fecha um sub-ajudante seu que já entregou. Com force, fecha mesmo sem retorno (só se travou).',

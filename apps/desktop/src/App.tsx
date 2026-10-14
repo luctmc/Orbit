@@ -112,6 +112,7 @@ export function App() {
         onNewMission={workspace && view === 'mission' ? () => setDialog('mission') : null}
         onSquads={() => setDialog('squads')}
         onSettings={() => setDialog('routing')}
+        pendingProposals={state.proposals.filter((p) => p.status === 'pendente').length}
       />
 
       {state.lastError && (

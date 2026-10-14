@@ -180,6 +180,12 @@ npm test
   cujos retornos voltam para ele. O líder pergunta a você com `ask_user` (o terminal fica "espera
   você" com as opções em botões). O recibo de cada abertura fica no fluxo da missão. Num workspace
   com várias pastas, o ajudante pode nascer na pasta do trabalho (`folder`).
+- **Classificação e tabela viva**: sem `kind`, cada tipo pontua as palavras da atividade (as do
+  título valem mais); quando nada bate ou dois tipos ficam próximos, o Claude Haiku decide pela
+  tabela, rodando sem hooks, MCP, ferramentas nem sessão salva (alguns segundos, fração de
+  centavo; dá para desligar). O líder pode propor mudanças na tabela (`routing_propose`, com o
+  motivo); você aceita ou recusa em Ajustes, que mostra um selo com as pendentes, e a resposta
+  chega no terminal dele.
 - **Continuidade**: retomar um agente mantém o número dele; ao abrir o Orbit, os agentes que
   estavam rodando voltam na mesma conversa, e quem devia uma entrega recebe um aviso para
   continuar (dá para desligar em Ajustes › Quem faz cada tarefa). A folga das contas do Codex é

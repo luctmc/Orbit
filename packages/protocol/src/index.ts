@@ -481,7 +481,7 @@ export interface Card {
   updatedAt: number
 }
 
-export type MissionEventKind = 'mission.created' | 'mission.ready' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser'
+export type MissionEventKind = 'mission.created' | 'mission.ready' | 'proposal' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser'
 
 export interface MissionEvent {
   id: string
@@ -507,12 +507,31 @@ export interface Snapshot {
   templates: MissionTemplate[]
   schedules: Schedule[]
   settings: OrbitSettings
+  proposals: RoutingProposal[]
 }
 
 /** Choices that change how Orbit behaves, kept with its data. */
 export interface OrbitSettings {
   /** When Orbit opens, bring back the agents of active missions in their conversations. */
   resumeOnStart: boolean
+  /** When no keyword tells an activity's type, a small model (Claude Haiku) decides. */
+  smartClassify: boolean
+}
+
+/** What a lead may suggest changing in a row of the task table. */
+export type RoutingChange = Partial<Pick<TaskType, 'cli' | 'model' | 'effort' | 'method' | 'readOnly'>>
+
+/** A lead's suggestion to change the task table; the person accepts or refuses it. */
+export interface RoutingProposal {
+  id: string
+  missionId: string
+  paneId: number
+  /** The row (task type id) it changes. */
+  kind: string
+  change: RoutingChange
+  reason: string
+  status: 'pendente' | 'aceita' | 'recusada'
+  createdAt: number
 }
 
 export interface SpawnPaneRequest {
@@ -589,6 +608,8 @@ export type ClientMessage =
   /** Back to the table Orbit ships with. */
   | { type: 'routing.reset' }
   | { type: 'settings.save'; settings: OrbitSettings }
+  /** Accept (apply to the table) or refuse a lead's proposal. */
+  | { type: 'proposal.decide'; proposalId: string; accept: boolean }
   | { type: 'account.save'; account: AccountInput }
   | { type: 'account.delete'; accountId: string }
   /** Ask each CLI about its accounts' logins again. */
@@ -631,6 +652,7 @@ export type ServerMessage =
   | { type: 'squad.removed'; squadId: string }
   | { type: 'routing.updated'; routing: Routing }
   | { type: 'settings.updated'; settings: OrbitSettings }
+  | { type: 'proposals'; proposals: RoutingProposal[] }
   | { type: 'catalog'; catalog: Catalog }
   | { type: 'usage.day'; day: UsageDay }
   | { type: 'limits'; limits: AccountLimits[] }

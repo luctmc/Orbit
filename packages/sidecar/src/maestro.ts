@@ -7,39 +7,58 @@ import { ACCOUNT_FULL_PERCENT, type Account, type AccountLimits, type AccountSta
 
 /** Words that point to each built-in task type; custom types match by their own name. */
 const KEYWORDS: Record<string, RegExp> = {
-  bug: /\b(bug|erro|falha|quebr|corrig|conserta|regress|exce[cç][aã]o|crash|n[aã]o funciona)/i,
-  testes: /\b(testes?|test|cobertura|spec|unit[aá]rio|e2e|jest|vitest|pytest)\b/i,
-  documentacao: /\b(doc|docs|documenta|readme|changelog|coment[aá]rio|guia|notas de vers)/i,
-  refatoracao: /\b(refator|refactor|reorganiz|limpa|renomei|extrai|simplific)/i,
-  investigacao: /\b(investig|analis|descobr|entend|mapei|audit|por que|porqu[eê]|diagn[oó]stic|medi[rç])/i,
-  revisao: /\b(revis|review|revisar|conferir|validar o trabalho|cr[ií]tic)/i,
-  funcionalidade: /\b(implement|criar|cria|adicion|nova|novo|feature|funcionalidade|tela|endpoint)/i,
+  bug: /\b(bug|erro|falha|quebr|corrig|conserta|regress|exce[cç][aã]o|crash|n[aã]o funciona)/gi,
+  testes: /\b(testes?|test|cobertura|spec|unit[aá]rio|e2e|jest|vitest|pytest)\b/gi,
+  documentacao: /\b(doc|docs|documenta|readme|changelog|coment[aá]rio|guia|notas de vers)|[\w-]+\.md\b/gi,
+  refatoracao: /\b(refator|refactor|reorganiz|limpa|renomei|extrai|simplific)/gi,
+  investigacao: /\b(investig|analis|descobr|entend|mapei|audit|por que|porqu[eê]|diagn[oó]stic|medi[rç])/gi,
+  revisao: /\b(revis|review|revisar|conferir|validar o trabalho|cr[ií]tic)/gi,
+  funcionalidade: /\b(implement|criar|cria|adicion|nova|novo|feature|funcionalidade|tela|endpoint)/gi,
 }
 
-/** Order matters: the first match wins (a "test for a bug fix" is a test). */
+/** On equal scores the first wins (a "test for a bug fix" is a test). */
 const ORDER = ['revisao', 'testes', 'bug', 'documentacao', 'refatoracao', 'investigacao', 'funcionalidade']
+/** A word in the title says more about the activity than one in the task's details. */
+const TITLE_WEIGHT = 3
 
 export interface Classified {
   type: TaskType
-  /** Why this row: the word that matched, or "padrão". */
+  /** Why this row: the words that matched, or "padrão". */
   via: string
+  /** One type clearly ahead; false when nothing matched or two types came close. */
+  sure: boolean
 }
 
-/** The task type of an activity the lead did not classify, from its title and text. */
-export function classifyTask(text: string, types: TaskType[]): Classified {
-  const haystack = text.slice(0, 4000)
-  for (const id of ORDER) {
-    const type = types.find((t) => t.id === id)
-    const match = type && KEYWORDS[id]?.exec(haystack)
-    if (type && match) return { type, via: `palavra "${match[0].trim().toLowerCase()}"` }
+/**
+ * The task type of an activity the lead did not classify, from its title and text: each type
+ * scores its words (title words weigh more); a clear winner decides, otherwise it is not "sure"
+ * and the maestro may ask a model.
+ */
+export function classifyTask(text: string, types: TaskType[], title = ''): Classified {
+  const body = text.slice(0, 4000)
+  const head = title.slice(0, 200)
+  const words = (re: RegExp, where: string) => [...where.matchAll(new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`))].map((m) => m[0].trim().toLowerCase())
+  const scored = types.map((type) => {
+    const re = KEYWORDS[type.id] ?? (() => {
+      const names = type.name.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      return names.length ? new RegExp(`\\b(${names.join('|')})`, 'gi') : null
+    })()
+    if (!re) return { type, score: 0, hit: [] as string[] }
+    const inTitle = words(re, head)
+    const inBody = words(re, body)
+    return { type, score: inTitle.length * TITLE_WEIGHT + Math.min(5, inBody.length), hit: [...new Set([...inTitle, ...inBody])] }
+  })
+  const rank = (id: string) => (ORDER.includes(id) ? ORDER.indexOf(id) : ORDER.length)
+  scored.sort((a, b) => b.score - a.score || rank(a.type.id) - rank(b.type.id))
+  const [best, second] = scored
+  if (!best || best.score === 0) return { type: types.find((t) => t.id === 'funcionalidade') ?? types[0]!, via: 'padrão', sure: false }
+  const sure = !second || second.score === 0 || best.score >= 2 * second.score
+  const quote = (hit: string[]) => hit.slice(0, 2).map((w) => `"${w}"`).join(', ')
+  return {
+    type: best.type,
+    via: `palavra${best.hit.length > 1 ? 's' : ''} ${quote(best.hit)}${sure ? '' : `; ${second!.type.name} também (${quote(second!.hit)})`}`,
+    sure,
   }
-  for (const type of types) {
-    if (ORDER.includes(type.id)) continue
-    const words = type.name.toLowerCase().split(/\W+/u).filter((w) => w.length >= 4)
-    const hit = words.find((w) => haystack.toLowerCase().includes(w))
-    if (hit) return { type, via: `palavra "${hit}"` }
-  }
-  return { type: types.find((t) => t.id === 'funcionalidade') ?? types[0]!, via: 'padrão' }
 }
 
 export interface AccountRoom {

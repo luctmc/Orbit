@@ -25,8 +25,18 @@ test('the maestro classifies activities the lead did not label', () => {
   assert.equal(kind('Refatorar o módulo de pagamento'), 'refatoracao')
   assert.equal(kind('Tela de configurações'), 'funcionalidade')
   const fallback = classifyTask('Fazer aquilo', DEFAULT_ROUTING.taskTypes)
-  assert.deepEqual([fallback.type.id, fallback.via], ['funcionalidade', 'padrão'])
-  assert.match(classifyTask('Cobrir com testes o login', DEFAULT_ROUTING.taskTypes).via, /palavra "testes"/)
+  assert.deepEqual([fallback.type.id, fallback.via, fallback.sure], ['funcionalidade', 'padrão', false])
+  const sure = classifyTask('Cobrir com testes o login', DEFAULT_ROUTING.taskTypes)
+  assert.deepEqual([sure.via, sure.sure], ['palavra "testes"', true])
+  // The title weighs more than a word in the details.
+  assert.equal(classifyTask('Escreva em NOTAS.md como rodar o projeto e os testes', DEFAULT_ROUTING.taskTypes, 'Documentar a instalação').type.id, 'documentacao')
+  // Two types close: not sure, so the maestro asks the decider.
+  const close = classifyTask('Escreva em NOTAS.md como rodar o projeto e os testes', DEFAULT_ROUTING.taskTypes, 'Notas')
+  assert.equal(close.sure, false)
+  assert.match(close.via, /também/)
+  // A custom type matches by its name.
+  const custom = { ...DEFAULT_ROUTING.taskTypes[0]!, id: 'migracao', name: 'Migração de banco' }
+  assert.equal(classifyTask('Fazer a migração das tabelas', [...DEFAULT_ROUTING.taskTypes, custom]).type.id, 'migracao')
 })
 
 const account = (p: Partial<Account>): Account => ({ id: 'a', cli: 'codex', name: 'A', kind: 'assinatura', builtin: false, baseUrl: null, model: null, keyHint: null, auto: true, createdAt: 1, ...p })
@@ -114,7 +124,7 @@ test('the maestro picks CLI and account by itself, falls back when one is used u
     ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Só Claude', objective: '', mode: 'agentica', allowedClis: ['claude'], lead: { cli: 'shell', model: null, title: '' } })
     const only = (await ui.next('mission.updated', (m) => m.mission.title === 'Só Claude')).mission
     const onlyLead = (await ui.next('pane.updated', (m) => m.pane.missionId === only.id && m.pane.role === 'lead')).pane
-    const helper = server.core.spawnHelper(onlyLead, { title: 'Testes', task: 'Escreva testes', model: null })
+    const helper = await server.core.spawnHelper(onlyLead, { title: 'Testes', task: 'Escreva testes', model: null })
     assert.equal(helper.pane.cli, 'claude')
     assert.match(helper.receipt.join('\n'), /Codex → Claude: a missão não usa essa CLI/)
   } finally {
