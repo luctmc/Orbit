@@ -685,3 +685,22 @@ h1, h2, p { margin: 0; }
 .routing__table .model-select { min-width: 190px; }
 .model-select__note { margin: 0; }
 .effort--none { color: var(--muted); padding: 0 8px; }
+
+/* Project memory */
+.memory { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.memory__head { display: flex; align-items: baseline; gap: 10px; }
+.memory__head h3 { margin: 0; }
+.memory__add { display: flex; gap: 8px; }
+.memory__add select, .memory__add input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); color-scheme: dark; }
+.memory__add input { flex: 1 1 auto; min-width: 0; }
+.memory__list { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; }
+.memory__entry { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); display: grid; gap: 4px; }
+.memory__entry--pinned { border-color: var(--accent-line); }
+.memory__meta { display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; }
+.memory__kind--decisao { color: var(--accent); border-color: var(--accent-line); }
+.memory__kind--licao { color: var(--wait); border-color: #5a3a17; }
+.memory__text { margin: 0; font-size: 13px; white-space: pre-wrap; }
+.memory__edit { display: grid; gap: 6px; }
+.memory__edit textarea { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); }
+.memory__edit-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.link-btn--danger { color: var(--danger); }

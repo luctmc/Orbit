@@ -15,6 +15,25 @@ export interface Workspace {
   instructions: string
 }
 
+/** What a project's memory holds: a decision that should stick, a fact, a lesson, a finished mission. */
+export type MemoryKind = 'decisao' | 'fato' | 'licao' | 'missao'
+export const MEMORY_KINDS: readonly MemoryKind[] = ['decisao', 'fato', 'licao', 'missao']
+export const MEMORY_KIND_LABEL: Record<MemoryKind, string> = { decisao: 'Decisão', fato: 'Fato', licao: 'Lição', missao: 'Missão' }
+
+/** One thing a workspace remembers across missions; written by leads, by Orbit or by the person. */
+export interface MemoryEntry {
+  id: string
+  kind: MemoryKind
+  text: string
+  at: number
+  /** Where it came from; null = written by the person. */
+  source: { missionId: string; missionTitle: string; paneId: number | null } | null
+  /** Always given to new leads first. */
+  pinned: boolean
+}
+
+export const MEMORY_LIMITS = { entries: 200, text: 1500 } as const
+
 /** A mission to start again: its setup, its lead and the board's cards. */
 export interface MissionTemplate {
   id: string
@@ -672,6 +691,11 @@ export type ClientMessage =
   | { type: 'mission.archive'; missionId: string }
   /** Hands the mission's lead to another agent, with everything that happened so far. */
   | { type: 'mission.lead.change'; missionId: string; to: LeadTarget }
+  /** A workspace's memory (answered to this connection). */
+  | { type: 'memory.get'; workspaceId: string }
+  /** Adds (no id) or changes an entry the person wrote or kept. */
+  | { type: 'memory.save'; workspaceId: string; entry: { id?: string; kind: MemoryKind; text: string; pinned?: boolean } }
+  | { type: 'memory.delete'; workspaceId: string; entryId: string }
   | { type: 'pane.spawn'; request: SpawnPaneRequest }
   /** A terminal view mounted: send me this pane's current screen, then its live output. */
   | { type: 'pane.attach'; paneId: number }
@@ -752,6 +776,7 @@ export type ServerMessage =
   | { type: 'routing.updated'; routing: Routing }
   | { type: 'settings.updated'; settings: OrbitSettings }
   | { type: 'proposals'; proposals: RoutingProposal[] }
+  | { type: 'memory'; workspaceId: string; entries: MemoryEntry[] }
   | { type: 'catalog'; catalog: Catalog }
   | { type: 'usage.day'; day: UsageDay }
   | { type: 'limits'; limits: AccountLimits[] }

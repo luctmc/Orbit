@@ -68,6 +68,13 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     return { agent: agentView(self()), mission: mission && { title: mission.title, mode: mission.mode, objective: mission.objective }, workspace: workspace && { name: workspace.name, folders: workspace.folders } }
   }))
 
+  server.registerTool('project_memory', {
+    description: 'The project memory: what earlier missions of this workspace learned and decided (decisions, facts, lessons, finished missions) and what the user wrote down. Pinned entries first.',
+  }, guarded(() => {
+    const workspace = core.missionWorkspace(caller.missionId)
+    return (workspace && core.projectMemory(workspace.id, 60_000)) || 'The project memory is empty.'
+  }))
+
   server.registerTool('agent_list', {
     description: 'Lists your mission\'s agents with status (running, idle, waiting = waiting for the user, exited) and whether they delivered.',
   }, guarded(() => core.missionPanes(caller.missionId).map(agentView)))
@@ -183,6 +190,11 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     server.registerTool('mission_briefing', {
       description: 'The mission briefing: objective, decisions written down, board, helpers and what each one owes, results, branches and the recent flow. Read it when you take over as lead and whenever you lose the thread (compacted conversation, resumed session).',
     }, guarded(() => core.missionBriefing(caller.missionId)))
+
+    server.registerTool('project_note', {
+      description: 'Saves to the project memory something every future mission of this workspace should know: kind decisao (a decision that should stick), fato (a fact: where something lives, how to run it) or licao (a lesson: a pitfall, what failed). Mission-only decisions go to mission_note.',
+      inputSchema: { kind: z.enum(['decisao', 'fato', 'licao']), text: z.string().min(1).max(1500) },
+    }, guarded(({ kind, text }: { kind: 'decisao' | 'fato' | 'licao'; text: string }) => `Saved to the project memory (${core.addProjectNote(caller, kind, text)} entries).`))
 
     server.registerTool('mission_note', {
       description: 'Writes down a decision or an important fact of the mission (what was decided and why, what not to do, where something is). Notes pass to any lead after you.',

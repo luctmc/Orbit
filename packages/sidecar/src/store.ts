@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { AGENT_CLIS, EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type UsageEntry, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type OrbitSettings, type RoutingProposal, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
+import { AGENT_CLIS, EMPTY_USAGE, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type UsageEntry, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type OrbitSettings, type RoutingProposal, type MemoryEntry, MEMORY_LIMITS, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
 import { BUILTIN_ACCOUNTS, migrateLimits } from './accounts.ts'
 import { DEFAULT_ROUTING, FACTORY_ALTS, FACTORY_METHODS, OLD_FACTORY_START } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
@@ -28,12 +28,19 @@ interface PersistedState extends Omit<Snapshot, 'squads' | 'routing' | 'accounts
   paneSpecs: Record<string, SpawnPaneRequest>
   /** Tokens and cost per day, mission and agent setup (CLI, model, account). */
   usageLog: UsageEntry[]
+  /** Each workspace's memory across missions. */
+  memories?: Record<string, MemoryEntry[]>
 }
 
 /** Durable state in `<dataDir>/state.json`. Writes are debounced and atomic (tmp + rename). */
 export class Store {
   private state: PersistedState
   private readonly file: string
+  /** Each workspace's memory, newest last. */
+  private get memories(): Record<string, MemoryEntry[]> {
+    return (this.state.memories ??= {})
+  }
+
   /** Agents that were running when Orbit last stopped (they can be brought back). */
   readonly wasRunning: number[] = []
   private saveTimer: NodeJS.Timeout | null = null
@@ -199,6 +206,31 @@ export class Store {
     this.state.settings = { resumeOnStart: settings?.resumeOnStart === true, smartClassify: settings?.smartClassify === true, agentsInEnglish: settings?.agentsInEnglish !== false }
     this.save()
     return this.settings()
+  }
+
+  memory(workspaceId: string): MemoryEntry[] {
+    return structuredClone(this.memories[workspaceId] ?? [])
+  }
+
+  /** Adds or replaces an entry; the oldest unpinned ones go when the memory is full. */
+  saveMemory(workspaceId: string, entry: MemoryEntry): MemoryEntry[] {
+    const list = (this.memories[workspaceId] ??= [])
+    const at = list.findIndex((e) => e.id === entry.id)
+    if (at >= 0) list[at] = entry
+    else list.push(entry)
+    while (list.length > MEMORY_LIMITS.entries) {
+      const oldest = list.findIndex((e) => !e.pinned)
+      if (oldest < 0) break
+      list.splice(oldest, 1)
+    }
+    this.save()
+    return this.memory(workspaceId)
+  }
+
+  deleteMemory(workspaceId: string, entryId: string): MemoryEntry[] {
+    this.memories[workspaceId] = (this.memories[workspaceId] ?? []).filter((e) => e.id !== entryId)
+    this.save()
+    return this.memory(workspaceId)
   }
 
   proposals(): RoutingProposal[] {

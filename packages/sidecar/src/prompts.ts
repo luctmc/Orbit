@@ -48,6 +48,7 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
     'Orbit exposes an MCP server named "orbit". With it you open helpers in terminals the user sees (agent_spawn, or agent_spawn_many for several at once), talk to them (agent_send), stop one that went the wrong way (agent_interrupt), resume one that stopped (agent_resume), follow the crew (agent_list, mission_status), see how much room each account has (accounts_status) and close helpers that delivered (agent_close).',
     'When a helper finishes, its result reaches you as a message starting with "[Orbit] Retorno de #N", saying whether it is done (with the evidence) or blocked (with the question; answer with agent_send). If a helper ends its turn without delivering, Orbit asks it to deliver and, if it still does not, sends you its last message. The full text is in handoff_list. Helpers can also talk to each other with agent_send and hand work to one another.',
     'Write down every important decision with mission_note (what was decided and why): the lead can pass to another agent, and the notes go with it. If you lose the thread (compacted conversation, resumed session), call mission_briefing.',
+    'Knowledge that will matter to future missions of this project (a convention, a pitfall, where something lives, a decision that should stick) goes in the project memory with project_note; read it all with project_memory. The summary of a mission declared ready is added to it on its own.',
     'For a decision only the user can make, call ask_user with the question and, if any, the choices: Orbit notifies the user and the answer arrives in your terminal. After asking, end your turn.',
     BROWSER_NOTE,
     BOARD_LEAD,
@@ -136,6 +137,11 @@ export function commandToolsNote(cli: AgentCli): string {
     '',
     '',
   ].join('\n')
+}
+
+/** What earlier missions of this project left behind, given to every new lead before its role. */
+export function projectMemoryNote(memory: string): string {
+  return memory ? `Project memory: what earlier missions of this project learned and decided, and what the user wrote down. Treat it as known context; it may be outdated, so check before relying on something risky.\n${memory}\n\n` : ''
 }
 
 /** Told to every agent of a multi-folder workspace, before its role. Empty for a single folder. */
