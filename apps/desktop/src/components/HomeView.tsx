@@ -5,6 +5,7 @@ import { CLI_LABEL, MODE_LABEL, STATUS, tokensText } from '../orbit/labels.ts'
 import { pathText } from '../orbit/labels.ts'
 import { dayKey, relativeTime, startOfDay } from '../orbit/time.ts'
 import { OrbitMark, PlusIcon, SearchIcon } from './icons.tsx'
+import { SchedulesSection } from './Schedules.tsx'
 
 type Filter = 'todas' | 'vivas' | 'encerradas'
 const FILTERS: Array<[Filter, string]> = [['todas', 'Todas'], ['vivas', 'Em andamento'], ['encerradas', 'Encerradas']]
@@ -119,6 +120,8 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
             {!needle && visible.length > shown.length && <p className="muted home__more">Mais {visible.length - shown.length} na busca ou nas abas de workspace.</p>}
           </section>
 
+          <SchedulesSection onOpenMission={onOpenMission} />
+
           <ActivityMap days={usageDays} />
         </main>
 
@@ -149,6 +152,7 @@ function MissionCard({ summary, squadName, onOpen }: { summary: MissionSummary; 
             <h3>{mission.title}</h3>
             <span className={`badge badge--${mission.mode}`}>{MODE_LABEL[mission.mode]}{squadName ? ` · ${squadName}` : ''}</span>
             {mission.status === 'archived' && <span className="badge">Arquivada</span>}
+            {mission.scheduleId && <span className="badge">Agendada</span>}
           </div>
           <p className="muted">{meta}</p>
         </div>

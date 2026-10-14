@@ -7,6 +7,7 @@ const EVENTS: Array<[keyof NoticePrefs, string, string]> = [
   ['handoff', 'Um ajudante entregou o retorno', 'O resumo que chegou ao líder.'],
   ['finished', 'Um agente terminou', 'Um agente do Claude parou depois de trabalhar mais de 30 s.'],
   ['exited', 'Um agente encerrou', 'O processo do agente terminou (inclusive com erro).'],
+  ['scheduled', 'Uma missão agendada começou', 'Uma missão da agenda foi iniciada sozinha.'],
 ]
 
 /** Settings › Avisos: which moments become a macOS notification. */

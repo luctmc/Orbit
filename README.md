@@ -61,6 +61,11 @@ npm test
   nativo, Homebrew) e a mais recente; atualiza pelo mesmo meio (`claude update` ou
   `npm install -g …@latest`). No Claude via npm, roda o `install.cjs` do pacote em seguida, porque o
   npm 12 bloqueia o script que copia o binário nativo.
+- **Missões agendadas** (Base › Agendadas): um modelo de missão roda sozinho uma vez numa data,
+  em dias e horário (ex.: dias úteis às 9:00) ou a cada N horas, enquanto o Orbit estiver aberto.
+  Se ele estava fechado na hora, a missão começa assim que abrir (uma vez só). Por padrão pula a
+  vez se a missão anterior do agendamento ainda tem agentes trabalhando. Dá para pausar, rodar
+  agora, editar e apagar; um aviso diz quando uma missão agendada começa.
 - **Relatório da missão** (botão na missão): objetivo, números (agentes, tokens, custo, cartões,
   retornos), cada agente (inclusive os já fechados, pelo fluxo), o quadro, os retornos dos
   ajudantes, as mudanças no código (commits e arquivos do branch e o PR com o CI, ou o que mudou

@@ -10,12 +10,14 @@ export interface NoticePrefs {
   finished: boolean
   /** An agent's process ended. */
   exited: boolean
+  /** A scheduled mission started by itself. */
+  scheduled: boolean
   /** Only while Orbit is not the app in front. */
   onlyInBackground: boolean
   sound: boolean
 }
 
-export const DEFAULT_PREFS: NoticePrefs = { waiting: true, handoff: true, finished: true, exited: false, onlyInBackground: true, sound: true }
+export const DEFAULT_PREFS: NoticePrefs = { waiting: true, handoff: true, finished: true, exited: false, scheduled: true, onlyInBackground: true, sound: true }
 
 export interface Notice {
   title: string
@@ -44,6 +46,7 @@ export class NoticeWatcher {
       const where = missionTitle(e.missionId)
       if (e.kind === 'pane.waiting' && prefs.waiting) return [{ title: e.title, body: clip(`${where}: ${e.body}`), missionId: e.missionId, paneId: e.paneId }]
       if (e.kind === 'handoff' && prefs.handoff) return [{ title: e.title, body: clip(`${where}: ${e.body.split('\n')[0] ?? ''}`), missionId: e.missionId, paneId: e.paneId }]
+      if (e.kind === 'mission.created' && e.title.startsWith('Missão agendada') && prefs.scheduled) return [{ title: e.title, body: clip(where), missionId: e.missionId, paneId: null }]
       if (e.kind === 'pane.exited' && prefs.exited) return [{ title: e.title, body: clip(`${where}: ${e.body}`), missionId: e.missionId, paneId: e.paneId }]
       return []
     }

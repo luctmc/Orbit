@@ -602,3 +602,15 @@ h1, h2, p { margin: 0; }
 .report__doc summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
 .report__raw { margin: 0; font: 12px/1.55 var(--mono); white-space: pre-wrap; color: var(--text-2); }
 .report__actions { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--line); }
+
+/* Base › Agendadas */
+.schedules { display: flex; flex-direction: column; gap: 8px; }
+.schedule { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); flex-wrap: wrap; }
+.schedule--off { opacity: 0.6; }
+.schedule__main { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.schedule__next { font-size: 12.5px; color: var(--text-2); }
+.schedule__actions { display: flex; align-items: center; gap: 6px; }
+.schedule-when { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; font-size: 13px; }
+.schedule-when input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); color-scheme: dark; }
+.schedule-when input[type='number'] { width: 80px; }
+.field select { color-scheme: dark; }

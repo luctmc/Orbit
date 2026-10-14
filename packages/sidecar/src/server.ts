@@ -18,6 +18,8 @@ export interface ServerOptions {
   agentCommand?: CoreOptions['agentCommand']
   run?: CoreOptions['run']
   browser?: CoreOptions['browser']
+  /** Tests drive the schedules with their own clock. */
+  scheduler?: boolean
 }
 
 export interface RunningServer {
@@ -124,6 +126,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   void core.refreshCatalog()
   void core.checkAccounts()
   void core.scanSkills().catch(() => {})
+  if (options.scheduler !== false) core.startScheduler()
 
   return {
     port,

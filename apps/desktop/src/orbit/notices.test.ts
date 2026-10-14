@@ -16,6 +16,8 @@ test('waiting, handoffs and exits become notices as the person chose', () => {
   assert.deepEqual(w.observe({ type: 'event.added', event: event('pane.exited', '#4 encerrou', 'código 0') }, [mission], DEFAULT_PREFS), [], 'exits are off by default')
   assert.equal(w.observe({ type: 'event.added', event: event('pane.exited', '#4 encerrou', 'código 1') }, [mission], { ...DEFAULT_PREFS, exited: true }).length, 1)
   assert.deepEqual(w.observe({ type: 'event.added', event: event('pane.waiting', '#4 espera você', 'x') }, [mission], { ...DEFAULT_PREFS, waiting: false }), [])
+  const scheduled = w.observe({ type: 'event.added', event: { ...event('mission.created', 'Missão agendada iniciada (Toda segunda)', 'Objetivo'), paneId: null } }, [mission], DEFAULT_PREFS)
+  assert.deepEqual(scheduled, [{ title: 'Missão agendada iniciada (Toda segunda)', body: 'Refatorar login', missionId: 'm1', paneId: null }])
 })
 
 test('a Claude agent finishing a long turn is a notice; quick answers and Codex are not', () => {
