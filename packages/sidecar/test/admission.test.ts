@@ -1,3 +1,4 @@
+import { seedRoutingQuota } from './helpers.ts'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, rmSync, readFileSync } from 'node:fs'
@@ -25,6 +26,7 @@ test('explicit squad CLI/model/effort reaches the launch and its durable decisio
 test('required native read-only sandbox chooses a capable adapter and refuses incompatible explicit choices', async () => {
   const { core, lead } = await fixture()
   try {
+    await seedRoutingQuota(core)
     const manager = (core as any).panes
     const spawn = manager.spawn.bind(manager)
     let sandbox: string | undefined

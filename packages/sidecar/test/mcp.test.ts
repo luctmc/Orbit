@@ -31,7 +31,7 @@ test('lead and helper coordinate through MCP, handoffs and hooks', async (t) => 
     await ui.next('snapshot')
     ui.send({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-'))) })
     const { workspace } = await ui.next('workspace.updated')
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Coordenação', objective: '', mode: 'agentica', lead: { cli: 'shell', model: null, title: 'Líder' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Coordenação', objective: '', mode: 'agentica', lead: { cli: 'shell', model: null, title: 'Líder' } })
     const { mission } = await ui.next('mission.updated')
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
     ui.send({ type: 'pane.spawn', request: { missionId: mission.id, role: 'crew', cli: 'shell', model: null, title: 'Testes' } })
@@ -163,7 +163,7 @@ test('an agent reads a packaged skill through authenticated MCP without executin
     await ui.opened
     ui.send({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-skill-ws-'))) })
     const { workspace } = await ui.next('workspace.updated')
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Skills', objective: 'Read a skill', mode: 'livre', lead: { cli: 'claude', model: null, title: 'Lead' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Skills', objective: 'Read a skill', mode: 'livre', lead: { cli: 'claude', model: null, title: 'Lead' } })
     await ui.next('pane.updated', m => m.pane.role === 'lead')
     const config = JSON.parse(readFileSync(launches[0]!.mcpConfigPath!, 'utf8'))
     client = await mcpClient(server.port, config.mcpServers.orbit.headers.Authorization.slice(7))
@@ -189,7 +189,7 @@ test('authenticated finalization accepts only the lead final integration review 
   try {
     await ui.opened
     server.core.handle({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-final-source-'))) })
-    server.core.handle({ type: 'mission.create', workspaceId: server.core.store.snapshot().workspaces[0]!.id, title: 'Finalization fixture', objective: 'Synthetic lifecycle', mode: 'agentica', lead: { cli: 'claude', model: null, title: 'Lead' } })
+    server.core.handle({ type: 'mission.create', allowOriginal: true, workspaceId: server.core.store.snapshot().workspaces[0]!.id, title: 'Finalization fixture', objective: 'Synthetic lifecycle', mode: 'agentica', lead: { cli: 'claude', model: null, title: 'Lead' } })
     const lead = server.core.store.snapshot().panes.find(p => p.role === 'lead')!
     const { pane } = await server.core.spawnHelper(lead, { title: 'Worker', task: 'Synthetic read', cli: 'claude', model: null, readOnly: true })
     const result = server.core.handoff(pane, { summary: 'Synthetic result', evidence: 'Synthetic observation' })

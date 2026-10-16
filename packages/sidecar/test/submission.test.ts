@@ -7,7 +7,7 @@ function fixture() {
   const panes = new PaneManager('/bin/sh')
   const live = (panes as unknown as { live: Map<number, any> }).live
   const writes: string[] = []
-  const process = { pty: { write: (text: string): void => { writes.push(text) }, kill: () => {} }, idleTimer: null, hookDriven: false, submitTimer: null, queue: [], closing: false }
+  const process = { pty: { write: (text: string): void => { writes.push(text) }, kill: () => {} }, idleTimer: null, hookDriven: false, submitTimer: null, queue: [], closing: false, terminationTimers: [] as NodeJS.Timeout[] }
   live.set(1, process)
   return { panes, live, process, writes }
 }
@@ -27,7 +27,7 @@ test('a deferred Enter never reaches a replacement process or a process that was
   const { panes, live, writes } = fixture()
   panes.submit(1, 'old session')
   const replacement: string[] = []
-  live.set(1, { pty: { write: (text: string) => replacement.push(text), kill: () => {} }, idleTimer: null, hookDriven: false, submitTimer: null, queue: [], closing: false })
+  live.set(1, { pty: { write: (text: string) => replacement.push(text), kill: () => {} }, idleTimer: null, hookDriven: false, submitTimer: null, queue: [], closing: false, terminationTimers: [] as NodeJS.Timeout[] })
   await delay(150)
   assert.deepEqual(replacement, [])
   panes.submit(1, 'closing')

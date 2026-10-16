@@ -53,7 +53,7 @@ test('the UI gets the report and saves it as a .md file', async () => {
     const folder = realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-')))
     ui.send({ type: 'workspace.open', path: folder })
     const { workspace } = await ui.next('workspace.updated')
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Relatório', objective: 'Testar o relatório', mode: 'livre', lead: { cli: 'shell', model: null, title: 'Terminal' }, cards: ['Primeiro passo'] })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Relatório', objective: 'Testar o relatório', mode: 'livre', lead: { cli: 'shell', model: null, title: 'Terminal' }, cards: ['Primeiro passo'] })
     const { mission } = await ui.next('mission.updated')
     await ui.next('pane.updated', (m) => m.pane.role === 'lead')
     ui.send({ type: 'report.get', missionId: mission.id })

@@ -9,7 +9,8 @@ export function harnessAccounts(accounts: Account[], statuses: AccountStatus[], 
     const limit = limits.find(l => l.accountId === a.id && l.cli === a.cli)
     if (!a.auto || a.kind !== 'assinatura' || status?.loggedIn !== true || status.busy || !status.checkedAt || status.checkedAt > now || now - status.checkedAt > 300000) return false
     if (!limit || limit.source !== 'provider' || limit.refreshError || limit.updatedAt > now || now - limit.updatedAt > 90000) return false
-    return [limit.fiveHour, limit.weekly].every(w => w && Number.isFinite(w.usedPercent) && w.usedPercent >= 0 && w.usedPercent < 85 && Number.isFinite(w.resetsAt) && w.resetsAt > now)
+    const windows = [limit.fiveHour, limit.weekly].filter(w => w !== null)
+    return windows.length > 0 && windows.every(w => w && Number.isFinite(w.usedPercent) && w.usedPercent >= 0 && w.usedPercent < 85 && Number.isFinite(w.resetsAt) && w.resetsAt > now)
   })
 }
 export function harnessCandidates(catalog: Catalog | null, clis: CliStatus[], accounts: Account[], allowed: readonly string[], sandbox: boolean): HarnessCandidate[] {

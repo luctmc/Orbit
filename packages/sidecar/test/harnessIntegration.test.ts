@@ -30,7 +30,7 @@ test('a qualified seat reaches the launch unchanged by the legacy tier or balanc
     const { createHash } = await import('node:crypto')
     const { blankStatus } = await import('../src/clis.ts')
     const core = f.core as any
-    const entry = { models: [{ id: 'fixture-measured-model', label: 'Fixture', description: '', efforts: ['low', 'high'], defaultEffort: 'low' }], efforts: ['low', 'high'], source: 'cli' }
+    const entry = { models: [{ id: 'fixture-measured-model', label: 'Fixture', description: 'Fast and affordable workhorse', efforts: ['low', 'high'], defaultEffort: 'low' }], efforts: ['low', 'high'], source: 'cli' }
     core.catalog = Object.fromEntries(['claude', 'codex', 'gemini', 'antigravity'].map(cli => [cli, entry]))
     core.clis.set('codex', { ...blankStatus('codex'), installed: true, version: 'fixture-v1', checkedAt: Date.now() })
     core.accountStatus.set('codex', { accountId: 'codex', loggedIn: true, checkedAt: Date.now(), busy: null })

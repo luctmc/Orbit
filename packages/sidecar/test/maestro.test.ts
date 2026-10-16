@@ -12,7 +12,7 @@ import type { AgentLaunch } from '../src/command.ts'
 import { chooseAccount, classifyTask, type AccountRoom } from '../src/maestro.ts'
 import { DEFAULT_ROUTING } from '../src/routing.ts'
 import { startServer } from '../src/server.ts'
-import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
+import { seedRoutingQuota, connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 const textOf = (result: unknown) => ((result as { content: Array<{ text: string }> }).content[0]?.text ?? '')
 
@@ -77,10 +77,11 @@ test('the maestro picks CLI and account by itself, falls back when one is used u
 
     ui.send({ type: 'workspace.open', path: initRepository(realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-')))) })
     const { workspace } = await ui.next('workspace.updated')
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Maestro', objective: 'Cobrir o login com testes', mode: 'agentica', isolation: 'worktrees', lead: { cli: 'claude', model: 'haiku', title: '' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Maestro', objective: 'Cobrir o login com testes', mode: 'agentica', isolation: 'worktrees', lead: { cli: 'claude', model: 'haiku', title: '' } })
     const { mission } = await ui.next('mission.updated')
     assert.deepEqual(mission.allowedClis, ['claude', 'codex'])
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
+    await seedRoutingQuota(server.core)
     ui.send({ type: 'pane.input', paneId: lead.id, data: 'echo "TOKEN:$ORBIT_PANE_TOKEN:"\r' })
     const token = /TOKEN:([\w-]{20,}):/.exec((await ui.next('pane.data', (m) => m.paneId === lead.id && /TOKEN:[\w-]{20,}:/.test(m.data))).data)![1]!
     mcp = new Client({ name: 'test', version: '0' })
@@ -108,26 +109,26 @@ test('the maestro picks CLI and account by itself, falls back when one is used u
     assert.match(await call('agent_close', { agent: helpers[0]!.id, force: true }), /fechado/)
 
     // Every Codex account used up: the next test helper goes to Claude, and the receipt says why.
-    const full = (accountId: string): AccountLimits => ({ accountId, cli: 'codex', fiveHour: { usedPercent: 99, resetsAt: Date.now() + 3_600_000, windowMinutes: 300 }, weekly: null, plan: null, updatedAt: Date.now() })
+    const full = (accountId: string): AccountLimits => ({ accountId, cli: 'codex', fiveHour: { usedPercent: 99, resetsAt: Date.now() + 3_600_000, windowMinutes: 300 }, weekly: null, plan: null, source: 'provider', updatedAt: Date.now() })
     server.core.store.setLimits(full('codex'))
     server.core.store.setLimits(full(work.id))
     const moved = await call('agent_spawn', { kind: 'testes', task: 'Mais testes' })
-    assert.match(moved, /▸ Codex → Claude: todas as contas do Codex estão no limite/)
+    assert.match(moved, /roteamento por quota válida e compatibilidade: claude/)
     assert.match(moved, /▸ abriu: Claude/)
     assert.match(textOf(await mcp.callTool({ name: 'accounts_status', arguments: {} })), /"full": true/)
 
     // Claude used up too: nothing opens, and the error says when an account frees up.
     server.core.store.setLimits({ ...full('claude'), cli: 'claude' })
-    assert.match(await call('agent_spawn', { kind: 'testes', task: 'Ainda mais testes' }), /Não há conta do Codex com folga.*A primeira volta em (59 min|1 h)/)
+    assert.match(await call('agent_spawn', { kind: 'testes', task: 'Ainda mais testes' }), /Roteamento automático: nenhuma conta com quota válida e modelo compatível/)
 
     // A mission limited to Claude keeps helpers on Claude even when the table says Codex.
     server.core.store.setLimits({ ...full('claude'), cli: 'claude', fiveHour: { usedPercent: 10, resetsAt: Date.now() + 3_600_000, windowMinutes: 300 } })
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Só Claude', objective: '', mode: 'agentica', isolation: 'worktrees', allowedClis: ['claude'], lead: { cli: 'shell', model: null, title: '' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Só Claude', objective: '', mode: 'agentica', isolation: 'worktrees', allowedClis: ['claude'], lead: { cli: 'shell', model: null, title: '' } })
     const only = (await ui.next('mission.updated', (m) => m.mission.title === 'Só Claude')).mission
     const onlyLead = (await ui.next('pane.updated', (m) => m.pane.missionId === only.id && m.pane.role === 'lead')).pane
     const helper = await server.core.spawnHelper(onlyLead, { title: 'Testes', task: 'Escreva testes', model: null })
     assert.equal(helper.pane.cli, 'claude')
-    assert.match(helper.receipt.join('\n'), /Codex → Claude: a missão não usa essa CLI/)
+    assert.match(helper.receipt.join('\n'), /roteamento por quota válida e compatibilidade: claude/)
   } finally {
     process.env.CODEX_HOME = HOMES.codex
     process.env.CLAUDE_CONFIG_DIR = HOMES.claude

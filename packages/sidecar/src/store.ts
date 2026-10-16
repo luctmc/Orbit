@@ -13,7 +13,7 @@ import { makeNotice } from './deliveryQueue.ts'
 import type { TurnCursor } from './adapters/codex.ts'
 import { AGENT_CLIS, EMPTY_USAGE, type ActivityRecord, type ActivityResult, type Account, type Card, type CardColumn, type MissionTemplate, type Schedule, type UsageEntry, type AccountLimits, type AgentCliForRole, type Mission, type MissionEvent, type OrbitSettings, type RoutingProposal, type MemoryEntry, MEMORY_LIMITS, type MissionMode, type Pane, type Routing, type Snapshot, type SpawnPaneRequest, type Squad, type TokenUsage, type UsageDay, type Workspace } from '@orbit/protocol'
 import { BUILTIN_ACCOUNTS, migrateLimits } from './accounts.ts'
-import { DEFAULT_ROUTING, FACTORY_ALTS, FACTORY_METHODS, OLD_FACTORY_START, routingRevision } from './routing.ts'
+import { DEFAULT_ROUTING, LEGACY_DEFAULT_ROUTING, FACTORY_ALTS, FACTORY_METHODS, OLD_FACTORY_SEATS, routingRevision } from './routing.ts'
 import { BUILTIN_SQUADS } from './squads.ts'
 import { deliveryPending, deliveryStatus, newDelivery, type DeliveryObligation } from './deliveryLedger.ts'
 import { accountReport, type SessionBaseline } from './sessionAccounting.ts'
@@ -35,6 +35,7 @@ export interface DelegationRecord {
 interface PersistedState extends Omit<Snapshot, 'squads' | 'routing' | 'accounts'> {
   // usageDays and limits are persisted as they are sent.
   version: 1
+  uiSpawns?: Record<string, { fingerprint: string; paneId: number | null }>
   nextPaneId: number
   /** User squads; builtins live in code. */
   customSquads: Squad[]
@@ -96,11 +97,11 @@ export class Store {
     for (const row of this.state.routing?.taskTypes ?? []) {
       row.onlySkills ??= false
       row.method ??= FACTORY_METHODS[row.id]?.method ?? ''
-      // A factory method still in its old Portuguese text becomes the English one; edited ones stay.
-      if (OLD_FACTORY_START[row.id] && row.method.startsWith(OLD_FACTORY_START[row.id]!)) row.method = FACTORY_METHODS[row.id]!.method
+      // Prefix matches cannot distinguish an edited method; preserve legacy text.
       row.readOnly ??= FACTORY_METHODS[row.id]?.readOnly ?? false
-      row.alt ??= FACTORY_ALTS[row.id] && FACTORY_ALTS[row.id]!.cli !== row.cli ? FACTORY_ALTS[row.id]! : null
+      if (!Object.hasOwn(row, 'alt')) row.alt = FACTORY_ALTS[row.id] && FACTORY_ALTS[row.id]!.cli !== row.cli ? FACTORY_ALTS[row.id]! : null
     }
+    this.migrateFactorySeats()
     this.state.settings = { ...DEFAULT_SETTINGS, ...this.state.settings }
     if (this.state.settings.agentToolProfile !== 'orbit' && this.state.settings.agentToolProfile !== 'inherit') this.state.settings.agentToolProfile = 'orbit'
     this.state.proposals ??= []
@@ -721,6 +722,27 @@ export class Store {
     this.save()
   }
 
+  /** A saved table still on an old factory seat (never edited) moves to the current, cheaper default. */
+  private migrateFactorySeats(): void {
+    const saved = this.state.routing
+    if (!saved) return
+    const seatSame = (a: { cli: string; model: string | null; effort: string | null }, b: typeof a) => a.cli === b.cli && (a.model ?? null) === b.model && (a.effort ?? null) === b.effort
+    // A matching seat alone is not provenance: compare every editable field before migrating.
+    for (const row of saved.taskTypes) {
+      if (row.automatic === false) continue
+      const current = DEFAULT_ROUTING.taskTypes.find(t => t.id === row.id)
+      if (!current) continue
+      const legacy = LEGACY_DEFAULT_ROUTING.taskTypes.find(t => t.id === row.id)!
+      const old = OLD_FACTORY_SEATS[row.id]
+      const fields = ['name', 'description', 'skills', 'onlySkills', 'method', 'readOnly', 'alt'] as const
+      const matches = (expected: typeof row) => seatSame(row, expected) && fields.every(key => JSON.stringify(row[key]) === JSON.stringify(expected[key]))
+      if ([current, legacy, ...(old ? [{ ...legacy, ...old }, { ...current, ...old }] : [])].some(matches)) {
+        Object.assign(row, { cli: current.cli, model: current.model, effort: current.effort, alt: structuredClone(current.alt), automatic: true })
+      }
+    }
+    // Preserve saved leader choices: old files do not record whether this seat was explicit.
+  }
+
   routing(): Routing {
     const routing = structuredClone(this.state.routing ?? DEFAULT_ROUTING)
     return { ...routing, revision: routingRevision(routing) }
@@ -888,6 +910,13 @@ export class Store {
     Object.assign(mission, patch, { updatedAt: Date.now() })
     this.save()
     return { ...mission }
+  }
+
+  uiSpawn(key: string) { return this.state.uiSpawns?.[key] }
+
+  saveUiSpawn(key: string, receipt: { fingerprint: string; paneId: number | null }): void {
+    (this.state.uiSpawns ??= {})[key] = receipt
+    this.flush()
   }
 
   allocatePaneId(): number {

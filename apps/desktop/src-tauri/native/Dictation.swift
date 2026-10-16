@@ -41,7 +41,7 @@ final class Dictation {
 
     func start() {
         guard !stopping else { finish(); return }
-        let locale = CommandLine.arguments.dropFirst().first ?? "pt-BR"
+        let locale = "pt-BR"
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)), recognizer.isAvailable else {
             finish("O reconhecimento de fala não está disponível para este idioma."); return
         }

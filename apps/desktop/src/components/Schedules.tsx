@@ -77,7 +77,7 @@ function localInput(at: number): string {
 
 function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onClose: () => void }) {
   const client = useOrbitClient()
-  const { templates, workspaces } = useOrbit()
+  const { templates, workspaces, accounts, settings } = useOrbit()
   const [templateId, setTemplateId] = useState(schedule?.templateId ?? templates[0]?.id ?? '')
   const template = templates.find((t) => t.id === templateId)
   const [workspaceId, setWorkspaceId] = useState(schedule?.workspaceId ?? template?.workspaceId ?? workspaces[0]?.id ?? '')
@@ -87,6 +87,8 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
   const [days, setDays] = useState<number[]>(schedule?.when.kind === 'daily' ? schedule.when.days : [1, 2, 3, 4, 5])
   const [hours, setHours] = useState(schedule?.when.kind === 'interval' ? schedule.when.hours : 6)
   const [at, setAt] = useState(localInput(schedule?.when.kind === 'once' ? schedule.when.at : Date.now() + 3_600_000))
+  const [translationAccountId, setTranslationAccountId] = useState(schedule?.translationAccountId ?? '')
+  const [allowOriginal, setAllowOriginal] = useState(schedule?.allowOriginal ?? false)
   const [skipIfRunning, setSkip] = useState(schedule?.skipIfRunning ?? true)
   const [error, setError] = useState<string | null>(null)
 
@@ -103,7 +105,8 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
   return (
     <Dialog eyebrow="Agenda" title={schedule ? 'Editar agendamento' : 'Agendar missão'} submitLabel="Salvar" onClose={onClose} onSubmit={() => {
       if (!templateId) return setError('Escolha o modelo.')
-      client.send({ type: 'schedule.save', schedule: { id: schedule?.id, name: name.trim() || template?.name || 'Agendamento', templateId, workspaceId, when: when(), enabled: schedule?.enabled ?? true, skipIfRunning } })
+      if (settings?.agentsInEnglish && template?.lead.cli !== 'shell' && template?.objective.trim() && !allowOriginal && !translationAccountId) return setError('Escolha uma conta Codex para traduzir o objetivo a cada execução.')
+      client.send({ type: 'schedule.save', schedule: { translationAccountId: translationAccountId || undefined, allowOriginal, id: schedule?.id, name: name.trim() || template?.name || 'Agendamento', templateId, workspaceId, when: when(), enabled: schedule?.enabled ?? true, skipIfRunning } })
       onClose()
     }}>
       <div className="field">
@@ -123,6 +126,15 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
           {workspaces.filter((w) => !template?.workspaceId || w.id === template.workspaceId).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
       </div>
+      {settings?.agentsInEnglish && template?.lead.cli !== 'shell' && <div className="field">
+        <label htmlFor="sch-translator">Traduzir objetivo em cada execução · Codex / gpt-6.1-sol / medium</label>
+        <select id="sch-translator" value={translationAccountId} disabled={allowOriginal} onChange={e => setTranslationAccountId(e.target.value)}>
+          <option value="">Escolha a conta Codex</option>
+          {accounts.filter(a => a.cli === 'codex' && a.kind === 'assinatura').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        <label><input type="checkbox" checked={allowOriginal} onChange={e => setAllowOriginal(e.target.checked)} /> Autorizar objetivo original sem tradução</label>
+        <p className="note">Sem login ou tradução confirmada, a missão não inicia. Resultado incerto pausa o agendamento para conferência.</p>
+      </div>}
       <div className="field">
         <label htmlFor="sch-name">Nome <span className="muted">(opcional)</span></label>
         <input id="sch-name" value={name} maxLength={SCHEDULE_LIMITS.name} placeholder={template?.name ?? 'Toda segunda de manhã'} onChange={(e) => setName(e.target.value)} />

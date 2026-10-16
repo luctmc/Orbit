@@ -35,7 +35,7 @@ pub fn orbit_dictation_stop(state: tauri::State<'_, Dictation>, session: String)
 
 #[tauri::command]
 pub fn orbit_dictation_start(app: tauri::AppHandle, state: tauri::State<'_, Dictation>, session: String, locale: String) -> Result<(), String> {
-    if session.len() > 80 || session.is_empty() || locale.len() > 40 {
+    if session.len() > 80 || session.is_empty() || locale != "pt-BR" {
         return Err("Sessão de ditado inválida".into());
     }
     #[cfg(not(target_os = "macos"))]

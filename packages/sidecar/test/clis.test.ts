@@ -97,3 +97,13 @@ test('the UI checks and updates the CLIs, and efforts are held to what each mode
     await server.close()
   }
 })
+
+test('Codex defaults report configured effort without confusing nested model settings', async () => {
+ const { writeFileSync } = await import('node:fs')
+ const { codexDefaults } = await import('../src/clis.ts')
+ const root = mkdtempSync(join(tmpdir(), 'codex-defaults-'))
+ writeFileSync(join(root, 'config.toml'), `model = 'gpt-6.1-sol'\nmodel_reasoning_effort = "high"\n[profiles.other]\nmodel = "unrelated"\nmodel_reasoning_effort = "ultra"\n`)
+ assert.deepEqual(codexDefaults(root), { defaultModel: 'gpt-6.1-sol', defaultEffort: 'high' })
+ writeFileSync(join(root, 'config.toml'), '[profiles.other]\nmodel = "unrelated"\n')
+ assert.deepEqual(codexDefaults(root), { defaultModel: null, defaultEffort: null })
+})

@@ -71,6 +71,10 @@ const build = spawnSync('npm', ['run', 'app:build', '--', '--config', JSON.strin
 if (build.status !== 0) fail('o build falhou')
 
 const bundle = join(desktop, 'src-tauri/target/release/bundle/macos')
+// Updater signing authenticates the archive bytes; independently require an intact macOS bundle.
+const macSignature = spawnSync('codesign', ['--verify', '--deep', '--strict', join(bundle, 'Orbit.app')], { stdio: 'inherit' })
+if (macSignature.status !== 0) fail('o bundle macOS falhou na verificação codesign; nenhum asset será publicado')
+
 const archive = join(bundle, 'Orbit.app.tar.gz')
 if (!existsSync(archive) || !existsSync(`${archive}.sig`)) fail('o build não gerou Orbit.app.tar.gz e a assinatura')
 

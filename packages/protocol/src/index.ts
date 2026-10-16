@@ -71,6 +71,10 @@ export interface Schedule {
   enabled: boolean
   /** Skip a run while the previous mission of this schedule still has agents working. */
   skipIfRunning: boolean
+  /** Explicit Codex subscription used to translate each scheduled objective. */
+  translationAccountId?: string
+  /** Human consent to run the original objective without translation. */
+  allowOriginal?: boolean
   nextRunAt: number | null
   lastRunAt: number | null
   lastMissionId: string | null
@@ -79,7 +83,7 @@ export interface Schedule {
   createdAt: number
 }
 
-export type ScheduleInput = Pick<Schedule, 'name' | 'templateId' | 'workspaceId' | 'when' | 'enabled' | 'skipIfRunning'> & { id?: string }
+export type ScheduleInput = Pick<Schedule, 'name' | 'templateId' | 'workspaceId' | 'when' | 'enabled' | 'skipIfRunning' | 'translationAccountId' | 'allowOriginal'> & { id?: string }
 
 export const SCHEDULE_LIMITS = { schedules: 30, name: 60, maxHours: 168 } as const
 
@@ -390,6 +394,8 @@ export interface VerificationRecord extends VerificationInput {
 }
 
 export interface Pane {
+  /** Model IDs observed in the current provider session, not inferred from launch defaults. */
+  reportedModels?: string[]
   /** Effective external MCP profile for this process; legacy panes inherited their CLI config. */
   toolProfile?: AgentToolProfile
   id: number
@@ -486,7 +492,13 @@ export interface RateWindow {
 }
 
 /** The limits an account's CLI last reported. */
+export interface ResetCredits {
+  availableCount: number
+  credits: Array<{ id: string; resetType: 'codexRateLimits'; expiresAt: number | null }> | null
+}
 export interface AccountLimits {
+  /** Provider-reported promotional benefits. null/absent means unknown, never zero. */
+  resetCredits?: ResetCredits | null
   accountId: string
   cli: AgentCliForRole
   fiveHour: RateWindow | null
@@ -560,6 +572,8 @@ export interface CliCatalog {
   source: 'cli' | 'builtin'
   /** The model the CLI uses when none is chosen, when Orbit can tell (Codex's config.toml). */
   defaultModel?: string | null
+  /** Effective effort configured by the user, before the model's own default. */
+  defaultEffort?: Effort | null
 }
 
 export type Catalog = Record<AgentCliForRole, CliCatalog>
@@ -591,6 +605,8 @@ export interface CliStatus {
 
 /** One row of "who does each task": the agent an agentic lead gets for that kind of work. */
 export interface TaskType {
+  /** Opt in to quota/model selection. Missing in older customized rows means fixed. */
+  automatic?: boolean
   /** Slug the lead passes as `kind`, e.g. `bug`. */
   id: string
   name: string
@@ -628,6 +644,8 @@ export const DIFFICULTIES: readonly Difficulty[] = ['simples', 'normal', 'difici
 
 /** A CLI, model and effort that can take a kind of work. */
 export interface AgentSeat {
+  /** Human choice: keep this model/effort, including a deliberate CLI default. */
+  pinned?: boolean
   cli: AgentCliForRole
   model: string | null
   effort: Effort | null
@@ -903,7 +921,7 @@ export type ClientMessage =
   /** Rename, replace the folder list or the instructions (new agents get them). */
   | { type: 'workspace.update'; workspaceId: string; name?: string; folders?: string[]; instructions?: string; requestId?: string }
   /** `isolation: 'worktrees'` gives every agent its own git worktree and branch. */
-  | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; adaptiveLead?: boolean; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'>; cards?: string[]; allowedClis?: AgentCliForRole[]; budget?: { tokens: number | null; costUsd: number | null } | null }
+  | { type: 'mission.create'; requestId?: string; translationAccountId?: string; allowOriginal?: boolean; workspaceId: string; title: string; objective: string; mode: MissionMode; adaptiveLead?: boolean; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'>; cards?: string[]; allowedClis?: AgentCliForRole[]; budget?: { tokens: number | null; costUsd: number | null } | null }
   /** Sets (or clears, with both null) a mission's budget. */
   | { type: 'mission.budget'; missionId: string; tokens: number | null; costUsd: number | null }
   /** The usage ledger of a month, YYYY-MM (answered to this connection). */
@@ -933,13 +951,13 @@ export type ClientMessage =
   /** Adds (no id) or changes an entry the person wrote or kept. */
   | { type: 'memory.save'; workspaceId: string; entry: { id?: string; kind: MemoryKind; text: string; pinned?: boolean } }
   | { type: 'memory.delete'; workspaceId: string; entryId: string }
-  | { type: 'pane.spawn'; request: SpawnPaneRequest }
+  | { type: 'pane.spawn'; request: SpawnPaneRequest; requestId?: string; expiresAt?: number }
   /** A terminal view mounted: send me this pane's current screen, then its live output. */
   | { type: 'pane.attach'; paneId: number }
   /** Raw keystrokes from the terminal view. */
   | { type: 'pane.input'; paneId: number; data: string }
   /** A whole message typed elsewhere (the command bar): pasted, then submitted with Enter. */
-  | { type: 'pane.submit'; paneId: number; text: string; attachments?: string[]; requestId?: string }
+  | { type: 'pane.submit'; paneId: number; text: string; attachments?: string[]; requestId?: string; translationAccountId?: string; allowOriginal?: boolean }
   | { type: 'attachment.add'; paneId: number; requestId: string; name: string; mime: string; data: string }
   | { type: 'pane.conversation'; paneId: number }
   | { type: 'pane.resize'; paneId: number; cols: number; rows: number }
@@ -975,6 +993,7 @@ export type ClientMessage =
   | { type: 'account.save'; account: AccountInput }
   | { type: 'account.delete'; accountId: string }
   /** Ask each CLI about its accounts' logins again. */
+  | { type: 'account.reset'; accountId: string; requestId: string; creditId: string; confirmed: true }
   | { type: 'account.check' }
   | { type: 'limits.refresh' }
   /** Opens a terminal running the CLI's login for this account. */
@@ -1010,8 +1029,14 @@ export type ServerMessage =
   | { type: 'mission.progress.error'; requestId: string; missionId: string; message: string }
   | { type: 'attachment.added'; requestId: string; attachment: Attachment }
   | { type: 'attachment.error'; requestId: string; message: string }
+  | { type: 'account.reset.result'; requestId: string; accountId: string; outcome: string; message: string }
+  | { type: 'account.reset.error'; requestId: string; message: string }
+  | { type: 'pane.spawned'; requestId: string; pane: Pane }
+  | { type: 'pane.spawn.error'; requestId: string; message: string }
   | { type: 'pane.submitted'; requestId: string; paneId: number }
-  | { type: 'pane.submit.error'; requestId: string; message: string }
+  | { type: 'pane.submit.error'; requestId: string; message: string; pending?: boolean }
+  | { type: 'mission.created'; requestId: string; mission: Mission }
+  | { type: 'mission.create.error'; requestId: string; message: string; pending?: boolean }
   | { type: 'pane.conversation'; paneId: number; turns: Array<{ role: 'pessoa' | 'agente'; text: string }> }
   | { type: 'snapshot'; snapshot: Snapshot }
   /**

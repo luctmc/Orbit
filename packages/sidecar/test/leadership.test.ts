@@ -61,7 +61,7 @@ test('the lead changes hands without losing anything: briefing, notes, helpers a
     const { workspace } = await ui.next('workspace.updated')
 
     // A Codex lead: read-only sandbox, and the maestro's reminder with what Orbit types to it.
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Troca', objective: 'Corrigir a média e cobrir com testes', mode: 'agentica', lead: { cli: 'codex', model: null, title: 'Líder' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Troca', objective: 'Corrigir a média e cobrir com testes', mode: 'agentica', lead: { cli: 'codex', model: null, title: 'Líder' } })
     const { mission } = await ui.next('mission.updated')
     const { pane: codexLead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
     assert.equal(launches.at(-1)!.sandbox, 'read-only')

@@ -35,7 +35,7 @@ test('workspace instructions reach every agent, and templates start missions wit
     assert.deepEqual([renamed.template.id, renamed.template.createdAt], [template.id, template.createdAt], 'saving again keeps the template')
 
     // A mission from it: the cards are on the board, the lead gets the workspace instructions.
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: template.title, objective: template.objective, mode: template.mode, squadId: null, lead: { cli: 'claude', model: 'opus', effort: 'high', title: '' }, cards: template.cards })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: template.title, objective: template.objective, mode: template.mode, squadId: null, lead: { cli: 'claude', model: 'opus', effort: 'high', title: '' }, cards: template.cards })
     const { mission } = await ui.next('mission.updated')
     for (const title of template.cards) await ui.next('card.updated', (m) => m.card.missionId === mission.id && m.card.title === title && m.card.createdBy === 'modelo')
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')

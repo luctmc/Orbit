@@ -59,7 +59,72 @@ export interface PaneView {
  * Single WebSocket to the sidecar. Structured state goes through `subscribe`/`getState`
  * (for useSyncExternalStore); terminal bytes bypass React through `attachPane`.
  */
+export class OrbitRequestTimeout extends Error {}
+export class OrbitPendingInput extends Error {}
+
+/** App-origin storage: drafts and operation IDs survive renderer/app restarts. No credentials. */
+class DurableMap<V> extends Map<string, V> {
+  private readonly storageKey: string
+  constructor(storageKey: string, decode: (value: V) => V = value => value) {
+    super()
+    this.storageKey = storageKey
+    try {
+      const entries = JSON.parse(localStorage.getItem(storageKey) ?? '[]')
+      if (Array.isArray(entries)) for (const entry of entries) {
+        if (Array.isArray(entry) && typeof entry[0] === 'string') super.set(entry[0], decode(entry[1]))
+      }
+    } catch { /* unavailable or corrupt storage never prevents opening the app */ }
+  }
+  private persist() { try { localStorage.setItem(this.storageKey, JSON.stringify([...this])) } catch { /* retain in memory if storage is unavailable */ } }
+  override set(key: string, value: V): this { super.set(key, value); this.persist(); return this }
+  override delete(key: string): boolean { const removed = super.delete(key); this.persist(); return removed }
+  override clear(): void { super.clear(); this.persist() }
+}
+
 export class OrbitClient {
+  readonly inputAttachments = new DurableMap<Array<import('@orbit/protocol').Attachment & { preview: string | null }>>('orbit.input.attachments.v1', files => files.map(file => ({ ...file, preview: null })))
+  readonly missionDrafts = new DurableMap<Omit<Extract<ClientMessage, { type: 'mission.create' }>, 'type' | 'requestId'>>('orbit.input.missions.v1')
+  readonly inputDrafts = new DurableMap<{ text: string; accountId: string; allowOriginal: boolean }>('orbit.input.drafts.v1')
+  private readonly inputAttempts = new DurableMap<{ fingerprint: string; requestId: string }>('orbit.input.attempts.v1')
+  inputPending(key: string): boolean { return this.inputAttempts.has(key) }
+
+  async submitInput(input: Omit<Extract<ClientMessage, { type: 'pane.submit' }>, 'type' | 'requestId'>) {
+    return this.identifiedInput(`pane-${input.paneId}`, { type: 'pane.submit', ...input }, 'pane.submitted')
+  }
+
+  async createMission(input: Omit<Extract<ClientMessage, { type: 'mission.create' }>, 'type' | 'requestId'>) {
+    return this.identifiedInput(`mission-${input.workspaceId}`, { type: 'mission.create', ...input }, 'mission.created')
+  }
+
+  /** Consult the exact durable request, including original field normalization and attachment IDs. */
+  async checkPendingInput(key: string) {
+    const attempt = this.inputAttempts.get(key)
+    if (!attempt) throw new Error('Não há pedido pendente para conferir.')
+    const message = JSON.parse(attempt.fingerprint) as ClientMessage
+    if (message.type !== 'pane.submit' && message.type !== 'mission.create') throw new Error('Pedido salvo inválido.')
+    return this.identifiedInput(key, message, message.type === 'pane.submit' ? 'pane.submitted' : 'mission.created')
+  }
+
+  private async identifiedInput<T extends 'pane.submitted' | 'mission.created'>(key: string, message: ClientMessage, type: T) {
+    const fingerprint = JSON.stringify(message)
+    const prior = this.inputAttempts.get(key)
+    if (prior && prior.fingerprint !== fingerprint) throw new OrbitPendingInput('Há um pedido pendente com outros dados. Confira o mesmo pedido antes de editar ou enviar outro.')
+    const attempt = prior ?? { fingerprint, requestId: crypto.randomUUID() }
+    this.inputAttempts.set(key, attempt)
+    try {
+      const result = await this.ask({ ...message, requestId: attempt.requestId } as ClientMessage, type, m => 'requestId' in m && m.requestId === attempt.requestId, 75_000)
+      // Clear the draft before the receipt: a restart in between still queries this same ID.
+      if (message.type === 'pane.submit') { this.inputDrafts.delete(key); this.inputAttachments.delete(key) }
+      if (message.type === 'mission.create') this.missionDrafts.delete(message.workspaceId)
+      this.inputAttempts.delete(key)
+      return result
+    } catch (error) {
+      if (!(error instanceof OrbitRequestTimeout) && !(error instanceof OrbitPendingInput)) this.inputAttempts.delete(key)
+      throw error
+    }
+  }
+
+  private readonly spawnAttempts = new Map<string, { requestId: string; expiresAt: number }>()
   private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, settings: null, proposals: [], catalog: null, clis: [], usageDays: [], limits: [], accounts: [], accountStatuses: [], browserEngine: undefined, browsers: [], skillCatalog: { items: [], disabled: [], scannedAt: null }, updateStatus: null, cards: [], templates: [], schedules: [], lastError: null }
   private readonly listeners = new Set<() => void>()
   /** Views per pane; `ready` once the view applied its snapshot and can take live output. */
@@ -102,6 +167,35 @@ export class OrbitClient {
     this.update({ lastError: null })
   }
 
+  /** Keep the operation identity after a lost ACK, including dialog close/reopen. */
+  async spawn(request: import('@orbit/protocol').SpawnPaneRequest) {
+    const fingerprint = JSON.stringify(request)
+    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(fingerprint))
+    const storageKey = `orbit.spawn.${Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('')}`
+    let attempt = this.spawnAttempts.get(fingerprint)
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) ?? 'null')
+      if (!attempt && saved && typeof saved.requestId === 'string' && Number.isFinite(saved.expiresAt)) attempt = saved
+    } catch { /* private storage may be unavailable */ }
+    if (!attempt) {
+      attempt = { requestId: crypto.randomUUID(), expiresAt: Date.now() + 20_000 }
+    }
+    this.spawnAttempts.set(fingerprint, attempt)
+    try { localStorage.setItem(storageKey, JSON.stringify(attempt)) } catch { /* retain operation in memory */ }
+    try {
+      const receipt = await this.ask({ type: 'pane.spawn', request, ...attempt }, 'pane.spawned', m => m.requestId === attempt.requestId)
+      this.spawnAttempts.delete(fingerprint)
+      try { localStorage.removeItem(storageKey) } catch { /* optional persistence */ }
+      return receipt
+    } catch (error) {
+      if (!(error instanceof OrbitRequestTimeout)) {
+        this.spawnAttempts.delete(fingerprint)
+        try { localStorage.removeItem(storageKey) } catch { /* optional persistence */ }
+      }
+      throw error
+    }
+  }
+
   /**
    * Mounts a view: the sidecar answers with the pane's screen serialized at the PTY's size, then
    * live output. Raw history is never replayed, since redrawing a TUI at another width scrambles it.
@@ -123,10 +217,10 @@ export class OrbitClient {
    */
   ask<T extends ServerMessage['type']>(message: ClientMessage, type: T, match: (m: Extract<ServerMessage, { type: T }>) => boolean = () => true, timeoutMs = 20_000): Promise<Extract<ServerMessage, { type: T }>> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => finish(() => reject(new Error('O motor não respondeu a tempo'))), timeoutMs)
+      const timer = setTimeout(() => finish(() => reject(new OrbitRequestTimeout(message.type === 'pane.spawn' ? 'A abertura ainda não foi confirmada. Tente novamente para conferir o mesmo pedido.' : 'O motor não respondeu a tempo'))), timeoutMs)
       const listener = (m: ServerMessage) => {
         if (m.type === type && match(m as Extract<ServerMessage, { type: T }>)) finish(() => resolve(m as Extract<ServerMessage, { type: T }>))
-        else if ((m.type === 'files.error' && message.type !== 'mission.progress') || ((m.type === 'workspace.error' || m.type === 'attachment.error' || m.type === 'pane.submit.error' || m.type === 'mission.progress.error') && 'requestId' in message && m.requestId === message.requestId)) finish(() => reject(new Error(m.message)))
+        else if ((m.type === 'files.error' && !['mission.progress', 'pane.submit', 'mission.create'].includes(message.type)) || ((m.type === 'mission.create.error' || m.type === 'account.reset.error' || m.type === 'workspace.error' || m.type === 'attachment.error' || m.type === 'pane.submit.error' || m.type === 'pane.spawn.error' || m.type === 'mission.progress.error') && 'requestId' in message && m.requestId === message.requestId)) finish(() => reject('pending' in m && m.pending ? new OrbitPendingInput(m.message) : new Error(m.message)))
       }
       const finish = (settle: () => void) => {
         clearTimeout(timer)
@@ -197,7 +291,7 @@ export class OrbitClient {
   }
 
   private receive(message: ServerMessage): void {
-    if (message.type.startsWith('mission.progress') || message.type.startsWith('attachment.') || message.type === 'pane.submitted' || message.type === 'pane.submit.error' || message.type === 'pane.conversation' || message.type.startsWith('files.') || message.type.startsWith('git.') || message.type.startsWith('report') || message.type === 'ledger') {
+    if (message.type === 'mission.created' || message.type === 'mission.create.error' || message.type.startsWith('account.reset.') || message.type === 'pane.spawned' || message.type === 'pane.spawn.error' || message.type.startsWith('mission.progress') || message.type.startsWith('attachment.') || message.type === 'pane.submitted' || message.type === 'pane.submit.error' || message.type === 'pane.conversation' || message.type.startsWith('files.') || message.type.startsWith('git.') || message.type.startsWith('report') || message.type === 'ledger') {
       for (const answer of [...this.answers]) answer(message)
       return
     }

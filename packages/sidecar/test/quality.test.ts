@@ -12,7 +12,7 @@ import { crewRole } from '../src/prompts.ts'
 import { DEFAULT_ROUTING, normalizeRouting } from '../src/routing.ts'
 import { startServer } from '../src/server.ts'
 import { findCodexRolloutById } from '../src/usage.ts'
-import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
+import { seedRoutingQuota, connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 const textOf = (result: unknown) => ((result as { content: Array<{ text: string }> }).content[0]?.text ?? '')
 
@@ -65,6 +65,7 @@ test('helpers answer acceptance criteria, open sub-helpers within a cap, and the
     ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Qualidade', objective: '', mode: 'agentica', lead: { cli: 'shell', model: null, title: 'Líder' } })
     const { mission } = await ui.next('mission.updated')
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
+    await seedRoutingQuota(server.core)
 
     const screen = server.core as unknown as { panes: { screenText: (id: number, lines: number) => string } }
     const sees = async (paneId: number, text: string) => {

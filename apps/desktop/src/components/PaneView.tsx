@@ -3,6 +3,8 @@ import type { Pane, PaneHandoff } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, costText, EFFORT_LABEL, pathText, STATUS, tokensText } from '../orbit/labels.ts'
 import { CloseIcon, MoreIcon, OrbitMark } from './icons.tsx'
+import { providerIdentity } from '../orbit/providerIdentity.ts'
+import { ProviderMark } from './ProviderMark.tsx'
 import { Conversation } from './Conversation.tsx'
 import { Terminal } from './LazyTerminal.tsx'
 import { DeleteAgentDialog } from './deletions.tsx'
@@ -78,9 +80,10 @@ function PaneTitle({ pane, editing, onEditing, onSelect }: { pane: Pane; editing
 export function PaneView({ pane, selected, onSelect, suggestions = [], suggestionsOn = false }: { pane: Pane; selected: boolean; onSelect: () => void; suggestions?: InputSuggestion[]; suggestionsOn?: boolean }) {
   const client = useOrbitClient()
   const account = useOrbit().accounts.find((a) => a.id === pane.accountId)
+  const identity = providerIdentity(pane, account)
   const status = STATUS[pane.status]
   const alive = pane.status !== 'exited'
-  const [chat, setChat] = useState(pane.role === 'lead' && pane.cli !== 'shell')
+  const [chat, setChat] = useState(false)
   const [menu, setMenu] = useState(false)
   const menuButton = useRef<HTMLButtonElement>(null)
   const closeMenu = useCallback(() => { setMenu(false); menuButton.current?.focus() }, [])
@@ -95,8 +98,10 @@ export function PaneView({ pane, selected, onSelect, suggestions = [], suggestio
         <span className="pane__id">#{pane.id}</span>
         <PaneTitle pane={pane} editing={renaming} onEditing={setRenaming} onSelect={onSelect} />
         {pane.handoffStatus && <span className={`chip ${HANDOFF_CHIP[pane.handoffStatus].tone}`} title={HANDOFF_CHIP[pane.handoffStatus].title}>{HANDOFF_CHIP[pane.handoffStatus].label}</span>}
-        <span className="chip">{[CLI_LABEL[pane.cli], account && !account.builtin && account.name, pane.model, pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}</span>
-        {pane.cli !== 'shell' && <button type="button" className="btn btn--ghost btn--sm pane__view-toggle" onClick={() => setChat((open) => !open)}>{chat ? 'Terminal' : 'Conversa'}</button>}
+        {pane.cli !== 'shell' && <div className="segmented pane__views" role="group" aria-label={`Visualização do agente ${pane.id}`}>
+          <button type="button" aria-pressed={!chat} onClick={() => setChat(false)}>Terminal</button>
+          <button type="button" aria-pressed={chat} onClick={() => setChat(true)}>Conversa</button>
+        </div>}
         <div className="menu-anchor">
           <button ref={menuButton} type="button" className="icon-btn" aria-label={`Ações de #${pane.id}`} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>
             <MoreIcon size={15} />
@@ -107,8 +112,10 @@ export function PaneView({ pane, selected, onSelect, suggestions = [], suggestio
           <CloseIcon size={14} />
         </button>
       </header>
+      <div className="pane__identity"><ProviderMark brand={identity.brand} /><span className={`dot dot--${status.tone}`} /><span className={`tone--${status.tone}`}>{status.label}</span><span className="pane__model-detail"><strong>{identity.provider}</strong><span>{[account?.name, identity.model, pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}</span></span></div>
       <div className="pane__body">
-        {chat ? <Conversation key={pane.id} pane={pane} onTerminal={() => setChat(false)} /> : <Terminal paneId={pane.id} interactive={alive} onFocus={onSelect} suggestions={suggestions} predictionEnabled={suggestionsOn} predictionReady={terminalPredictionReady(pane.status)} executionEpoch={pane.executionEpoch} />}
+        {chat && <Conversation key={pane.id} pane={pane} onTerminal={() => setChat(false)} />}
+        <div className="pane__terminal" hidden={chat}><Terminal key={pane.executionEpoch ?? pane.id} paneId={pane.id} interactive={alive} onFocus={onSelect} suggestions={suggestions} predictionEnabled={suggestionsOn} predictionReady={terminalPredictionReady(pane.status)} executionEpoch={pane.executionEpoch} /></div>
       </div>
       {!alive && pane.cli !== 'shell' && (
         <div className="ended" role="status">

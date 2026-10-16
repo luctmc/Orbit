@@ -14,6 +14,9 @@ import { DeleteMissionDialog } from './deletions.tsx'
 import { ArchiveIcon, TrashIcon, BoardIcon, BookmarkIcon, BranchIcon, ReportIcon, FolderIcon, GlobeIcon, PlusIcon } from './icons.tsx'
 import { MessageComposer } from './MessageComposer.tsx'
 import { PaneView } from './PaneView.tsx'
+import { PaneGrid } from './PaneGrid.tsx'
+import type { Layout, Columns } from '../orbit/paneLayout.ts'
+export type { Layout } from '../orbit/paneLayout.ts'
 import { OrbitCompanion } from './OrbitCompanion.tsx'
 import { MissionProgress } from './MissionProgress.tsx'
 import { useMissionProgress } from '../orbit/useMissionProgress.ts'
@@ -22,8 +25,6 @@ import { inputSuggestions } from '../orbit/inputSuggestions.ts'
 import { FlowTimeline } from './FlowTimeline.tsx'
 import { ActionMenu } from './ActionMenu.tsx'
 
-export type Layout = 'grade' | 'foco'
-type Columns = 'auto' | '1' | '2' | '3'
 const COLUMNS: Columns[] = ['auto', '1', '2', '3']
 
 function rememberedColumns(): Columns {
@@ -35,8 +36,9 @@ function rememberedColumns(): Columns {
   }
 }
 
-export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, onSelectPane, onAddAgent }: {
+export function MissionView({ mission, active = true, panes, selectedPaneId, layout, onLayout, onSelectPane, onAddAgent }: {
   mission: Mission
+  active?: boolean
   panes: Pane[]
   selectedPaneId: number | null
   layout: Layout
@@ -45,7 +47,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   onAddAgent: () => void
 }) {
   const client = useOrbitClient()
-  const progress = useMissionProgress(mission.id)
+  const progress = useMissionProgress(mission.id, active)
   const signal = missionSignal(mission, panes, progress.data, progress.connection, progress.error)
   const { squads, browsers, workspaces, cards, events } = useOrbit()
   const missionCards = cards.filter((c) => c.missionId === mission.id)
@@ -83,7 +85,6 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   }, [columns])
   const archived = mission.status === 'archived'
   const selected = panes.find((p) => p.id === selectedPaneId) ?? panes[0] ?? null
-  const visible = layout === 'foco' && selected ? [selected] : panes
   const leader = panes.find(p => p.role === 'lead')
   const suggestions = suggestionsOn && leader ? inputSuggestions({ mission, pane: leader, progress: progress.error ? null : progress.data, cards: missionCards, connected: progress.connection === 'open' }) : []
 
@@ -91,6 +92,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   const latest = useRef({ panes, selected, onSelectPane })
   latest.current = { panes, selected, onSelectPane }
   useEffect(() => {
+    if (!active) return
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
       const { panes: list, selected: current, onSelectPane: select } = latest.current
@@ -111,7 +113,7 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [])
+  }, [active])
   const alive = panes.filter((p) => p.status !== 'exited').length
 
   return (
@@ -129,16 +131,16 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
           </p>
         </div>
         <div className="mission__actions">
-          <ActionMenu label="Visualizar">
-          <span className="eyebrow">Layout dos agentes</span>
-          <div className="segmented" role="group" aria-label="Layout dos agentes">
+          <div className="segmented mission__layout" role="group" aria-label="Layout dos agentes">
             <button type="button" aria-pressed={layout === 'grade'} onClick={() => onLayout('grade')}>Grade</button>
             <button type="button" aria-pressed={layout === 'foco'} onClick={() => onLayout('foco')}>Foco</button>
           </div>
+          <ActionMenu label="Visualizar">
+          <span className="eyebrow">Painéis e colunas</span>
           {layout === 'grade' && panes.length > 1 && (
             <label className="columns" title="Colunas da grade">
               <span className="sr-only">Colunas</span>
-              <select value={columns} onChange={(e) => setColumns(e.target.value as Columns)}>
+              <select aria-label="Colunas da grade" value={columns} onChange={(e) => setColumns(e.target.value as Columns)}>
                 {COLUMNS.map((c) => <option key={c} value={c}>{c === 'auto' ? 'Colunas: auto' : `${c} ${c === '1' ? 'coluna' : 'colunas'}`}</option>)}
               </select>
             </label>
@@ -195,9 +197,8 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
             {!archived && <button className="btn btn--primary" onClick={onAddAgent}><PlusIcon size={14} />Abrir um agente</button>}
           </div>
         ) : (
-          <div className={`pane-grid pane-grid--${layout}${layout === 'grade' && columns !== 'auto' ? ` pane-grid--cols-${columns}` : ''}`}>
-            {visible.map((p) => <PaneView key={p.id} pane={p} selected={p.id === selected?.id} onSelect={() => onSelectPane(p.id)} suggestions={p.role === 'lead' ? suggestions : []} suggestionsOn={suggestionsOn && p.role === 'lead' && ['claude', 'codex'].includes(p.cli)} />)}
-          </div>
+          <PaneGrid missionId={mission.id} layout={layout} columns={columns} selectedId={selected?.id ?? null}
+            panes={panes.map(p => ({ id: p.id, content: <PaneView pane={p} selected={p.id === selected?.id} onSelect={() => onSelectPane(p.id)} suggestions={p.role === 'lead' ? suggestions : []} suggestionsOn={suggestionsOn && p.role === 'lead' && ['claude', 'codex'].includes(p.cli)} /> }))} />
         )}
         {side === 'atividades' && <aside className="activity-panel" aria-label="Histórico das atividades">
           <div className="activity-panel__head"><h2>Trabalho da missão</h2><button type="button" className="btn btn--ghost btn--sm" onClick={() => setSide(null)}>Recolher</button></div>

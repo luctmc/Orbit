@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startServer } from '../src/server.ts'
 import { Store } from '../src/store.ts'
-import { connect, ORIGIN, TOKEN } from './helpers.ts'
+import { seedRoutingQuota, connect, ORIGIN, TOKEN } from './helpers.ts'
 
 test('delegations are idempotent across concurrent calls, completion, close and restart', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-adaptive-'))
@@ -16,8 +16,9 @@ test('delegations are idempotent across concurrent calls, completion, close and 
     await ui.opened
     ui.send({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-'))) })
     const { workspace } = await ui.next('workspace.updated')
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Adaptive', objective: '', mode: 'agentica', lead: { cli: 'shell', model: null, title: '' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Adaptive', objective: '', mode: 'agentica', lead: { cli: 'shell', model: null, title: '' } })
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
+    await seedRoutingQuota(server.core)
     const input = { title: 'Build', task: 'Execute npm run build', cli: 'shell' as const, model: null }
     const [first, duplicate] = await Promise.all([server.core.spawnHelper(lead, input), server.core.spawnHelper(lead, { ...input, title: 'Build again' })])
     assert.equal(duplicate.pane.id, first.pane.id, 'same work must not open another process')
@@ -60,8 +61,9 @@ test('automatic leader, inferred helper seats, explicit overrides and attachment
     await ui.opened
     ui.send({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-'))) })
     const { workspace } = await ui.next('workspace.updated')
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Run build', objective: 'Execute npm run build', mode: 'agentica', adaptiveLead: true, lead: { cli: 'claude', model: 'claude-opus-5-5', effort: 'high', title: '' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Run build', objective: 'Execute npm run build', mode: 'agentica', adaptiveLead: true, lead: { cli: 'claude', model: 'claude-opus-5-5', effort: 'high', title: '' } })
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
+    await seedRoutingQuota(server.core)
     assert.equal(lead.model, 'claude-haiku-5-5')
     assert.equal(lead.effort, 'low', 'the leader of a simple command also avoids high effort')
     const helper = await server.core.spawnHelper(lead, { title: 'Run build', task: 'Execute npm run build', taskTypeId: 'operacao', model: null })
@@ -73,11 +75,11 @@ test('automatic leader, inferred helper seats, explicit overrides and attachment
     ui.send({ type: 'attachment.add', paneId: lead.id, requestId: 'upload-1', name: 'image.png', mime: 'image/png', data: bytes.toString('base64') })
     const { attachment } = await ui.next('attachment.added', (m) => m.requestId === 'upload-1')
     assert.deepEqual(readFileSync(attachment.path), bytes)
-    ui.send({ type: 'pane.submit', paneId: lead.id, requestId: 'submit-1', text: 'echo QA_OK', attachments: [attachment.id] })
+    ui.send({ type: 'pane.submit', allowOriginal: true, paneId: lead.id, requestId: 'submit-1', text: 'echo QA_OK', attachments: [attachment.id] })
     assert.equal((await ui.next('pane.submitted', (m) => m.requestId === 'submit-1')).paneId, lead.id)
-    ui.send({ type: 'pane.submit', paneId: lead.id, requestId: 'submit-bad', text: 'x', attachments: ['../bad'] })
+    ui.send({ type: 'pane.submit', allowOriginal: true, paneId: lead.id, requestId: 'submit-bad', text: 'x', attachments: ['../bad'] })
     assert.match((await ui.next('pane.submit.error', (m) => m.requestId === 'submit-bad')).message, /Anexo/)
-    ui.send({ type: 'pane.submit', paneId: lead.id, requestId: 'submit-long', text: 'x'.repeat(20_001) })
+    ui.send({ type: 'pane.submit', allowOriginal: true, paneId: lead.id, requestId: 'submit-long', text: 'x'.repeat(20_001) })
     assert.match((await ui.next('pane.submit.error', (m) => m.requestId === 'submit-long')).message, /20.000/)
     ui.send({ type: 'pane.conversation', paneId: lead.id })
     assert.deepEqual((await ui.next('pane.conversation')).turns, [])

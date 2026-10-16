@@ -88,7 +88,7 @@ export async function runNativeHarnessPilot(options: { cli: 'codex' | 'claude'; 
       const w = core.store.snapshot().workspaces[0]!
       // Livre denies sub-helper admission. The local controller creates exactly one inference task
       // per corpus case; no classifier call, agent reviewer or hidden auxiliary phase.
-      core.handle({ type: 'mission.create', workspaceId: w.id, title: task.id, objective: task.goal, mode: 'livre', lead: { cli: 'shell', model: null, title: 'Protected oracle controller' }, budget: { tokens: 40000, costUsd: .5 } })
+      core.handle({ type: 'mission.create', allowOriginal: true, workspaceId: w.id, title: task.id, objective: task.goal, mode: 'livre', lead: { cli: 'shell', model: null, title: 'Protected oracle controller' }, budget: { tokens: 40000, costUsd: .5 } })
       const lead = core.store.snapshot().panes.find(p => p.role === 'lead')!; missionId = lead.missionId
       const accept = ['Preserve protected fixtures and stay within allowed writes', ...task.checks.map(c => c.label)]
       worker = (await core.spawnHelper(lead, { activityId: task.id, title: task.id, taskTypeId: task.category === 'bug' ? 'bug' : 'operacao', cli: options.cli, model: candidate.model, effort: candidate.effort,

@@ -45,3 +45,26 @@ test('Codex quota transport only initializes and reads limits, strips unrelated 
   assert.throws(() => process.kill(requests[0].pid, 0), { code: 'ESRCH' })
   await assert.rejects(readCodexLimits({ file: process.execPath, args: ['-e', 'setInterval(()=>{},1000)'], timeoutMs: 50 }), /prazo/)
 })
+
+test('promotional resets preserve unknown versus zero and expose only available typed benefits', () => {
+  const raw = { rateLimits: rate(50), rateLimitResetCredits: { availableCount: 2, credits: [
+    { id: 'free', resetType: 'codexRateLimits', status: 'available', expiresAt: 2000000000 },
+    { id: 'paid-or-unknown', resetType: 'unknown', status: 'available', expiresAt: null },
+    { id: 'used', resetType: 'codexRateLimits', status: 'redeemed', expiresAt: null },
+  ] } }
+  const parsed = parseCodexAccountLimits(raw)!
+  assert.deepEqual(parsed.resetCredits, { availableCount: 2, credits: [{ id: 'free', resetType: 'codexRateLimits', expiresAt: 2000000000000 }] })
+  assert.equal(parseCodexAccountLimits({ rateLimits: rate(1) })?.resetCredits, null)
+  assert.equal(parseCodexAccountLimits({ ...raw, rateLimitResetCredits: { availableCount: 0, credits: [] } })?.resetCredits?.availableCount, 0)
+})
+
+test('free reset transport calls only the official consume method with the original idempotency key', async () => {
+  const temp = mkdtempSync('/private/tmp/orbit-reset-transport-'), log = join(temp, 'requests.jsonl'), server = join(temp, 'server.mjs')
+  writeFileSync(server, `import{appendFileSync}from'node:fs';let b='';process.stdin.on('data',c=>{b+=c;let i;while((i=b.indexOf('\\n'))>=0){const m=JSON.parse(b.slice(0,i));b=b.slice(i+1);appendFileSync(${JSON.stringify(log)},JSON.stringify(m)+'\\n');if(m.id===0)console.log(JSON.stringify({id:0,result:{}}));if(m.id===1)console.log(JSON.stringify({id:1,result:{outcome:'nothingToReset'}}));}})`)
+  const requestId = '12345678-1234-1234-1234-123456789012'
+  const result = await readCodexLimits({ file: process.execPath, args: [server], timeoutMs: 2000, reset: { requestId, creditId: 'free-credit' } }) as any
+  assert.equal(result.outcome, 'nothingToReset')
+  const requests = readFileSync(log, 'utf8').trim().split('\n').map(s => JSON.parse(s))
+  assert.deepEqual(requests.map(r => r.method), ['initialize', 'initialized', 'account/rateLimitResetCredit/consume'])
+  assert.deepEqual(requests.at(-1).params, { idempotencyKey: requestId, creditId: 'free-credit' })
+})

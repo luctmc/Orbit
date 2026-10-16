@@ -47,6 +47,14 @@ export function Terminal({ paneId, interactive, onFocus, suggestions = [], predi
   const predictionOptions = useRef({ suggestions, predictionEnabled, predictionReady })
   predictionOptions.current = { suggestions, predictionEnabled, predictionReady }
   const controls = useRef({ refresh: () => {}, reset: () => {} })
+  const terminal = useRef<XTerm | null>(null)
+  const interactiveRef = useRef(interactive)
+  interactiveRef.current = interactive
+  useEffect(() => {
+    if (!terminal.current) return
+    terminal.current.options.disableStdin = !interactive
+    terminal.current.options.cursorBlink = interactive
+  }, [interactive])
   const [ghost, setGhost] = useState<(InlineSuggestion & { left: number; top: number; maxWidth: number }) | null>(null)
   useEffect(() => { controls.current.refresh() }, [suggestions])
   useEffect(() => { controls.current.reset() }, [predictionEnabled, predictionReady, executionEpoch])
@@ -64,6 +72,7 @@ export function Terminal({ paneId, interactive, onFocus, suggestions = [], predi
       scrollback: 5000,
       allowProposedApi: false,
     })
+    terminal.current = term
     const fit = new FitAddon()
     term.loadAddon(fit)
     const predictor = new TerminalPrediction()
@@ -74,7 +83,7 @@ export function Terminal({ paneId, interactive, onFocus, suggestions = [], predi
     }
     const currentPrediction = () => {
       const options = predictionOptions.current
-      return focused && !composing && interactive && options.predictionEnabled && options.predictionReady ? predictor.prediction(options.suggestions, cursor()) : null
+      return focused && !composing && interactiveRef.current && options.predictionEnabled && options.predictionReady ? predictor.prediction(options.suggestions, cursor()) : null
     }
     const refreshPrediction = () => {
       const proposal = currentPrediction(), screen = element.querySelector('.xterm-screen'), box = frame.current
@@ -187,9 +196,10 @@ export function Terminal({ paneId, interactive, onFocus, suggestions = [], predi
       term.textarea?.removeEventListener('compositionstart', onCompositionStart)
       term.textarea?.removeEventListener('compositionend', onCompositionEnd)
       controls.current = { refresh: () => {}, reset: () => {} }
+      terminal.current = null
       term.dispose()
     }
-  }, [client, paneId, interactive])
+  }, [client, paneId])
 
   return <div className="terminal-surface">
     <div className="terminal-surface__screen" ref={frame}>

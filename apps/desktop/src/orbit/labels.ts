@@ -1,4 +1,4 @@
-import { CLI_NAME, EFFORT_LABEL, type Account, type AgentCli, type Catalog, type MissionMode, type PaneStatus } from '@orbit/protocol'
+import { CLI_NAME, EFFORT_LABEL, type Account, type AgentSeat, type AgentCliForRole, type AgentCli, type Catalog, type MissionMode, type PaneStatus } from '@orbit/protocol'
 
 export { EFFORT_LABEL }
 
@@ -47,4 +47,13 @@ export function costText(usd: number | null): string | null {
 /** "Claude" for this Mac's own login, the given name for the others. */
 export function accountLabel(account: Account | undefined, cli: AgentCli): string {
   return !account || account.builtin ? CLI_LABEL[cli] : account.name
+}
+
+/** A starting seat for a newly chosen CLI, only when its catalog advertises it. */
+export function suggestedTaskSeat(catalog: Catalog | null, cli: AgentCliForRole, kind: string): AgentSeat {
+  const cheap = ['operacao', 'documentacao'].includes(kind)
+  const id = cli === 'codex' ? cheap ? 'gpt-6-luna' : 'gpt-6.1-sol' : cli === 'claude' ? cheap ? 'claude-haiku-5-5' : 'claude-sonnet-5-5' : null
+  const model = catalog?.[cli].models.find(m => m.id === id)
+  const desired = cheap ? 'low' : 'medium'
+  return { cli, model: model?.id ?? null, effort: model?.efforts.includes(desired) ? desired : model?.defaultEffort ?? null }
 }

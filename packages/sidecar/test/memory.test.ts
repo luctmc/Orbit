@@ -8,7 +8,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { Run } from '../src/clis.ts'
 import type { AgentLaunch } from '../src/command.ts'
 import { startServer } from '../src/server.ts'
-import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
+import { seedRoutingQuota, connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 const textOf = (result: unknown) => ((result as { content: Array<{ text: string }> }).content[0]?.text ?? '')
 
@@ -47,7 +47,7 @@ test('a workspace remembers across missions: leads write to it, finished mission
     }
 
     // First mission: the lead writes to the project memory; the finished mission adds its summary.
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Primeira', objective: 'Corrigir a média', mode: 'agentica', lead: { cli: 'shell', model: null, title: 'Líder' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Primeira', objective: 'Corrigir a média', mode: 'agentica', lead: { cli: 'shell', model: null, title: 'Líder' } })
     const { pane: lead1 } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
     const asLead1 = await mcpAs(lead1.id)
     assert.match(await asLead1('project_note', { kind: 'licao', text: 'npm test precisa de NODE_ENV=test, senão os testes de banco falham' }), /1 entries/)
@@ -66,7 +66,7 @@ test('a workspace remembers across missions: leads write to it, finished mission
     assert.equal(edited.source?.missionTitle, 'Primeira')
 
     // Second mission: its lead starts with the memory (pinned first) and any agent can read it all.
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Segunda', objective: 'Nova tela', mode: 'agentica', lead: { cli: 'claude', model: 'haiku', title: 'Líder' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Segunda', objective: 'Nova tela', mode: 'agentica', lead: { cli: 'claude', model: 'haiku', title: 'Líder' } })
     const { pane: lead2 } = await ui.next('pane.updated', (m) => m.pane.role === 'lead' && m.pane.cli === 'claude')
     const role = readFileSync(launches.at(-1)!.rolePromptPath!, 'utf8')
     assert.match(role, /Project memory: what earlier missions of this project learned/)
@@ -76,7 +76,7 @@ test('a workspace remembers across missions: leads write to it, finished mission
     assert.match(memoryLines[2]!, /^- \[mission · Primeira · .*\] Primeira: Média corrigida/)
     const asLead2 = await mcpAs(lead2.id)
     assert.match(await asLead2('mission_briefing'), /## Required project memory \(pinned or written by the user\)\n\n- \[decision, pinned/)
-    const helper = Number(/#(\d+) /.exec(await asLead2('agent_spawn', { title: 'Tela', task: 'Crie a tela', agent: 'claude' }))![1])
+    const helper = Number(/#(\d+) /.exec(await asLead2('agent_spawn', { title: 'Consulta', task: 'Consulte as notas', agent: 'claude' }))![1])
     const asHelper = await mcpAs(helper)
     assert.match(await asHelper('project_memory'), /NODE_ENV=test/)
     assert.match(await asHelper('project_note', { kind: 'fato', text: 'x' }), /not found|Tool project_note/i)

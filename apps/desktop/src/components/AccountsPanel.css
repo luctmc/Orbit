@@ -1,0 +1,105 @@
+/* IAs: a provider workbench. Orbit tokens retain the product's own identity. */
+.ias { gap: 24px; min-width: 0; }
+.ias h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.ias-intro { display: grid; gap: 8px; }
+.ias-intro h2 { font-size: 24px; letter-spacing: -.04em; }
+.ias-intro p, .ias-toolbar p, .ias-footnote { color: var(--text-3); font-size: 13px; line-height: 1.6; max-width: 72ch; }
+.ias-arsenal { padding: 20px; border: 1px solid var(--accent-line); border-radius: 12px; background: var(--surface-2); display: grid; grid-template-columns: 1fr auto; gap: 16px; }
+.ias-arsenal h3 { font-size: 20px; margin: 8px 0 4px; letter-spacing: -.025em; }
+.ias-arsenal p { color: var(--text-3); font: 12px/1.6 var(--mono); }
+.ias-arsenal__marks { display: flex; align-items: center; gap: 8px; }
+.ias-arsenal__foot { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 12px; }
+.ias-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.ias-toolbar > div { display: grid; gap: 4px; }
+.ias .btn, .ias .segmented button { min-height: 44px; }
+.ias-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 188px), 1fr)); gap: 8px; align-items: stretch; }
+.ias-provider { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line-2); border-radius: 10px; padding: 12px; gap: 16px; background: var(--surface-2); }
+.ias-provider--selected { border-color: var(--accent-line); }
+.ias-provider__head { display: flex; align-items: center; gap: 8px; }
+.ias-provider__head > div { min-width: 0; }
+.ias-provider__head h3 { font-size: 13px; }
+.ias-provider__head p { color: var(--text-3); font: 10px/1.6 var(--mono); overflow-wrap: anywhere; }
+.ias-provider .provider-mark, .ias-mark { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--raised); }
+.ias-provider__status { display: flex; align-items: center; gap: 6px; color: var(--text-3); font-size: 11px; min-height: 32px; }
+.ias-provider__meters { display: grid; gap: 12px; }
+.ias-meter { display: grid; gap: 6px; min-width: 0; font: 10px/1.5 var(--mono); }
+.ias-meter__name { color: var(--text-2); font-weight: 500; overflow-wrap: anywhere; }
+.ias-meter__row { display: grid; grid-template-columns: 36px 1fr; gap: 4px; align-items: center; color: var(--text-3); }
+.ias-meter__row > span:nth-child(3) { grid-column: 1 / -1; text-align: right; }
+.ias-meter__track { height: 4px; overflow: hidden; background: var(--line-2); border-radius: 4px; }
+.ias-meter__track > span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.ias-models { display: grid; gap: 8px; }
+.ias-models .eyebrow { font-size: 9px; letter-spacing: .06em; }
+.ias-models > div { display: flex; flex-wrap: wrap; gap: 4px; }
+.ias-model { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 2px 4px; color: var(--text-2); font: 10px/1.5 var(--mono); overflow-wrap: anywhere; max-width: 100%; }
+.ias-model--default { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
+.ias-model small { font-size: 8px; text-transform: uppercase; }
+.ias-models p, .ias-provider__empty { color: var(--text-3); font-size: 12px; }
+.ias-provider__open { margin-top: auto; width: 100%; display: flex; justify-content: space-between; gap: 4px; padding-inline: 0; font-size: 11px; }
+.ias-provider__open[aria-pressed='true'] { color: var(--accent); }
+.ias-details { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--line); padding-top: 20px; scroll-margin-top: 16px; min-width: 0; }
+.ias-details .account { min-width: 0; background: var(--bg); }
+.ias .account__head h4, .ias .account__facts, .ias .account__state, .ias .check span { overflow-wrap: anywhere; min-width: 0; }
+.ias .account__head .spacer { flex-basis: 0; }
+.ias .account__facts { line-height: 1.6; }
+.ias .check { min-height: 44px; line-height: 1.6; }
+.ias .check input { width: 20px; height: 20px; flex: none; }
+.ias .quota-access { min-width: 0; }
+.ias .quota-access__actions { flex-wrap: wrap; }
+.ias .account--form { border-color: var(--accent-line); }
+.ias .field { min-width: 0; }
+.ias .field input { width: 100%; min-width: 0; }
+.ias .segmented { flex-wrap: wrap; }
+.ias-empty, .ias-notice { padding: 16px; border: 1px dashed var(--line-strong); border-radius: 8px; color: var(--text-3); font-size: 13px; line-height: 1.6; }
+.ias-api { display: grid; gap: 12px; }
+.ias-api__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ias-api__item { display: flex; align-items: center; gap: 8px; min-height: 76px; min-width: 0; text-align: left; padding: 12px; border: 1px dashed var(--line-strong); border-radius: 8px; background: var(--bg); transition: background 180ms ease-out; }
+.ias-api__item > span:not(.provider-mark):not(.ias-mark) { flex: 1; min-width: 0; }
+.ias-api__item strong, .ias-api__item small { display: block; overflow-wrap: anywhere; }
+.ias-api__item strong { font-size: 13px; }
+.ias-api__item small { font-size: 11px; line-height: 1.6; color: var(--text-3); }
+.ias-api__item:hover:enabled { background: var(--surface-2); }
+.ias-api__item:disabled { opacity: .55; cursor: default; }
+.ias :is(button, input, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.ias-footnote { border-top: 1px solid var(--line); padding-top: 16px; }
+.ias :is(.ias-meter, .ias-arsenal p) { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 600px) {
+  .ias-grid, .ias-api__grid { grid-template-columns: minmax(0, 1fr); }
+  .ias { gap: 20px; }
+  .ias-intro p, .ias-toolbar p, .ias-footnote, .ias .account__facts, .ias .check { font-size: 16px; }
+  .ias-arsenal { padding: 16px; grid-template-columns: minmax(0, 1fr); }
+  .ias-arsenal__marks { grid-row: 2; }
+  .ias-provider__head h3 { font-size: 16px; }
+  .ias-provider__head p, .ias-provider__status, .ias-provider__open { font-size: 13px; }
+  .ias-meter, .ias-model { font-size: 12px; }
+  .ias .account__head .spacer { display: none; }
+  .ias .account-form__actions, .ias .account__login-actions { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { .ias-api__item { transition: none; } }
+
+/* Local completion states; all colours inherit Orbit's active theme. */
+.ias-meter__renewal { grid-column: 1 / -1; color: var(--text-3); font: inherit; text-align: right; }
+.ias-meter__notice, .ias-refresh-status { color: var(--text-3); font-size: 12px; line-height: 1.6; }
+.ias-meter__notice { border-left: 2px solid var(--wait); padding-left: 8px; }
+.ias-spinner { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: ias-spin 800ms linear infinite; flex: none; }
+.ias .btn { white-space: normal; height: auto; padding-block: 8px; }
+.ias .chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.ias .account__head h4 { margin: 0; }
+.ias .field input { min-height: 44px; background: var(--control-bg, var(--bg-deep)); }
+.ias .check { cursor: pointer; }
+.ias .check:has(input:disabled) { cursor: not-allowed; }
+.ias :is(.cli-card__message, .account__terminal) { max-width: 100%; }
+.ias .cli-card__message { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ias .btn:disabled { opacity: .55; cursor: not-allowed; }
+.ias-api__item:active:enabled { background: var(--surface-3); }
+@keyframes ias-spin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) {
+  .ias .field input { font-size: 16px; }
+  .ias .account-form__row { gap: 12px; }
+  .ias .field, .ias .account-form__row > fieldset { width: 100%; }
+  .ias .segmented { max-width: 100%; }
+  .ias .segmented button { height: auto; padding-block: 8px; }
+  .ias .quota-access__windows { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .ias-spinner { animation: none; } }

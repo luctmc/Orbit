@@ -3,7 +3,7 @@ import type { OrbitState } from '../orbit/client.ts'
 import { accountLabel } from '../orbit/labels.ts'
 import { untilTime } from '../orbit/time.ts'
 import { useAppUpdater } from '../orbit/updater.ts'
-import { HomeIcon, OrbitMark, PlusIcon, ReloadIcon } from './icons.tsx'
+import { HomeIcon, OrbitMark, PlusIcon, ReloadIcon, SettingsIcon } from './icons.tsx'
 import { useOrbitClient } from '../orbit/context.tsx'
 import { limitWindowView, limitReadLabel, limitMetric } from '../orbit/limitPresentation.ts'
 import { useLimitClock } from '../orbit/useLimitClock.ts'
@@ -100,6 +100,7 @@ export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSele
         <button type="button" onClick={onSquads}>Equipes e squads<span>Organizar papéis e especialidades</span></button>
         <button type="button" onClick={onSettings}>Configurações{pendingProposals > 0 && <span className="count-badge">{pendingProposals} propostas</span>}<span>Contas, CLIs, modelos e ferramentas</span></button>
       </ActionMenu>
+      <button type="button" className="icon-btn tabs__settings" aria-label="Configurações" title="Configurações" onClick={onSettings}><SettingsIcon size={18} />{pendingProposals > 0 && <span className="tabs__notification" aria-label={`${pendingProposals} propostas pendentes`} />}</button>
       {onNewMission && (
         <button className="btn btn--primary btn--sm" onClick={onNewMission}><PlusIcon size={14} />Nova missão</button>
       )}
