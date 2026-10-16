@@ -112,6 +112,7 @@ export function ModelSelect({ id, cli, value, onChange, label, disabled, compact
         <input aria-label={`${label ?? 'Modelo'}: id do modelo`} value={value ?? ''} disabled={disabled} spellCheck={false} autoFocus={!compact}
           placeholder={cli === 'gemini' ? 'gemini-3.1-pro-preview' : cli === 'codex' ? 'gpt-…' : 'id do modelo'} onChange={(e) => onChange(e.target.value.trim() || null)} />
       )}
+      {compact && value === null && <p className="note">Padrão da CLI: {fallback?.id ?? 'modelo não confirmado'} · esforço {catalog?.[cli].defaultEffort ? EFFORT_LABEL[catalog[cli].defaultEffort!] : fallback?.defaultEffort ? EFFORT_LABEL[fallback.defaultEffort] : 'não confirmado'}. A conta pode ter configuração própria.</p>}
       {!compact && (
         <p className="note model-select__note">
           {typing ? 'Qualquer id que a CLI aceite.' : value === null ? `O que o ${CLI_NAME[cli]} usa quando ninguém escolhe.` : info?.description || info?.label || value}
@@ -126,7 +127,7 @@ export function ModelSelect({ id, cli, value, onChange, label, disabled, compact
 export function useEfforts(cli: AgentCli, model: string | null): { allowed: readonly Effort[]; modelDefault: Effort | null } {
   const { catalog } = useOrbit()
   const allowed = effortsFor(catalog, cli, model)
-  const modelDefault = cli === 'shell' || !catalog ? null : catalog[cli].models.find((m) => m.id === (model ?? catalog[cli].defaultModel))?.defaultEffort ?? null
+  const modelDefault = cli === 'shell' || !catalog ? null : (model === null ? catalog[cli].defaultEffort : null) ?? catalog[cli].models.find((m) => m.id === (model ?? catalog[cli].defaultModel))?.defaultEffort ?? null
   return { allowed, modelDefault }
 }
 

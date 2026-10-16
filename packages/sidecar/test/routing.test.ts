@@ -40,14 +40,14 @@ test('an agentic lead routes helpers through the table; the table is saved and r
 
     // The user tweaks the table: tests go to Codex with high effort and a skill.
     const edited: Routing = structuredClone(DEFAULT_ROUTING)
-    Object.assign(edited.taskTypes.find((t) => t.id === 'testes')!, { cli: 'codex', model: 'gpt-6.1', effort: 'high', skills: ['prova-antes'] })
+    Object.assign(edited.taskTypes.find((t) => t.id === 'testes')!, { cli: 'codex', automatic: false, model: 'gpt-6.1', effort: 'high', skills: ['prova-antes'] })
     ui.send({ type: 'routing.save', routing: edited })
     const { routing } = await ui.next('routing.updated')
     assert.equal(routing.taskTypes.find((t) => t.id === 'testes')!.cli, 'codex')
 
     ui.send({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-'))) })
     const { workspace } = await ui.next('workspace.updated')
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Login', objective: 'Arrumar o login', mode: 'agentica', lead: { cli: 'claude', model: 'claude-opus-5-5', title: '', effort: 'high' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Login', objective: 'Arrumar o login', mode: 'agentica', lead: { cli: 'claude', model: 'claude-opus-5-5', title: '', effort: 'high' } })
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
     assert.equal(lead.effort, 'high')
     const leadRole = readFileSync(join(dataDir, 'panes', String(lead.id), 'role.md'), 'utf8')
@@ -75,7 +75,7 @@ test('an agentic lead routes helpers through the table; the table is saved and r
     assert.match(crewRole, /skills .*: prova-antes/)
 
     ui.send({ type: 'routing.reset' })
-    const { routing: reset } = await ui.next('routing.updated', (m) => m.routing.taskTypes.find((t) => t.id === 'testes')!.model === null)
+    const { routing: reset } = await ui.next('routing.updated', (m) => m.routing.taskTypes.find((t) => t.id === 'testes')!.model === 'gpt-6.1-sol')
     assert.deepEqual({ ...reset, revision: undefined }, { ...DEFAULT_ROUTING, revision: undefined })
   } finally {
     await mcp?.close()

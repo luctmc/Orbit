@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { AGENT_CLIS, MODEL_ID, ROUTING_LIMITS, type AgentCliForRole, type AgentSeat, type Routing, type TaskType } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
-import { CLI_LABEL } from '../orbit/labels.ts'
+import { CLI_LABEL, EFFORT_LABEL, suggestedTaskSeat } from '../orbit/labels.ts'
 import { CliSelect, EffortCycle, ModelSelect, SkillsField } from './agentPickers.tsx'
 import { AccountsPanel } from './AccountsPanel.tsx'
 import { ClisPanel } from './ClisPanel.tsx'
@@ -11,7 +11,7 @@ import { UsagePanel } from './UsagePanel.tsx'
 import { CloseIcon, PlusIcon } from './icons.tsx'
 
 
-const blankRow = (): TaskType => ({ id: '', name: '', description: '', cli: 'claude', model: null, effort: 'medium', skills: [], onlySkills: false, method: '', readOnly: false, alt: null })
+const blankRow = (): TaskType => ({ id: '', name: '', description: '', cli: 'claude', model: null, effort: 'medium', skills: [], onlySkills: false, method: '', readOnly: false, alt: null, automatic: false })
 
 function validate(draft: Routing): string | null {
   if (draft.taskTypes.length === 0) return 'Inclua pelo menos um tipo de tarefa.'
@@ -32,7 +32,7 @@ const TAB_TITLE: Record<SettingsTab, string> = { routing: 'Quem faz cada tarefa'
 export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: () => void; initialTab?: SettingsTab }) {
   const [tab, setTab] = useState<SettingsTab>(initialTab)
   const client = useOrbitClient()
-  const { routing } = useOrbit()
+  const { routing, catalog } = useOrbit()
   const ref = useRef<HTMLDialogElement>(null)
   const uid = useId()
   const [draft, setDraft] = useState<Routing | null>(() => (routing ? structuredClone(routing) : null))
@@ -69,22 +69,25 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
   }
 
   return (
-    <dialog ref={ref} className="dialog dialog--wide" aria-labelledby={`${uid}-title`} onCancel={(e) => { e.preventDefault(); onClose() }}>
-      <header className="dialog__head">
-        <div>
-          <div className="eyebrow">Ajustes</div>
-          <h2 id={`${uid}-title`}>{TAB_TITLE[tab]}</h2>
-        </div>
-        <div className="segmented settings-tabs" role="group" aria-label="Seção dos ajustes">
-          <button type="button" aria-pressed={tab === 'routing'} onClick={() => setTab('routing')}>Quem faz cada tarefa</button>
-          <button type="button" aria-pressed={tab === 'skills'} onClick={() => setTab('skills')}>Skills e MCP</button>
-          <button type="button" aria-pressed={tab === 'contas'} onClick={() => setTab('contas')}>Contas</button>
-          <button type="button" aria-pressed={tab === 'uso'} onClick={() => setTab('uso')}>Uso</button>
-          <button type="button" aria-pressed={tab === 'avisos'} onClick={() => setTab('avisos')}>Avisos</button>
-          <button type="button" aria-pressed={tab === 'clis'} onClick={() => setTab('clis')}>Agentes e CLIs</button>
-        </div>
-        <button type="button" className="icon-btn" aria-label="Fechar" onClick={onClose}><CloseIcon /></button>
+    <dialog ref={ref} className="dialog dialog--wide settings" aria-labelledby={`${uid}-title`} onCancel={(e) => { e.preventDefault(); onClose() }}>
+      <header className="settings__head">
+        <div><span className="eyebrow">Seu ambiente de trabalho</span><h2 id={`${uid}-title`}>Configurações</h2></div>
+        <button type="button" className="icon-btn" aria-label="Fechar configurações" onClick={onClose}><CloseIcon /></button>
       </header>
+      <div className="settings__layout">
+        <nav className="settings__nav" aria-label="Seções das configurações">
+          <span className="eyebrow">Missão agêntica</span>
+          <button type="button" aria-current={tab === 'routing' ? 'page' : undefined} onClick={() => setTab('routing')}>Quem faz cada tarefa<span>Modelos, esforço e regras</span></button>
+          <span className="eyebrow">Ambiente</span>
+          <button type="button" aria-current={tab === 'contas' ? 'page' : undefined} onClick={() => setTab('contas')}>Contas<span>Provedores e autenticação</span></button>
+          <button type="button" aria-current={tab === 'clis' ? 'page' : undefined} onClick={() => setTab('clis')}>Agentes e CLIs</button>
+          <button type="button" aria-current={tab === 'skills' ? 'page' : undefined} onClick={() => setTab('skills')}>Skills e MCP</button>
+          <span className="eyebrow">Acompanhamento</span>
+          <button type="button" aria-current={tab === 'uso' ? 'page' : undefined} onClick={() => setTab('uso')}>Uso</button>
+          <button type="button" aria-current={tab === 'avisos' ? 'page' : undefined} onClick={() => setTab('avisos')}>Avisos</button>
+        </nav>
+        <section className="settings__content" aria-labelledby={`${uid}-section`}>
+          <div className="settings__section-head"><span className="eyebrow">{tab === 'routing' ? 'Missão agêntica' : 'Ambiente'}</span><h3 id={`${uid}-section`}>{TAB_TITLE[tab]}</h3></div>
 
       {tab === 'clis' ? (
         <ClisPanel />
@@ -101,22 +104,26 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
       ) : (
         <form className="dialog__body routing" onSubmit={(e) => { e.preventDefault(); save() }}>
           <p className="muted routing__intro">
-            Na missão agêntica o líder classifica cada atividade num destes tipos e o Orbit abre o ajudante com o agente, o modelo e o esforço da linha. Pedidos explícitos do líder (agente ou modelo) vencem a tabela.
+            No automático, o Orbit escolhe CLI, modelo e conta pela tarefa e pela quota válida. Codex pode implementar código com líder Codex. Suas escolhas explícitas são preservadas; quota desconhecida não conta como saldo.
           </p>
 
           <fieldset className="routing__lead">
             <legend>Líder padrão das missões agênticas</legend>
             <div className="squads__row">
-              <CliSelect id={`${uid}-lead-cli`} label="Agente do líder" value={draft.lead.cli} onChange={(cli) => edit({ ...draft, lead: { cli, model: null, effort: null } })} />
+              <CliSelect id={`${uid}-lead-cli`} label="Agente do líder" value={draft.lead.cli} onChange={(cli) => edit({ ...draft, lead: suggestedTaskSeat(catalog, cli, 'lead') })} />
               <ModelSelect id={`${uid}-lead`} className="routing__model" label="Modelo do líder" compact cli={draft.lead.cli} value={draft.lead.model} onChange={(model) => edit({ ...draft, lead: { ...draft.lead, model } })} />
               <EffortCycle label="Líder" cli={draft.lead.cli} model={draft.lead.model} value={draft.lead.effort} onChange={(effort) => edit({ ...draft, lead: { ...draft.lead, effort } })} />
             </div>
           </fieldset>
 
+          <details className="routing__policy"><summary>Regras de frontend, visual, motion e skills</summary>
+          <p className="muted">Frontend e visual: Opus 5.5 ou GPT 6.1 Sol, esforço médio/alto. Motion: Opus 5.5 alto. As regras automáticas usam os IDs do catálogo local. Em Contas, habilite cada login separadamente — duas contas Codex dividem a mesma CLI, com quotas independentes.</p>
+          <p className="muted">Skills de design são escolhidas por tarefa e stack entre as instaladas e entregues como conteúdo ao agente. O design system e as instruções do projeto têm prioridade. Skills ausentes são informadas; nada é instalado automaticamente.</p>
+          </details>
           <Proposals />
-          <ResumeOnStart />
+          <details className="routing__policy"><summary>Preferências de execução e ferramentas</summary><ResumeOnStart /></details>
 
-          <div className="routing__table-wrap">
+          <div className="routing__table-wrap" tabIndex={0} role="region" aria-label="Tabela de tarefas, role horizontalmente para ver todas as colunas">
             <table className="routing__table">
               <thead>
                 <tr>
@@ -136,20 +143,21 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
                       <input id={`${uid}-n${i}`} className="routing__name" value={t.name} maxLength={ROUTING_LIMITS.name} placeholder="Revisão de PR" onChange={(e) => patchRow(i, { name: e.target.value })} />
                       <label className="sr-only" htmlFor={`${uid}-d${i}`}>Quando usar {t.name}</label>
                       <input id={`${uid}-d${i}`} className="routing__desc" value={t.description} maxLength={ROUTING_LIMITS.description} placeholder="Quando este tipo se aplica" onChange={(e) => patchRow(i, { description: e.target.value })} />
+                      <label className="check"><input type="checkbox" checked={t.automatic === true} onChange={e => patchRow(i, { automatic: e.target.checked })} /><span>Automático por quota e tarefa</span></label>
                       <details className="routing__method">
-                        <summary>{t.method ? 'Como fazer' : 'Como fazer (vazio)'}{t.readOnly ? ' · só leitura' : ''}{t.alt ? ` · equivalente: ${CLI_LABEL[t.alt.cli]}` : ''}</summary>
+                        <summary>{t.method ? 'Como fazer' : 'Como fazer (vazio)'}{t.readOnly ? ' · só leitura' : ''}{t.alt ? ` · equivalente: ${CLI_LABEL[t.alt.cli]} · ${t.alt.model ?? 'padrão escolhido'} · ${t.alt.effort ? EFFORT_LABEL[t.alt.effort] : 'esforço padrão'}` : ''}</summary>
                         <label className="sr-only" htmlFor={`${uid}-h${i}`}>Como fazer {t.name}</label>
                         <textarea id={`${uid}-h${i}`} rows={5} value={t.method} maxLength={ROUTING_LIMITS.method} placeholder="Passos que o ajudante segue neste tipo de tarefa (vale para Claude e Codex)" onChange={(e) => patchRow(i, { method: e.target.value })} />
                         <label className="check">
                           <input type="checkbox" checked={t.readOnly} onChange={(e) => patchRow(i, { readOnly: e.target.checked })} />
                           <span>Só leitura: o ajudante não edita arquivos</span>
                         </label>
-                        <AltSeat id={`${uid}-alt${i}`} name={t.name || `tipo ${i + 1}`} cli={t.cli} value={t.alt} onChange={(alt) => patchRow(i, { alt })} />
+                        <AltSeat id={`${uid}-alt${i}`} kind={t.id} name={t.name || `tipo ${i + 1}`} cli={t.cli} value={t.alt} onChange={(alt) => patchRow(i, { alt })} />
                       </details>
                     </td>
-                    <td><CliSelect id={`${uid}-c${i}`} label={`Agente de ${t.name || `tipo ${i + 1}`}`} value={t.cli} onChange={(cli) => patchRow(i, { cli, model: null, effort: null })} /></td>
-                    <td><ModelSelect id={`${uid}-m${i}`} className="routing__model" compact label={`Modelo de ${t.name || `tipo ${i + 1}`}`} cli={t.cli} value={t.model} onChange={(model) => patchRow(i, { model })} /></td>
-                    <td><EffortCycle label={t.name || `Tipo ${i + 1}`} cli={t.cli} model={t.model} value={t.effort} onChange={(effort) => patchRow(i, { effort })} /></td>
+                    <td><CliSelect id={`${uid}-c${i}`} label={`Agente de ${t.name || `tipo ${i + 1}`}`} value={t.cli} onChange={(cli) => patchRow(i, { ...suggestedTaskSeat(catalog, cli, t.id), automatic: false })} /></td>
+                    <td><ModelSelect id={`${uid}-m${i}`} className="routing__model" compact label={`Modelo de ${t.name || `tipo ${i + 1}`}`} cli={t.cli} value={t.model} onChange={(model) => patchRow(i, { model, automatic: false })} /><p className="note">{t.automatic ? (['operacao', 'documentacao'].includes(t.id) ? 'Base econômica; ajusta pela dificuldade e quota.' : 'Base para código/análise; simples reduz custo, difícil sobe até alto.') : 'Escolha fixa; o automático não substitui este assento.'}</p></td>
+                    <td><EffortCycle label={t.name || `Tipo ${i + 1}`} cli={t.cli} model={t.model} value={t.effort} onChange={(effort) => patchRow(i, { effort, automatic: false })} /></td>
                     <td>
                       <SkillsField id={`${uid}-s${i}`} cli={t.cli} skills={t.skills} only={t.onlySkills} label={`Skills de ${t.name || `tipo ${i + 1}`}`}
                         onChange={(skills, onlySkills) => patchRow(i, { skills, onlySkills })} />
@@ -183,6 +191,8 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
           </div>
         </form>
       )}
+        </section>
+      </div>
     </dialog>
   )
 }
@@ -256,22 +266,25 @@ function Proposals() {
  * The same kind of work on another CLI: the maestro sends it there when this row's CLI is much
  * busier, or used up.
  */
-function AltSeat({ id, name, cli, value, onChange }: { id: string; name: string; cli: AgentCliForRole; value: AgentSeat | null; onChange: (alt: AgentSeat | null) => void }) {
+function AltSeat({ id, kind, name, cli, value, onChange }: { id: string; kind: string; name: string; cli: AgentCliForRole; value: AgentSeat | null; onChange: (alt: AgentSeat | null) => void }) {
+  const { catalog } = useOrbit()
   return (
     <div className="alt-seat">
-      <label htmlFor={id}>Equivalente em outra CLI <span className="muted">(o maestro manda para lá quando a {CLI_LABEL[cli]} estiver bem mais ocupada ou no limite)</span></label>
+      <label htmlFor={id}>Equivalente em outra CLI <span className="muted">(no automático, concorre por quota válida e compatibilidade com a tarefa)</span></label>
       <div className="squads__row">
-        <select id={id} className="cli-select" value={value?.cli ?? ''} onChange={(e) => onChange(e.target.value ? { cli: e.target.value as AgentCliForRole, model: null, effort: null } : null)}>
+        <select id={id} className="cli-select" value={value?.cli ?? ''} onChange={(e) => onChange(e.target.value ? suggestedTaskSeat(catalog, e.target.value as AgentCliForRole, kind) : null)}>
           <option value="">Nenhum</option>
           {AGENT_CLIS.filter((c) => c !== cli).map((c) => <option key={c} value={c}>{CLI_LABEL[c]}</option>)}
         </select>
         {value && (
           <>
-            <ModelSelect id={`${id}-m`} compact label={`Modelo equivalente de ${name}`} cli={value.cli} value={value.model} onChange={(model) => onChange({ ...value, model })} />
-            <EffortCycle label={`Equivalente de ${name}`} cli={value.cli} model={value.model} value={value.effort} onChange={(effort) => onChange({ ...value, effort })} />
+            <ModelSelect id={`${id}-m`} compact label={`Modelo equivalente de ${name}`} cli={value.cli} value={value.model} onChange={(model) => onChange({ ...value, model, pinned: true })} />
+            <EffortCycle label={`Equivalente de ${name}`} cli={value.cli} model={value.model} value={value.effort} onChange={(effort) => onChange({ ...value, effort, pinned: true })} />
           </>
         )}
       </div>
+      {value && <p className="note">{value.pinned ? 'Escolha humana: modelo e esforço preservados, inclusive o padrão da CLI. Se incompatível com a política ou catálogo, este equivalente não concorre.' : 'Herdado da tabela: modelo e esforço se adaptam à dificuldade; frontend e motion seguem as políticas acima.'}</p>}
+      {value?.pinned && <button type="button" className="btn btn--ghost btn--sm" onClick={() => { const { pinned: _, ...seat } = value; onChange(seat) }}>Adaptar equivalente à tarefa</button>}
     </div>
   )
 }

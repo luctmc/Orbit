@@ -1,3 +1,4 @@
+import { seedRoutingQuota } from './helpers.ts'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { fixture } from './r2Fixture.ts'
@@ -17,6 +18,7 @@ test('usage without a reported USD amount stays unknown in the ledger', async ()
 test('classification usage is charged even when its JSON cannot classify the task', async () => {
   const { core, lead, root } = await fixture()
   try {
+    await seedRoutingQuota(core)
     let calls = 0
     ;(core as any).run = async () => {
       calls++

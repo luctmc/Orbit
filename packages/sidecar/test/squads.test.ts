@@ -71,10 +71,10 @@ test('a squad mission briefs the lead with the script and opens helpers by role'
 
     ui.send({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-'))) })
     const { workspace } = await ui.next('workspace.updated')
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Sem squad', objective: '', mode: 'squad', lead: { cli: 'claude', model: null, title: '' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Sem squad', objective: '', mode: 'squad', lead: { cli: 'claude', model: null, title: '' } })
     assert.match((await ui.next('error', (m) => /squad/.test(m.message))).message, /Escolha um squad/)
 
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Bug do login', objective: 'O login falha com senha válida', mode: 'squad', squadId: 'caca-bugs', lead: { cli: 'claude', model: 'claude-opus-5-5', title: '' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Bug do login', objective: 'O login falha com senha válida', mode: 'squad', squadId: 'caca-bugs', lead: { cli: 'claude', model: 'claude-opus-5-5', title: '' } })
     const { mission } = await ui.next('mission.updated', (m) => m.mission.title === 'Bug do login')
     assert.equal(mission.squadId, 'caca-bugs')
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.missionId === mission.id && m.pane.role === 'lead')

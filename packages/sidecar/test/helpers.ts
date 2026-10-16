@@ -51,3 +51,16 @@ export function connect(port: number, token = TOKEN, origin = ORIGIN) {
 
 /** Stand-in for the login shell: no CLI probes or updates leave the test. */
 export const offline = async () => ({ code: 127, stdout: '', stderr: 'offline' })
+
+/** Fresh synthetic provider observations; never contact or read the user's accounts. */
+export async function seedRoutingQuota(core: import('../src/core.ts').OrbitCore) {
+  await core.checkAccounts()
+  const now = Date.now()
+  const privateCore = core as unknown as { accountStatus: Map<string, import('@orbit/protocol').AccountStatus> }
+  for (const a of core.store.accounts()) privateCore.accountStatus.set(a.id, { accountId: a.id, loggedIn: true, checkedAt: now, busy: null, email: null, method: 'synthetic', plan: null, loginPaneId: null, message: null })
+  for (const account of core.store.accounts()) core.store.setLimits({ accountId: account.id, cli: account.cli, source: 'provider', fiveHour: { usedPercent: 0, resetsAt: now + 3600000, windowMinutes: 300 }, weekly: null, updatedAt: now, plan: null })
+  const state = core as unknown as { catalog: import('@orbit/protocol').Catalog }
+  const { CLAUDE_CATALOG } = await import('../src/clis.ts')
+  const efforts = ['low', 'medium', 'high'] as const
+  state.catalog = { claude: CLAUDE_CATALOG, codex: { source: 'cli', efforts: [...efforts], models: ['gpt-6.1-sol', 'gpt-6-luna', 'gpt-6-astra'].map(id => ({ id, label: id, description: '', efforts: [...efforts], defaultEffort: 'medium' })) }, gemini: { source: 'builtin', efforts: [], models: [] }, antigravity: { source: 'builtin', efforts: [], models: [] } }
+}

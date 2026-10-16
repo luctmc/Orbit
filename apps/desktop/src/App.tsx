@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { hasNewPanes, selectedAfterRemoval } from './orbit/paneLayout.ts'
 import type { Mission } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from './orbit/context.tsx'
 import { TitleBar, WorkspaceTabs } from './components/chrome.tsx'
@@ -13,7 +14,7 @@ import { UpdaterProvider, useUpdater } from './orbit/updater.ts'
 import { useNotifications } from './orbit/notify.ts'
 import { OrbitMark, PlusIcon } from './components/icons.tsx'
 
-type DialogKind = 'workspace' | 'workspace-edit' | 'mission' | 'agent' | 'squads' | 'routing' | 'about' | null
+type DialogKind = 'workspace' | 'workspace-edit' | 'mission' | 'agent' | 'squads' | 'routing' | 'accounts' | 'about' | null
 
 const BOOT_AT = Date.now()
 
@@ -48,7 +49,9 @@ export function App() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(() => remembered('workspace', null))
   const [missionId, setMissionId] = useState<string | null>(() => remembered('mission', null))
   const [paneId, setPaneId] = useState<number | null>(null)
-  const [layout, setLayout] = useState<Layout>(() => remembered('layout', 'foco'))
+  const [layouts, setLayouts] = useState<Record<string, Layout>>(() => remembered('missionLayouts', {}))
+  const [visited, setVisited] = useState<string[]>([])
+  const previousPanes = useRef<Map<string, number[]>>(new Map())
   const [dialog, setDialog] = useState<DialogKind>(null)
   // The app opens on the Base; picking a mission or workspace switches to the mission screen.
   const [view, setView] = useState<'home' | 'mission'>('home')
@@ -57,12 +60,30 @@ export function App() {
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? workspaces[0] ?? null
   const missions = state.missions.filter((m) => m.workspaceId === workspace?.id)
   const mission = missions.find((m) => m.id === missionId) ?? missions.filter((m) => m.status === 'active').sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null
-  const panes = state.panes.filter((p) => p.missionId === mission?.id).sort((a, b) => (a.role === b.role ? a.id - b.id : a.role === 'lead' ? -1 : 1))
   const liveAgents = state.panes.filter((p) => p.status !== 'exited').length
 
   useEffect(() => remember('workspace', workspace?.id ?? null), [workspace?.id])
   useEffect(() => remember('mission', mission?.id ?? null), [mission?.id])
-  useEffect(() => remember('layout', layout), [layout])
+  useEffect(() => remember('missionLayouts', layouts), [layouts])
+  useEffect(() => {
+    if (mission && view === 'mission') setVisited(current => current.includes(mission.id) ? current : [...current, mission.id])
+  }, [mission?.id, view])
+  useEffect(() => {
+    if (state.connection !== 'open') return
+    const next = new Map<string, number[]>()
+    const reveal: string[] = []
+    for (const item of state.missions) {
+      const ids = state.panes.filter(p => p.missionId === item.id).sort((a, b) => a.role === b.role ? a.id - b.id : a.role === 'lead' ? -1 : 1).map(p => p.id)
+      const previous = previousPanes.current.get(item.id)
+      if (previous && hasNewPanes(previous, ids)) reveal.push(item.id)
+      if (item.id === mission?.id) {
+        setPaneId(current => selectedAfterRemoval(previous ?? [], ids, current))
+      }
+      next.set(item.id, ids)
+    }
+    previousPanes.current = next
+    if (reveal.length) setLayouts(current => ({ ...current, ...Object.fromEntries(reveal.map(id => [id, 'grade'])) }))
+  }, [state.panes, state.missions, state.connection, mission?.id])
 
   // A mission created while the app is open becomes the active one (not the ones a schedule starts).
   const followed = useRef<string | null>(null)
@@ -129,15 +150,17 @@ export function App() {
 
       {state.startup && state.startup.some(task => task.state !== 'ready') && <details className="startup-status"><summary><span className="dot dot--idle" />{state.startup.some(task => task.state === 'error') ? 'Alguns serviços precisam de atenção' : 'Preparando seu ambiente em segundo plano…'}</summary><ul>{state.startup.map(task => <li key={task.id}><strong>{{ recovery: 'Retomada das equipes', catalog: 'Catálogo de modelos', accounts: 'Contas', clis: 'CLIs', skills: 'Skills' }[task.id]}</strong><span>{task.state === 'ready' ? 'Pronto' : task.state === 'error' ? task.message || 'Falha ao iniciar' : task.state === 'running' ? 'Em preparação' : 'Aguardando'}</span></li>)}</ul></details>}
 
-      {!workspace || view === 'home' ? (
+      {(!workspace || view === 'home') && (
         <HomeView
           onOpenMission={openMission}
           onOpenWorkspace={(w) => { setWorkspaceId(w.id); setMissionId(null); setView('mission') }}
           onNewMission={workspace ? () => setDialog('mission') : null}
           onAddFolder={() => setDialog('workspace')}
+          onOpenAccounts={() => setDialog('accounts')}
         />
-      ) : (
-        <div className="body">
+      )}
+      {workspace && (
+        <div className="body" hidden={view !== 'mission'}>
           <MissionRail
             workspace={workspace}
             onEditWorkspace={() => setDialog('workspace-edit')}
@@ -149,17 +172,22 @@ export function App() {
             onSelectPane={setPaneId}
             onNewMission={() => setDialog('mission')}
           />
-          {mission ? (
-            <MissionView
-              mission={mission}
-              panes={panes}
-              selectedPaneId={paneId}
-              layout={layout}
-              onLayout={setLayout}
-              onSelectPane={setPaneId}
-              onAddAgent={() => setDialog('agent')}
-            />
-          ) : (
+          {state.missions.filter(item => visited.includes(item.id) || (view === 'mission' && item.id === mission?.id)).map(item => {
+            const active = view === 'mission' && item.id === mission?.id
+            return <div key={item.id} className="mission-cache" hidden={!active}>
+              <MissionView
+                mission={item}
+                active={active}
+                panes={state.panes.filter(p => p.missionId === item.id).sort((a, b) => a.role === b.role ? a.id - b.id : a.role === 'lead' ? -1 : 1)}
+                selectedPaneId={active ? paneId : null}
+                layout={layouts[item.id] === 'foco' ? 'foco' : 'grade'}
+                onLayout={next => setLayouts(current => ({ ...current, [item.id]: next }))}
+                onSelectPane={setPaneId}
+                onAddAgent={() => setDialog('agent')}
+              />
+            </div>
+          })}
+          {!mission && (
             <main className="mission empty">
               <p>Nenhuma missão em <strong>{workspace.name}</strong>.</p>
               <button className="btn btn--primary" onClick={() => setDialog('mission')}><PlusIcon size={14} />Nova missão</button>
@@ -174,6 +202,7 @@ export function App() {
       {dialog === 'agent' && mission && <AddAgentDialog missionId={mission.id} onClose={() => setDialog(null)} />}
       {dialog === 'squads' && <SquadsDialog onClose={() => setDialog(null)} />}
       {dialog === 'routing' && <RoutingDialog onClose={() => setDialog(null)} />}
+      {dialog === 'accounts' && <RoutingDialog initialTab="contas" onClose={() => setDialog(null)} />}
       {dialog === 'about' && <RoutingDialog initialTab="clis" onClose={() => setDialog(null)} />}
     </div>
     </UpdaterProvider>

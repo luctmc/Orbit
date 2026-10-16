@@ -1,3 +1,4 @@
+import { InputJournal, inputFingerprint, translateCodex, UncertainTranslation, RESPONSE_LANGUAGE, type InputRecord, type Translate } from './inputLanguage.ts'
 import { readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { needsDelivery, noticeText } from './deliveryQueue.ts'
@@ -13,6 +14,8 @@ import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { bundledCatalog, codexDisabledMcp, gateTool, missionSkills, readSkill, scanCatalog, type SkillPolicy } from './skills.ts'
 import { SkillSessions } from './skillSessions.ts'
+import { projectDesignContext, selectDesignSkills, designSkillDelivery } from './designSkills.ts'
+import { automaticTaskSeat, designWork } from './taskPolicy.ts'
 import { accountRooms, BALANCE_GAP, chooseAccount, classifyTask, assessDifficulty, cliLoad, LIVE_WEIGHT, seatForDifficulty, decisionReceipt, type AccountRoom } from './maestro.ts'
 import { dueSchedules, nextRun, normalizeWhen } from './schedules.ts'
 import { fileDiff, folderStatus, folderTree, readFile } from './files.ts'
@@ -84,6 +87,8 @@ export interface HelperRequest {
 export type Broadcast = (message: ServerMessage) => void
 
 export interface CoreOptions {
+  /** Tests inject an offline translator; production always uses isolated Codex. */
+  translate?: Translate
   /** Opt-in local benchmark measurement; never calls a model or stores message content. */
   measurements?: HarnessMeasurements
   /** Benchmark-only control: include optional context eagerly, within the same byte budget. */
@@ -101,6 +106,9 @@ export interface CoreOptions {
 
 /** Orbit's domain logic: UI messages, MCP tool calls and hook reports all land here. */
 export class OrbitCore {
+  private readonly inputJournal: InputJournal
+  private readonly translate: Translate
+  private readonly inputInFlight = new Map<string, Promise<void>>()
   private readonly measurements?: HarnessMeasurements
   private readonly benchmarkEagerContext: boolean
   private readonly harnessMode: 'live' | 'simulated'
@@ -145,6 +153,7 @@ export class OrbitCore {
   /** New releases of Orbit itself, read with the person's gh login. */
   readonly updates: Updates
   /** Installed skills, subagents and MCP servers; empty until the first scan. */
+  private readonly designContexts = new Map<string, string>()
   private catalogItems: CatalogItem[] = []
   private catalogScannedAt: number | null = null
   private scanning: Promise<void> | null = null
@@ -153,13 +162,15 @@ export class OrbitCore {
   /** Files Claude agents edited (real path → who, in order), from their PostToolUse hooks. */
   private readonly touched = new Map<string, Array<{ paneId: number; missionId: string }>>()
 
-  constructor({ dataDir, shell, broadcast, agentCommand, run, browser, measurements, benchmarkEagerContext }: CoreOptions) {
+  constructor({ dataDir, shell, broadcast, agentCommand, run, browser, measurements, benchmarkEagerContext, translate }: CoreOptions) {
     this.harnessMode = agentCommand ? 'simulated' : 'live'
     this.measurements = measurements
     this.benchmarkEagerContext = benchmarkEagerContext === true
     this.broadcast = broadcast
     this.run = run ?? loginShellRunner(shell)
     this.dataDir = dataDir
+    this.inputJournal = new InputJournal(dataDir)
+    this.translate = translate ?? translateCodex
     this.attachments = new Attachments(dataDir)
     this.contexts = new ContextLibrary(join(dataDir, 'context'))
     this.skillSessions = new SkillSessions(join(dataDir, 'skill-sessions'))
@@ -390,7 +401,7 @@ export class OrbitCore {
     // Cards from a template are on the board before the lead looks at it.
     for (const card of templateCards(message.cards)) this.addCard(mission.id, 'modelo', { title: card })
     // Agentic and squad leads start working on the objective right away.
-    const task = mission.mode !== 'livre' && mission.objective ? objectiveTask(mission) : null
+    const task = mission.mode !== 'livre' && mission.objective ? `${objectiveTask(mission)}\n\n${RESPONSE_LANGUAGE}` : null
     const assessment = assessDifficulty(mission.title, mission.objective)
     const automatic = message.adaptiveLead === true && mission.mode === 'agentica'
     const lead = automatic ? { ...message.lead, ...this.store.routing().lead, accountId: null } : message.lead
@@ -444,6 +455,8 @@ export class OrbitCore {
       when,
       enabled,
       skipIfRunning: input.skipIfRunning !== false,
+      translationAccountId: input.translationAccountId || undefined,
+      allowOriginal: input.allowOriginal === true,
       nextRunAt: enabled ? nextRun(when, now) : null,
       lastRunAt: existing?.lastRunAt ?? null,
       lastMissionId: existing?.lastMissionId ?? null,
@@ -453,9 +466,21 @@ export class OrbitCore {
   }
 
   /** Starts a schedule's mission from its template; returns what happened. */
-  private runSchedule(schedule: Schedule, now: number, manual: boolean): Schedule {
+  private readonly scheduleInFlight = new Map<string, Promise<Schedule>>()
+
+  private runSchedule(schedule: Schedule, now: number, manual: boolean): Promise<Schedule> {
+    const active = this.scheduleInFlight.get(schedule.id)
+    if (active) return active
+    const run = this.executeSchedule(schedule, now, manual)
+    this.scheduleInFlight.set(schedule.id, run)
+    void run.finally(() => this.scheduleInFlight.delete(schedule.id))
+    return run
+  }
+
+  private async executeSchedule(schedule: Schedule, now: number, manual: boolean): Promise<Schedule> {
     let result: string
     let missionId = schedule.lastMissionId
+    let uncertain = false
     const previous = schedule.lastMissionId ? this.missionPanes(schedule.lastMissionId).filter((p) => this.panes.isAlive(p.id) && p.status !== 'idle') : []
     const template = this.store.template(schedule.templateId)
     if (!template) result = 'Não rodou: o modelo foi apagado'
@@ -463,18 +488,33 @@ export class OrbitCore {
     else {
       try {
         const stamp = new Date(now).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-        const mission = this.startMission({
-          workspaceId: schedule.workspaceId,
-          title: `${template.title} · ${stamp}`.slice(0, 120),
-          objective: template.objective,
-          mode: template.mode,
-          squadId: template.squadId,
-          isolation: template.isolation,
-          lead: { cli: template.lead.cli, model: template.lead.model, effort: template.lead.effort, title: '' },
-          cards: template.cards,
-          budget: template.budget,
-        }, schedule)
-        missionId = mission.id
+        // The due timestamp is stable across restarts; uncertain runs never translate/spawn twice.
+        const scope = `schedule-${schedule.id}`
+        const requestId = manual ? `manual-${randomBytes(12).toString('hex')}` : `due-${schedule.nextRunAt ?? now}`
+        const record = await this.inputOnce(scope, requestId, inputFingerprint({ schedule, template }), template.objective, async record => {
+          record.english = template.lead.cli === 'shell' ? template.objective : await this.englishInput(template.objective, schedule.translationAccountId, schedule.allowOriginal)
+          if (record.english.length > 4000) throw new Error('O objetivo traduzido excedeu 4.000 caracteres. Reduza o objetivo do modelo; nenhum agente foi iniciado.')
+          if (this.stopping || JSON.stringify(this.store.schedule(schedule.id)) !== JSON.stringify(schedule)) throw new Error('O agendamento mudou ou o Orbit está encerrando; nenhuma missão foi iniciada.')
+          record.state = 'submitting'; this.inputJournal.save(scope, requestId, record)
+          const mission = this.startMission({
+            workspaceId: schedule.workspaceId,
+            title: `${template.title} · ${stamp}`.slice(0, 120),
+            objective: record.english,
+            mode: template.mode,
+            squadId: template.squadId,
+            isolation: template.isolation,
+            lead: { cli: template.lead.cli, model: template.lead.model, effort: template.lead.effort, title: '' },
+            cards: template.cards,
+            budget: template.budget,
+          }, schedule)
+          record.missionId = mission.id; record.state = 'acked'
+          this.inputJournal.save(scope, requestId, record)
+        })
+        if (record.state !== 'acked' || !record.missionId) {
+          uncertain = record.state !== 'failed'
+          throw new Error(record.error ?? 'Resultado incerto após interrupção. Confira as missões; agendamento pausado para evitar duplicação.')
+        }
+        missionId = record.missionId
         result = manual ? 'Missão iniciada (na mão)' : 'Missão iniciada'
       } catch (error) {
         result = `Não rodou: ${error instanceof Error ? error.message : String(error)}`
@@ -482,7 +522,8 @@ export class OrbitCore {
     }
     // A run Orbit missed while closed happens once; the schedule then moves on from now.
     const next = manual ? schedule.nextRunAt : schedule.when.kind === 'once' ? null : nextRun(schedule.when, now)
-    const updated: Schedule = { ...schedule, lastRunAt: now, lastMissionId: missionId, lastResult: result, nextRunAt: next, enabled: next === null && schedule.when.kind === 'once' ? false : schedule.enabled }
+    if (JSON.stringify(this.store.schedule(schedule.id)) !== JSON.stringify(schedule)) return this.store.schedule(schedule.id) ?? schedule
+    const updated: Schedule = { ...schedule, lastRunAt: now, lastMissionId: missionId, lastResult: uncertain ? `${result} Agendamento pausado; confira antes de reativar.` : result, nextRunAt: uncertain ? null : next, enabled: uncertain ? false : next === null && schedule.when.kind === 'once' ? false : schedule.enabled }
     this.store.saveSchedule(updated)
     this.broadcast({ type: 'schedule.updated', schedule: updated })
     return updated
@@ -500,7 +541,7 @@ export class OrbitCore {
 
   /** Runs every schedule that is due (tests pass their own clock). */
   tickSchedules(now = Date.now()): void {
-    for (const schedule of dueSchedules(this.store.schedules(), now)) this.runSchedule(schedule, now, false)
+    for (const schedule of dueSchedules(this.store.schedules(), now)) void this.runSchedule(schedule, now, false)
   }
 
   // ---- mission report ----
@@ -675,6 +716,7 @@ export class OrbitCore {
     if (options.conversations) for (const pane of panes) this.forgetConversation(pane)
     this.store.forgetMission(missionId, options.memory)
     this.attachments.remove(missionId)
+    this.inputJournal.remove(missionId)
     this.contexts.remove(missionId)
     if (options.memory) this.broadcast({ type: 'memory', workspaceId: mission.workspaceId, entries: this.store.memory(mission.workspaceId) })
     if (!quiet) this.broadcast({ type: 'snapshot', snapshot: this.store.snapshot() })
@@ -1067,6 +1109,27 @@ export class OrbitCore {
     return true
   }
 
+  /** Explicit free promotional reset only; no purchase/plan/credential operation is exposed. */
+  private async resetAccount(message: Extract<ClientMessage, { type: 'account.reset' }>, reply: (m: ServerMessage) => void): Promise<void> {
+    try {
+      const account = this.store.account(message.accountId)
+      if (!account || account.cli !== 'codex' || account.kind !== 'assinatura' || message.confirmed !== true) throw new Error('Reset direto disponível apenas para benefício gratuito de uma assinatura Codex confirmada')
+      if (!/^[a-f0-9-]{36}$/.test(message.requestId) || typeof message.creditId !== 'string' || message.creditId.length > 256) throw new Error('Pedido de reset inválido')
+      const known = this.store.limits().find(l => l.accountId === account.id)
+      const credit = known?.resetCredits?.credits?.find(c => c.id === message.creditId)
+      if (!credit || (credit.expiresAt !== null && credit.expiresAt <= Date.now())) throw new Error('Benefício não confirmado ou expirado; atualize os limites e confira o painel oficial')
+      const result = await this.run(`${this.accountFiles.envPrefix(account)}${shellQuote(process.execPath)} ${shellQuote(CODEX_LIMITS_SCRIPT)} --reset-credit ${shellQuote(message.requestId)} ${shellQuote(message.creditId)}`, 12000)
+      if (result.code !== 0) throw new Error('O provedor não confirmou o reset. Confira os limites; uma repetição usa o mesmo pedido.')
+      const { outcome } = JSON.parse(result.stdout)
+      const labels: Record<string, string> = { reset: 'Benefício gratuito aplicado pelo provedor.', nothingToReset: 'Os limites não precisavam de reset; benefício preservado.', noCredit: 'Nenhum benefício disponível nesta conta.', alreadyRedeemed: 'Este benefício já foi utilizado.' }
+      if (!labels[outcome]) throw new Error('Resposta de reset desconhecida; confira o painel oficial')
+      await this.readCodexLimits(account)
+      reply({ type: 'account.reset.result', accountId: account.id, requestId: message.requestId, outcome, message: labels[outcome]! })
+    } catch (error) {
+      reply({ type: 'account.reset.error', requestId: message.requestId, message: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
   private refreshAccountLimits(account: Account): Promise<void> {
     if (this.stopping || account.kind !== 'assinatura' || !['claude', 'codex'].includes(account.cli)) return Promise.resolve()
     return this.limitRefreshes.run(account.id, async () => {
@@ -1212,6 +1275,112 @@ export class OrbitCore {
     return this.panes.snapshot(paneId)
   }
 
+  private async englishInput(text: string, accountId?: string, allowOriginal = false): Promise<string> {
+    if (!this.store.settings().agentsInEnglish || allowOriginal || !text.trim()) return text
+    if (!accountId) throw new Error('Escolha explicitamente uma conta Codex para traduzir o prompt para inglês.')
+    const account = this.store.account(accountId)
+    if (!account || account.cli !== 'codex' || account.kind !== 'assinatura') throw new Error('O tradutor aceita somente uma conta de assinatura Codex escolhida explicitamente. Nenhum outro provedor será usado.')
+    const home = this.accountFiles.configDir(account) ?? userConfigDir('codex')
+    return this.translate({ text, authFile: join(home, 'auth.json') })
+  }
+
+  /** A repeated request joins a live operation, or reads its durable receipt. Never reruns it. */
+  private async inputOnce(scope: string, requestId: string, fingerprint: string, original: string, work: (record: InputRecord) => Promise<void>): Promise<InputRecord> {
+    const key = `${scope}/${requestId}`
+    const prior = this.inputJournal.get(scope, requestId)
+    if (prior && prior.fingerprint !== fingerprint) throw new Error('Este pedido já foi usado com outros dados. Preserve o rascunho e confira o envio pendente.')
+    const running = this.inputInFlight.get(key)
+    if (running) { await running; return this.inputJournal.get(scope, requestId)! }
+    if (prior) return prior
+    const record: InputRecord = { fingerprint, original, state: 'translating' }
+    this.inputJournal.save(scope, requestId, record)
+    const promise = (async () => {
+      try { await work(record) }
+      catch (error) {
+        // Once PTY paste/spawn begins, the result can be uncertain. Never repeat it.
+        if (record.state !== 'submitting' && !(error instanceof UncertainTranslation)) record.state = 'failed'
+        record.error = error instanceof Error ? error.message : String(error)
+        this.inputJournal.save(scope, requestId, record)
+      }
+    })()
+    this.inputInFlight.set(key, promise)
+    try { await promise } finally { this.inputInFlight.delete(key) }
+    return record
+  }
+
+  private async submitInput(message: Extract<ClientMessage, { type: 'pane.submit' }>, reply: (message: ServerMessage) => void): Promise<void> {
+    let pending = false
+    try {
+      const pane = this.store.pane(message.paneId)
+      if (!pane) throw new Error('Agente inexistente')
+      if (!message.requestId) {
+        // Literal CLI choice buttons are terminal controls, never free-form user prompts.
+        if (pane.choices?.includes(message.text)) { this.activeMission(pane.missionId); this.panes.answered(pane.id); this.submitTo(pane.id, message.text); return }
+        throw new Error('Envie requestId estável para evitar duplicação e translationAccountId de uma conta Codex explícita; para enviar sem tradução, autorize allowOriginal: true.')
+      }
+      const record = await this.inputOnce(pane.missionId, message.requestId, inputFingerprint(message), message.text, async record => {
+        this.activeMission(pane.missionId)
+        if (!this.panes.isAlive(pane.id)) throw new Error(`#${pane.id} não está rodando`)
+        if (typeof message.text !== 'string' || message.text.length > 20_000) throw new Error('A mensagem pode ter até 20.000 caracteres')
+        const ids = message.attachments ?? []
+        if (!Array.isArray(ids) || ids.length > ATTACHMENT_LIMITS.files) throw new Error('Envie até 8 anexos por mensagem')
+        if (ids.length && pane.cli === 'shell') throw new Error('Anexos precisam de um agente de IA')
+        const files = [...new Set(ids)].map(id => this.attachments.get(pane.missionId, id))
+        if (files.reduce((n, f) => n + f.size, 0) > ATTACHMENT_LIMITS.totalBytes) throw new Error('Os anexos da mensagem podem somar até 8 MB')
+        if (!message.text.trim() && !files.length) throw new Error('Escreva uma mensagem ou adicione um anexo')
+        record.english = pane.cli === 'shell' ? message.text : await this.englishInput(message.text, message.translationAccountId, message.allowOriginal)
+        record.state = 'prepared'; this.inputJournal.save(pane.missionId, message.requestId!, record)
+        const text = record.english + (files.length ? `\n\nUser attachments (local files; inspect using your file/image tools):\n${files.map(f => JSON.stringify({ name: f.name, path: f.path, mime: f.mime })).join('\n')}` : '') + (pane.cli === 'shell' ? '' : `\n\n${RESPONSE_LANGUAGE}`)
+        record.state = 'submitting'; this.inputJournal.save(pane.missionId, message.requestId!, record)
+        this.panes.answered(pane.id)
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('ACK do terminal pendente. Confira o mesmo pedido; não reenvie o texto.')), 5000)
+          const queued = this.panes.submitWithReceipt(pane.id, text, () => {
+            clearTimeout(timer); record.state = 'acked'; record.error = undefined
+            this.inputJournal.save(pane.missionId, message.requestId!, record)
+            if (pane.executionEpoch) this.measurements?.wakeup(pane.executionEpoch)
+            resolve()
+          })
+          if (!queued) { clearTimeout(timer); reject(new Error('O terminal não confirmou o envio. Confira o pedido pendente.')) }
+          else if (pane.executionEpoch) this.measurements?.bytes(pane.executionEpoch, 'submittedBytes', text)
+        })
+      })
+      if (record.state !== 'acked') { pending = record.state !== 'failed'; throw new Error(record.error ?? 'Envio pendente após interrupção. Nenhuma chamada será repetida; confira o terminal.') }
+      reply({ type: 'pane.submitted', requestId: message.requestId, paneId: pane.id })
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      if (!message.requestId) { reply({ type: 'error', message: detail }); return }
+      reply({ type: 'pane.submit.error', requestId: message.requestId, pending, message: detail })
+    }
+  }
+
+  private async createInputMission(message: Extract<ClientMessage, { type: 'mission.create' }>, reply: (message: ServerMessage) => void): Promise<void> {
+    let pending = false
+    try {
+      if (!message.requestId) {
+        if (this.store.settings().agentsInEnglish && message.objective?.trim() && !message.allowOriginal) throw new Error('A missão precisa de requestId estável e translationAccountId de uma conta Codex explícita para traduzir o objetivo; para preservar o original, autorize allowOriginal: true.')
+        this.startMission(message); return
+      }
+      const scope = `new-${message.workspaceId}`
+      const record = await this.inputOnce(scope, message.requestId, inputFingerprint(message), message.objective, async record => {
+        record.english = await this.englishInput(message.objective, message.translationAccountId, message.allowOriginal)
+        if (record.english.length > 4000) throw new Error('O objetivo traduzido excedeu 4.000 caracteres. Reduza o objetivo; nenhum agente foi iniciado.')
+        record.state = 'submitting'; this.inputJournal.save(scope, message.requestId!, record)
+        const mission = this.startMission({ ...message, objective: record.english })
+        record.missionId = mission.id; record.state = 'acked'
+        this.inputJournal.save(mission.id, message.requestId!, record)
+        this.inputJournal.save(scope, message.requestId!, record)
+      })
+      if (record.state !== 'acked' || !record.missionId) { pending = record.state !== 'failed'; throw new Error(record.error ?? 'Criação pendente após interrupção; confira a lista de missões antes de qualquer nova abertura.') }
+      const mission = this.store.mission(record.missionId)
+      if (!mission) throw new Error('A missão deste pedido foi excluída; nenhum novo agente foi aberto.')
+      reply({ type: 'mission.created', requestId: message.requestId, mission })
+    } catch (error) {
+      if (!message.requestId) throw error
+      reply({ type: 'mission.create.error', requestId: message.requestId, pending, message: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
   handle(message: ClientMessage, reply: (message: ServerMessage) => void = this.broadcast): void | Promise<void> {
     switch (message.type) {
       case 'mission.progress': {
@@ -1266,8 +1435,7 @@ export class OrbitCore {
         return
       }
       case 'mission.create':
-        this.startMission(message)
-        return
+        return this.createInputMission(message, reply)
       case 'squad.save': {
         const squad = normalizeSquad(message.squad, this.store.customSquadIds())
         this.store.saveSquad(squad)
@@ -1297,6 +1465,8 @@ export class OrbitCore {
       case 'account.delete':
         void this.deleteAccount(message.accountId).catch((error) => this.fail(error))
         return
+      case 'account.reset':
+        return this.resetAccount(message, reply)
       case 'account.check':
         void this.checkAccounts()
         return
@@ -1373,9 +1543,32 @@ export class OrbitCore {
         if (mission) this.broadcast({ type: 'mission.updated', mission })
         return
       }
-      case 'pane.spawn':
-        this.spawn(message.request, { ...(message.request.cli !== 'shell' ? { explicitCli: message.request.cli } : {}) })
-        return
+      case 'pane.spawn': {
+        return (async () => {
+        try {
+          await this.prepareDesignContext(message.request)
+          const key = message.requestId
+          const fingerprint = createHash('sha256').update(JSON.stringify(message.request)).digest('hex')
+          if (key) {
+            if (typeof key !== 'string' || !key.trim() || key.length > 100) throw new Error('Identificador de abertura inválido')
+            const receipt = this.store.uiSpawn(key)
+            if (receipt) {
+              if (receipt.fingerprint !== fingerprint) throw new Error('Este pedido de abertura já foi usado com outros dados')
+              const pane = receipt.paneId === null ? undefined : this.store.pane(receipt.paneId)
+              if (!pane) throw new Error('Abertura anterior sem agente disponível; confira a missão antes de iniciar um novo pedido')
+              reply({ type: 'pane.spawned', requestId: key, pane }); return
+            }
+          }
+          if (message.expiresAt !== undefined && (!Number.isFinite(message.expiresAt) || Date.now() > message.expiresAt)) throw new Error('Pedido expirou antes da abertura; nenhum novo agente foi criado')
+          if (key) this.store.saveUiSpawn(key, { fingerprint, paneId: null })
+          const pane = this.spawn(message.request, { ...(message.request.cli !== 'shell' ? { explicitCli: message.request.cli } : {}) })
+          if (key) { this.store.saveUiSpawn(key, { fingerprint, paneId: pane.id }); reply({ type: 'pane.spawned', requestId: key, pane }) }
+        } catch (error) {
+          if (!message.requestId) throw error
+          reply({ type: 'pane.spawn.error', requestId: message.requestId, message: error instanceof Error ? error.message : String(error) })
+        }
+        })()
+      }
       case 'pane.attach':
         return // per-connection: handled by the server
       case 'pane.input':
@@ -1400,28 +1593,8 @@ export class OrbitCore {
         reply({ type: 'pane.conversation', paneId: pane.id, turns: this.conversationOf(pane).slice(-60).map((t) => ({ ...t, text: t.text.slice(0, 12_000) })) })
         return
       }
-      case 'pane.submit': {
-        try {
-          const pane = this.store.pane(message.paneId)
-          if (!pane || !this.panes.isAlive(pane.id)) throw new Error(`#${message.paneId} não está rodando`)
-          this.activeMission(pane.missionId)
-          if (typeof message.text !== 'string' || message.text.length > 20_000) throw new Error('A mensagem pode ter até 20.000 caracteres')
-          const ids = message.attachments ?? []
-          if (!Array.isArray(ids) || ids.length > ATTACHMENT_LIMITS.files) throw new Error('Envie até 8 anexos por mensagem')
-          if (ids.length && pane.cli === 'shell') throw new Error('Anexos precisam de um agente de IA')
-          const files = [...new Set(ids)].map((id) => this.attachments.get(pane.missionId, id))
-          if (files.reduce((n, f) => n + f.size, 0) > ATTACHMENT_LIMITS.totalBytes) throw new Error('Os anexos da mensagem podem somar até 8 MB')
-          if (!message.text.trim() && !files.length) throw new Error('Escreva uma mensagem ou adicione um anexo')
-          const text = message.text + (files.length ? `\n\nUser attachments (local files; inspect using your file/image tools):\n${files.map((f) => JSON.stringify({ name: f.name, path: f.path, mime: f.mime })).join('\n')}` : '')
-          this.panes.answered(pane.id)
-          if (!this.submitTo(pane.id, text)) throw new Error(`#${pane.id} não está rodando`)
-          if (message.requestId) reply({ type: 'pane.submitted', requestId: message.requestId, paneId: pane.id })
-        } catch (error) {
-          if (!message.requestId) throw error
-          reply({ type: 'pane.submit.error', requestId: message.requestId, message: error instanceof Error ? error.message : String(error) })
-        }
-        return
-      }
+      case 'pane.submit':
+        return this.submitInput(message, reply)
       case 'pane.resize':
         this.panes.resize(message.paneId, message.cols, message.rows)
         return
@@ -1488,8 +1661,7 @@ export class OrbitCore {
       case 'schedule.run': {
         const schedule = this.store.schedule(message.scheduleId)
         if (!schedule) throw new Error('Agendamento não encontrado')
-        this.runSchedule(schedule, Date.now(), true)
-        return
+        return this.runSchedule(schedule, Date.now(), true).then(() => {})
       }
       case 'template.save': {
         const template = this.normalizeTemplate(message.template)
@@ -1516,8 +1688,8 @@ export class OrbitCore {
         const pane = this.store.pane(message.paneId)
         const spec = pane && this.store.paneSpec(message.paneId)
         if (!pane || !spec) throw new Error(`#${message.paneId} foi aberto antes desta versão do Orbit; abra um novo`)
-        this.spawn({ ...spec, role: 'crew', title: `${pane.title} (cópia)`.slice(0, 120) }, { opened: (id) => `#${id} é uma cópia de #${pane.id}` })
-        return
+        const input = { ...spec, role: 'crew' as const, title: `${pane.title} (cópia)`.slice(0, 120) }
+        return this.prepareDesignContext(input).then(() => { this.spawn(input, { opened: (id) => `#${id} é uma cópia de #${pane.id}` }) })
       }
     }
   }
@@ -1747,6 +1919,7 @@ export class OrbitCore {
     const { accept: _, difficulty: __, retryReason: ___, activityId: ____, ...request } = input
     // A model the lead named stays; otherwise the activity's difficulty picks the tier.
     const tier = difficulty !== 'normal' && !input.model && !input.squadRoleId ? { difficulty, by: difficultyBy } : undefined
+    await this.prepareDesignContext({ ...request, missionId: caller.missionId, role: 'crew', cli: input.cli ?? 'claude' })
     // Classification may have awaited a model; enforce the sub-helper cap at launch too.
     if (caller.role === 'crew' && this.childSlots(caller) === 0) throw new Error('Não há vaga para outro sub-ajudante; aguarde ou feche um que entregou')
     this.assertCurrent(caller)
@@ -2208,6 +2381,7 @@ export class OrbitCore {
     const pane = this.store.pane(paneId)
     if (!pane) return
     if (report.limits) this.broadcast({ type: 'limits', limits: this.store.setLimits({ ...report.limits, accountId: pane.accountId ?? report.limits.cli }) })
+    if (identity?.models.length) this.panes.setReportedModels(paneId, identity.models)
     if (!report.usage && report.contextPercent === null) return
     let usage = report.usage
     if (usage && pane.cli !== 'shell') {
@@ -2389,6 +2563,12 @@ export class OrbitCore {
 
   // ---- internals ----
 
+  private async prepareDesignContext(input: Pick<SpawnPaneRequest, 'missionId' | 'cli' | 'title' | 'task' | 'role'>): Promise<void> {
+    if (input.cli === 'shell' || input.role !== 'crew' || !designWork(`${input.title} ${input.task ?? ''}`)) return
+    const workspace = this.missionWorkspace(input.missionId)
+    if (workspace) this.designContexts.set(JSON.stringify(workspace.folders), await projectDesignContext(workspace.folders))
+  }
+
   /** `resume` continues that conversation of the CLI; `opened` replaces the flow's "Agente #N aberto". */
   private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; attemptId?: string; explicitCli?: AgentCli; tier?: { difficulty: Difficulty; by: string }; keep?: AgentSeat; requireReadOnlySandbox?: boolean; decisionSource?: DecisionReceipt['source']; harnessTask?: { difficulty: Difficulty; retry: boolean } } = {}): Pane {
     if (this.stopping) throw new Error('Orbit está encerrando; novas execuções não são admitidas')
@@ -2444,7 +2624,7 @@ export class OrbitCore {
     const catalogRevision = this.catalog ? createHash('sha256').update(JSON.stringify(this.catalog)).digest('hex') : null
     const harnessReadOnly = !!(input.readOnly || requiresSandbox || taskType?.readOnly || squadRole?.readOnly)
     const eligibleAccounts = harnessAccounts(this.store.accounts(), [...this.accountStatus.values()], this.store.limits())
-    const harnessExplicit = !!(options.explicitCli || input.model || input.effort || input.accountId || input.squadRoleId || options.keep)
+    const harnessExplicit = !!(options.explicitCli || input.model || input.effort || input.accountId || input.squadRoleId || taskType?.automatic === false || (taskType && taskType.automatic !== true) || options.keep)
     const classified = options.harnessTask && !taskType ? classifyTask(`${input.title}\n${input.task ?? ''}`, routing.taskTypes, input.title ?? '') : null
     const harness = options.harnessTask ? selectHarnessCandidate(
       composeHarness({
@@ -2453,12 +2633,22 @@ export class OrbitCore {
         constraintRevision: createHash('sha256').update(JSON.stringify({ routing, squadRole, allowed: mission.allowedClis, instructions: workspace.instructions, settings: this.store.settings() })).digest('hex'),
       }),
       harnessCandidates(this.catalog, [...this.clis.values()], eligibleAccounts, mission.allowedClis, requiresSandbox),
-      harnessExplicit ? [] : this.store.harnessEvidence(),
+      harnessExplicit || taskType?.alt?.pinned ? [] : this.store.harnessEvidence(),
       { explicit: harnessExplicit },
     ) : undefined
-    const measured = harness?.selected
+    const work = request.role === 'crew' && !['operacao', 'documentacao'].includes(taskType?.id ?? '') ? designWork(`${taskType?.id ?? ''} ${input.title} ${input.task ?? ''}`) : null
+    const automatic = !harnessExplicit && (!harness?.selected || work) && request.role === 'crew' && (taskType || work) && this.catalog
+      ? automaticTaskSeat({ catalog: this.catalog, preferred: { cli: request.cli as AgentCliForRole, model: request.model, effort: request.effort ?? null }, alternate: taskType?.alt, difficulty: options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal', design: work, allowed: mission.allowedClis.filter(cli => !requiresSandbox || adapterCapabilities(cli).supports.readOnlySandbox), rooms: cli => this.rooms(cli, this.liveByAccount()).filter(r => this.accountStatus.get(r.account.id)?.loggedIn === true && !this.accountStatus.get(r.account.id)?.busy) }) : null
+    // Once a catalog is available, autonomous staffing needs a valid quota and compatible model.
+    if (!harnessExplicit && request.role === 'crew' && (taskType || work) && !automatic && (!harness?.selected || work)) throw new Error('Roteamento automático: nenhuma conta com quota válida e modelo compatível. Atualize os limites em Contas ou escolha uma conta explicitamente.')
+    const measured = work ? automatic : harness?.selected ?? automatic
     if (measured) Object.assign(request, { cli: measured.cli, model: measured.model, effort: measured.effort })
     if (harness) receipt.push(...harness.reasons)
+    if (automatic) {
+      const seat = taskType?.alt?.cli === automatic.cli ? taskType.alt : taskType
+      receipt.push(`roteamento por quota válida e compatibilidade${work ? ` · política ${work}` : ''}: ${automatic.cli} · ${automatic.model} · ${automatic.effort}`)
+      receipt.push(`motivo do assento: ${seat && 'pinned' in seat && seat.pinned ? `equivalente fixado pelo usuário${seat.model === null ? ' · padrão da CLI resolvido pelo catálogo/configuração' : ''}` : work ? `política ${work}` : `dificuldade ${options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal'} · base ${seat?.model ?? 'herdada'}; tarefa simples usa patamar econômico, difícil até alto`}`)
+    }
 
     // The maestro's seat: the CLI the mission allows and the account with the most room, moving to
     // the other CLI when every account of the first one is used up.
@@ -2488,16 +2678,16 @@ export class OrbitCore {
       }
       const live = this.liveByAccount()
       // Fair share: when the table's CLI is much busier than the equivalent's, the equivalent takes it.
-      if (!measured && alt && !options.explicitCli && !input.model && request.role !== 'lead' && request.cli !== alt.cli && taskType && request.cli === taskType.cli) {
+      if (!measured && alt && !harnessExplicit && request.role !== 'lead' && request.cli !== alt.cli && taskType && request.cli === taskType.cli) {
         const here = cliLoad(this.rooms(request.cli, live))
         const there = cliLoad(this.rooms(alt.cli, live))
-        if (there !== null && here !== null && here - there >= BALANCE_GAP) {
-          move(alt.cli, `${CLI_LABEL[request.cli]} com carga ${Math.round(here)}, ${CLI_LABEL[alt.cli]} com ${Math.round(there)} (uso da conta + ${LIVE_WEIGHT} por agente rodando): foi para o equivalente da tabela`)
+        if (there !== null && (here === null || here - there >= BALANCE_GAP)) {
+          move(alt.cli, `${CLI_LABEL[request.cli]} com carga ${Math.round(here ?? 100)}, ${CLI_LABEL[alt.cli]} com ${Math.round(there)} (uso da conta + ${LIVE_WEIGHT} por agente rodando): foi para o equivalente da tabela`)
         }
       }
-      let choice = chooseAccount(this.rooms(request.cli as AgentCliForRole, live).filter(room => !measured || eligibleAccounts.some(a => a.id === room.account.id)))
+      let choice = chooseAccount(this.rooms(request.cli as AgentCliForRole, live).filter(room => !measured || (room.used !== null && !room.full && this.accountStatus.get(room.account.id)?.loggedIn === true && !this.accountStatus.get(room.account.id)?.busy)))
       // Used up: the next CLI the mission allows that is installed and has room.
-      if ((choice.exhausted || choice.account?.kind === 'api') && !measured && !options.explicitCli && !input.model && request.role !== 'lead') {
+      if ((choice.exhausted || choice.account?.kind === 'api') && !measured && !harnessExplicit && request.role !== 'lead') {
         // The table's equivalent first, then any other CLI the mission allows.
         const others = allowedHere.filter((c) => c !== request.cli && (!requiresSandbox || adapterCapabilities(c).supports.readOnlySandbox)).sort((a, b) => Number(b === alt?.cli) - Number(a === alt?.cli))
         // Exhaust subscriptions across allowed providers before using a paid API account.
@@ -2525,7 +2715,7 @@ export class OrbitCore {
     }
     // The difficulty moves the seat within the chosen CLI: a cheaper model or a stronger one.
     if (chosen?.kind === 'api' && chosen.model && !input.model) request.model = chosen.model
-    if (!measured && options.tier && request.cli !== 'shell' && !(chosen?.kind === 'api' && chosen.model)) {
+    if (!measured && (!harnessExplicit || request.role === 'lead') && options.tier && request.cli !== 'shell' && !(chosen?.kind === 'api' && chosen.model)) {
       const seat = seatForDifficulty(request.cli, request.model ?? null, request.effort ?? null, options.tier.difficulty, (model) => effortsFor(this.catalog, request.cli, model), this.catalog?.[request.cli])
       if (seat.changed) {
         request.model = seat.model
@@ -2543,6 +2733,12 @@ export class OrbitCore {
       throw new Error(`Esforço "${EFFORT_LABEL[request.effort]}" não vale para ${request.model ?? `o modelo padrão do ${CLI_LABEL[request.cli]}`}; use ${allowed.map((e) => EFFORT_LABEL[e]).join(', ')}`)
     }
 
+    if (work && request.cli !== 'shell') {
+      const validModel = work === 'motion' ? request.cli === 'claude' && request.model === 'claude-opus-5-5' : request.cli === 'claude' && request.model === 'claude-opus-5-5' || request.cli === 'codex' && request.model === 'gpt-6.1-sol'
+      const validEffort = work === 'motion' ? request.effort === 'high' : request.effort === 'medium' || request.effort === 'high'
+      if (!validModel || !validEffort) throw new Error(`A escolha explícita conflita com a política ${work}: ${work === 'motion' ? 'Opus 5.5 alto' : 'Opus 5.5 ou GPT 6.1 Sol médio/alto'}. Ajuste a escolha; ela não foi substituída.`)
+      if (!this.catalog?.[request.cli].models.some(m => m.id === request.model)) throw new Error('Modelo de design indisponível no catálogo local; atualize o catálogo')
+    }
     if (account) this.accountFiles.prepare(account)
 
     const roleSkills = squadRole ?? taskType
@@ -2573,8 +2769,15 @@ export class OrbitCore {
     const english = this.store.settings().agentsInEnglish
     const toolProfile = request.cli === 'claude' || request.cli === 'codex' ? this.store.settings().agentToolProfile ?? 'orbit' : 'inherit'
     const lead = this.missionPanes(mission.id).find((p) => p.role === 'lead')
+    const skillItems = request.cli === 'shell' ? [] : missionSkills([...bundledCatalog(), ...this.catalogItems.filter(i => i.resource?.origin !== 'bundled')], request.cli, workspace.folders, new Set(this.store.disabledCatalog()), policy)
+    const explicitSkills = roleSkills?.skills ?? []
+    const designSelection = request.role === 'crew' && request.cli !== 'shell' && designWork(`${input.title} ${input.task ?? ''}`) ? selectDesignSkills(skillItems, `${input.title} ${input.task ?? ''}`, this.designContexts.get(JSON.stringify(workspace.folders)) ?? '', explicitSkills, !!roleSkills?.onlySkills) : { items: [], missing: [] }
+    const selectedSkills = [...skillItems.filter(i => explicitSkills.some(n => i.name === n || i.name.endsWith(`:${n}`))), ...designSelection.items]
+    const skillDelivery = designSkillDelivery(selectedSkills, explicitSkills, designSelection.missing)
+    if (selectedSkills.length || designSelection.missing.length) receipt.push(`skills de design: ${skillDelivery.delivered.map(i => i.name).join(', ') || designSelection.missing.join('; ')}`)
     const roleContext = this.contextPack(mission.id, [
       { id: 'permissions', text: (isReadOnly ? 'This execution is read-only. Do not modify project files.\n\n' : '') + (toolProfile === 'orbit' ? 'External MCP profile: only Orbit coordination is loaded. Native file/terminal tools, project instructions, skills and permission rules still apply. If the task needs an external integration, report the missing capability and ask for the full tool profile on reopen. Do not install or reconfigure integrations to bypass this profile.\n\n' : '') + commandToolsNote(request.cli) + workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy), required: true },
+      { id: 'design-skills', text: skillDelivery.text, required: true },
       { id: 'required-project-memory', text: request.role === 'lead' ? projectMemoryNote(this.projectMemory(mission.workspaceId, Infinity, 'required')) : '', required: true },
       { id: 'project-memory', text: request.role === 'lead' ? projectMemoryNote(this.projectMemory(mission.workspaceId, Infinity, 'optional')) : '', maxBytes: harness?.strategy.optionalContextBytes ?? 2000 },
       { id: 'execution-strategy', text: harness ? harnessNote(harness) : '', required: true },
@@ -2613,9 +2816,10 @@ export class OrbitCore {
     const suggested = request.role === 'lead' ? 'orbit-pilot' : taskType?.id === 'revisao' ? 'orbit-review' : taskType?.readOnly ? 'orbit-research' : taskType?.id === 'operacao' ? 'orbit-verify' : 'orbit-build'
     try {
       this.store.startExecution(id, executionEpoch, executionPolicy)
-      this.skillSessions.start(id, executionEpoch, request.cli === 'shell' ? [] : [...(roleSkills?.skills ?? []), ...(!policy?.only || policy.only.includes(suggested) ? [suggested] : [])])
+      this.skillSessions.start(id, executionEpoch, request.cli === 'shell' ? [] : [...(roleSkills?.skills ?? []), ...designSelection.items.map(i => i.name), ...(!policy?.only || policy.only.includes(suggested) ? [suggested] : [])])
+      for (const item of skillDelivery.delivered) this.skillSessions.loaded(id, executionEpoch, item.id, item.name, item.resource!.sha256)
       const decision = decisionReceipt({
-        source: measured ? 'benchmark' : fallbackUsed ? 'fallback' : options.decisionSource ?? (options.explicitCli || input.model || input.effort ? 'explicit' : 'rule'),
+        source: harness?.selected && !automatic ? 'benchmark' : fallbackUsed ? 'fallback' : options.decisionSource ?? (options.explicitCli || input.model || input.effort ? 'explicit' : 'rule'),
         requested: { cli: options.explicitCli ?? null, model: input.model ?? null, effort: input.effort ?? null },
         effective: { cli: request.cli, model: request.model, effort: request.effort ?? null, accountId: account?.id ?? null },
         reasons: [...receipt],
@@ -2699,6 +2903,7 @@ export class OrbitCore {
       const git = this.store.mission(pane.missionId)?.git
       const worktree = git && pane.branch ? { path: this.worktreeOf(pane, git), branch: pane.branch } : undefined
       const accept = this.acceptance.get(paneId)
+      await this.prepareDesignContext({ ...spec, title: pane.title, ...(message ? { task: message } : {}) })
       this.store.revokeExecution(paneId)
       this.panes.kill(paneId)
       await this.panes.waitForExit(paneId)

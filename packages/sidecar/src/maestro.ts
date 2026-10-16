@@ -72,7 +72,8 @@ export function classifyTask(text: string, types: TaskType[], title = ''): Class
 /** Conservative local policy. Risk wins over a cheap operation; no model call for obvious work. */
 export function assessDifficulty(title: string, task: string): { difficulty: Difficulty; why: string } {
   const text = `${title}\n${task}`.slice(0, 20_200)
-  const risk = /architect|arquitet|reestrutur|cross[- ]cutting|v[aá]rios m[oó]dulos|multiple modules|race condition|concurren|concorr|intermittent|intermitente|unknown cause|causa desconhecida|seguran[cç]a|security|migra.{0,30}(banco|database)|distributed|distribu[ií]d/i
+  // A bare word like "security" or "distributed" in a long objective is not evidence of a hard task.
+  const risk = /architect|arquitet|reestrutur|cross[- ]cutting|v[aá]rios m[oó]dulos|multiple modules|race condition|concurren|concorr|intermittent|intermitente|unknown cause|causa desconhecida|vulnerab|falha de seguran|security (fix|audit|review|hole|flaw)|auditoria de seguran|migra.{0,30}(banco|database)|distributed (system|transaction|lock)|sistema distribu[ií]d/i
   if (risk.test(text)) return { difficulty: 'dificil', why: 'escopo amplo, risco ou diagnóstico complexo' }
   const operation = /\b(run|execute|executar|rodar|inicie|iniciar|start|install|instalar|verificar|check)\b.{0,80}\b(build|compil|npm|pnpm|yarn|test|testes|projeto|project|servidor|server|depend)/i
   const small = /\b(typo|ortografia|renomear|rename|small|pequeno|simples|simple)\b/i
@@ -97,10 +98,10 @@ export function accountRooms(cli: AgentCliForRole, accounts: Account[], statuses
   return accounts
     .filter((a) => a.cli === cli && a.auto && (a.kind === 'api' ? a.keyHint !== null : statuses.find((s) => s.accountId === a.id)?.loggedIn !== false))
     .map((account) => {
-      const l = limits.find((x) => x.accountId === account.id)
+      const l = limits.find((x) => x.accountId === account.id && x.cli === account.cli)
       const windows = l ? [l.fiveHour, l.weekly].filter((w): w is NonNullable<typeof w> => Boolean(w && Number.isFinite(w.usedPercent) && w.usedPercent >= 0 && w.usedPercent <= 100 && Number.isFinite(w.resetsAt))) : []
-      const fresh = !!l && l.source !== 'session' && !l.refreshError && l.updatedAt <= now && now - l.updatedAt <= 90000
-      const used = fresh && windows.length && windows.every(w => w.resetsAt > now) ? Math.max(...windows.map(w => w.usedPercent)) : null
+      const fresh = !!l && l.source === 'provider' && !l.refreshError && l.updatedAt <= now && now - l.updatedAt <= 90000
+      const used = fresh && [l?.fiveHour, l?.weekly].filter(Boolean).length === windows.length && windows.length && windows.every(w => w.resetsAt > now) ? Math.max(...windows.map(w => w.usedPercent)) : null
       // A failed refresh or elapsed timestamp is not evidence that a saturated subscription recovered.
       const blocked = windows.filter(w => w.usedPercent >= ACCOUNT_FULL_PERCENT)
       const full = account.kind === 'assinatura' && blocked.length > 0
@@ -127,16 +128,17 @@ export function seatForDifficulty(cli: AgentCliForRole, model: string | null, ef
   const candidates = catalog?.models ?? []
   const family = difficulty === 'simples' ? /luna|mini|haiku|flash|fast and affordable|lightweight|cost.efficient/i : /astra|opus|frontier|most demanding/i
   const candidate = !ladder ? candidates.find((m) => family.test(`${m.id} ${m.description}`)) : undefined
-  const nextModel = candidate?.id ?? (ladder ? (difficulty === 'simples' ? ladder.cheap : ladder.strong) : model)
+  const proposed = candidate?.id ?? (ladder ? (difficulty === 'simples' ? ladder.cheap : ladder.strong) : model)
+  const nextModel = catalog && proposed && !candidates.some(m => m.id === proposed) ? model : proposed
   const levels = effortsOf(nextModel)
-  const at = effort ? levels.indexOf(effort) : -1
   let nextEffort: Effort | null = effort
   if (levels.length) {
     if (difficulty === 'simples') nextEffort = levels[0]!
     else {
+      // Hard work reaches "high" and stops there: the gate never raises to xhigh/max by itself (a higher level already set stays).
       const high = levels.indexOf('high')
-      const floor = high >= 0 ? high : levels.length - 1
-      nextEffort = levels[Math.min(levels.length - 1, Math.max(floor, at >= 0 ? at + 1 : 0))]!
+      const ceiling = high >= 0 ? high : levels.length - 1
+      nextEffort = effort && levels.indexOf(effort) > ceiling ? effort : levels[ceiling]!
     }
   }
   if (nextEffort && !levels.includes(nextEffort)) nextEffort = null

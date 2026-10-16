@@ -5,7 +5,7 @@ import { BUILTIN_ACCOUNTS } from '../src/accounts.ts'
 import type { AccountLimits, AccountStatus, Effort } from '@orbit/protocol'
 const now = Date.now(), account = BUILTIN_ACCOUNTS.find(a => a.cli === 'codex')!
 const status: AccountStatus = { accountId: account.id, loggedIn: true, checkedAt: now, busy: null, email: null, method: 'test', plan: null, loginPaneId: null, message: null }
-const limits = (extra: Partial<AccountLimits> = {}): AccountLimits => ({ accountId: account.id, cli: 'codex', fiveHour: { usedPercent: 10, resetsAt: now + 10000, windowMinutes: 300 }, weekly: null, updatedAt: now, plan: null, ...extra })
+const limits = (extra: Partial<AccountLimits> = {}): AccountLimits => ({ accountId: account.id, cli: 'codex', source: 'provider', fiveHour: { usedPercent: 10, resetsAt: now + 10000, windowMinutes: 300 }, weekly: null, updatedAt: now, plan: null, ...extra })
 const rooms = (l: AccountLimits[]) => accountRooms('codex', [account], [status], l, new Map(), now)
 test('expired and stale quota never becomes an observed zero, nor clears saturated capacity', () => {
   for (const limit of [limits({ fiveHour: null }), limits({ updatedAt: now - 100000 }), limits({ updatedAt: now + 10000 }), limits({ refreshError: 'offline' }), limits({ fiveHour: { usedPercent: 10, resetsAt: now - 1, windowMinutes: 300 } })]) {

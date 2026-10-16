@@ -32,6 +32,7 @@ interface LivePane {
   queue: Array<{ text: string; accepted?: () => void }>
   submitTimer: NodeJS.Timeout | null
   closing: boolean
+  terminationTimers: NodeJS.Timeout[]
   lastOutputAt: number | null
 }
 
@@ -116,7 +117,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     const serializer = new serialize.SerializeAddon()
     term.loadAddon(serializer)
     const screen: Screen = { term, serializer }
-    const live: LivePane = { pty: proc, idleTimer: null, hookDriven, queue: [], submitTimer: null, closing: false, lastOutputAt: null }
+    const live: LivePane = { pty: proc, idleTimer: null, hookDriven, queue: [], submitTimer: null, closing: false, terminationTimers: [], lastOutputAt: null }
     this.live.set(id, live)
     this.screens.set(id, screen)
     this.panes.set(id, pane)
@@ -140,6 +141,8 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       if (!live.hookDriven) this.markActive(id, live)
     })
     proc.onExit(({ exitCode }) => {
+      for (const timer of live.terminationTimers) clearTimeout(timer)
+      live.terminationTimers = []
       if (live.idleTimer) clearTimeout(live.idleTimer)
       if (live.submitTimer) clearTimeout(live.submitTimer)
       // Even a forgotten/replaced pane must confirm its own epoch's termination.
@@ -215,7 +218,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       if (live.submitTimer) clearTimeout(live.submitTimer)
       live.submitTimer = null
       live.queue = []
-      try { live.pty.kill() } catch { /* already stopped */ }
+      this.kill(id)
     }
     this.emit('receiptError', error)
   }
@@ -239,6 +242,14 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     live.closing = true
     if (live.submitTimer) clearTimeout(live.submitTimer)
     live.queue = []
+    if (live.terminationTimers.length) return
+    // A shell can ignore HUP (including during startup). Keep the epoch leased until onExit,
+    // but do not leave shutdown/restart waiting forever on that single best-effort signal.
+    // Capture this process, not the pane id: forget/reopen must never target a replacement.
+    live.terminationTimers = [
+      setTimeout(() => live.pty.kill('SIGTERM'), 750),
+      setTimeout(() => live.pty.kill('SIGKILL'), 1750),
+    ]
     live.pty.kill()
   }
 
@@ -329,6 +340,15 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     const previous = pane.status
     Object.assign(pane, { status, attention })
     this.emit('status', { ...pane }, previous)
+  }
+
+  setReportedModels(id: number, models: string[]): void {
+    const pane = this.panes.get(id)
+    if (!pane) return
+    const clean = [...new Set(models.filter(m => /^[a-zA-Z0-9._:/-]{1,200}$/.test(m)))].slice(0, 32)
+    if (!clean.length || JSON.stringify(clean) === JSON.stringify(pane.reportedModels)) return
+    pane.reportedModels = clean
+    this.emit('status', { ...pane }, pane.status)
   }
 
   /** Session totals the CLI reported. */

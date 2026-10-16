@@ -20,7 +20,7 @@ function routingTable(routing: Routing): string {
   return routing.taskTypes
     .map((t) => {
       const who = [CLI_NAME[t.cli], t.model, t.effort && `${EFFORT_EN[t.effort]} effort`].filter(Boolean).join(', ')
-      const alt = t.alt ? `; or ${[CLI_NAME[t.alt.cli], t.alt.model, t.alt.effort && `${EFFORT_EN[t.alt.effort]} effort`].filter(Boolean).join(', ')} when that CLI is busier` : ''
+      const alt = t.alt ? `; or ${[CLI_NAME[t.alt.cli], t.alt.model, t.alt.effort && `${EFFORT_EN[t.alt.effort]} effort`].filter(Boolean).join(', ')}${t.alt.pinned ? ' (human-fixed)' : ''}` : ''
       return `- kind "${t.id}" (${t.name}) → ${who}${alt}`
     })
     .join('\n')
@@ -34,7 +34,7 @@ export function languageNote(english: boolean, role: 'lead' | 'crew'): string {
   if (!english) return 'Language: write everything in Brazilian Portuguese — tasks, messages to other agents, notes, handoffs and anything the user reads.'
   return role === 'lead'
     ? 'Language: the user writes in Brazilian Portuguese. Work in English: write tasks, messages to other agents and notes in English. Everything the user reads goes in Brazilian Portuguese: your replies in this terminal, ask_user questions and the mission_ready summary.'
-    : 'Language: work in English — your notes, messages to other agents and handoffs (summary, evidence, details) in English. If the user types to you directly, answer them in Brazilian Portuguese.'
+    : 'Language: work in English — your notes, messages to other agents and technical evidence in English. Handoff summaries and details read by the user must be in Brazilian Portuguese. If the user types to you directly, answer them in Brazilian Portuguese.'
 }
 
 /** Said to a helper that ends its turn still owing a handoff. */
@@ -51,6 +51,7 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
   if (mission.mode === 'livre') return [...base, 'Execute the requested work; open helpers only when requested or useful.'].join('\n\n')
   const orchestration = [
     'You orchestrate, you do not execute: delegate implementation and commands. You may inspect enough context to plan and review; never edit. Codex leads use read-only sandbox; Claude edit hooks are a policy guard, not an OS sandbox.',
+    'Codex helpers code under Codex leads.',
     'Split by independent scope, not agent count. One simple command needs one helper; overlapping files belong to one writer. Start independent work with agent_spawn_many (up to eight); start dependent work only after acceptance.',
     'For each agent_spawn, pass a self-contained task: context, exact paths, outcome, evidence, boundaries and accept criteria. Reuse a stable activityId across paraphrases; retries require retryReason explaining changed inputs or failed evidence. Check activity_status before retrying a stopped reservation.',
     'Reuse active helpers with agent_send and completed evidence with handoff_list. A required done result is a submission, not acceptance. Ask for missing evidence, then close finished writers before launching another in their physical checkout. Isolated worktrees allow parallel writers; extra folders still count toward overlap. Admission refusal is not a queued task.',
@@ -64,7 +65,7 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
     `Playbook:\n${squad.playbook}`,
   ].join('\n\n')
   return [...base, ...orchestration,
-    `Allowed CLIs: ${mission.allowedClis.map(c => CLI_NAME[c]).join(', ')}. For each activity pass kind = the table type. Orbit infers scope/risk, composes task stages, and selects model/effort only from qualified comparable live benchmarks; otherwise the table/capacity fallback applies. Never call fallback a benchmark winner. Pin agent, model, effort only for an explicit user choice; use model_catalog for valid capabilities.`,
+    `Allowed CLIs: ${mission.allowedClis.map(c => CLI_NAME[c]).join(', ')}. For each activity pass kind = the table type. Orbit uses qualified live benchmarks or the task table with valid account quotas; unknown quota is not capacity. Never call rules a benchmark winner. Pass difficulty "simples" for bounded mechanical work, "dificil" for broad/risky work (up to high); omit otherwise. Frontend: Opus 5.5 or GPT 6.1 Sol medium/high; motion: Opus 5.5 high. Pin agent/model/effort only for human choices; model_catalog lists valid capabilities.`,
     ...(routing?.taskTypes.length ? [`Routing (execution methods are supplied to helpers):\n${routingTable(routing)}`] : []),
   ].join('\n\n')
 }

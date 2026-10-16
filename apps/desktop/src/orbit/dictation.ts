@@ -36,7 +36,7 @@ const ERRORS: Record<string, string> = {
   'audio-capture': 'Nenhum microfone encontrado.',
   network: 'O reconhecimento de fala precisa de internet.',
   'no-speech': 'Não ouvi nada. Tente de novo mais perto do microfone.',
-  'language-not-supported': 'O idioma do sistema não é aceito pelo reconhecimento de fala.',
+  'language-not-supported': 'O português brasileiro não é aceito pelo reconhecimento de fala.',
 }
 
 /**
@@ -98,7 +98,7 @@ export function useDictation(onText: (text: string, final: boolean) => void) {
           })
           if (native.current.session !== session) { off(); return }
           native.current.off = off
-          await invoke('orbit_dictation_start', { session, locale: navigator.language || 'pt-BR' })
+          await invoke('orbit_dictation_start', { session, locale: 'pt-BR' })
         } catch (cause) {
           if (native.current.session !== session) return
           native.current.off?.(); native.current = { session: '', partial: '' }; setListening(false)
@@ -109,7 +109,7 @@ export function useDictation(onText: (text: string, final: boolean) => void) {
     }
     if (!Recognizer || recognition.current) return
     const r = new Recognizer()
-    r.lang = navigator.language || 'pt-BR'
+    r.lang = 'pt-BR'
     r.continuous = true
     r.interimResults = true
     r.onresult = (event) => {

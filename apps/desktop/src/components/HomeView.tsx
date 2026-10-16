@@ -4,12 +4,14 @@ import { useOrbit } from '../orbit/context.tsx'
 import { CLI_LABEL, MODE_LABEL, STATUS, tokensText } from '../orbit/labels.ts'
 import { pathText } from '../orbit/labels.ts'
 import { dayKey, relativeTime, startOfDay } from '../orbit/time.ts'
-import { FolderIcon, MissionGlyph, OrbitMark, PlusIcon, SearchIcon, SendIcon, TrashIcon } from './icons.tsx'
+import { ChevronIcon, FolderIcon, MissionGlyph, OrbitMark, PlusIcon, SearchIcon, SendIcon, TrashIcon } from './icons.tsx'
 import { DeleteMissionDialog } from './deletions.tsx'
+import { HomeAccounts } from './QuotaAccess.tsx'
 import { SchedulesSection } from './Schedules.tsx'
+import './HomeView.css'
 
 type Filter = 'todas' | 'vivas' | 'encerradas'
-const FILTERS: Array<[Filter, string]> = [['todas', 'Todas'], ['vivas', 'Em andamento'], ['encerradas', 'Encerradas']]
+const FILTERS: Array<[Filter, string]> = [['todas', 'Todas'], ['vivas', 'Em andamento'], ['encerradas', 'Sem agentes ativos']]
 const RECENT_LIMIT = 8
 const WEEKS = 53
 
@@ -22,16 +24,18 @@ interface MissionSummary {
 }
 
 /** Base: where you land. Recent missions across workspaces, your folders and how busy you have been. */
-export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFolder }: {
+export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFolder, onOpenAccounts }: {
   onOpenMission: (mission: Mission) => void
   onOpenWorkspace: (workspace: Workspace) => void
   onNewMission: (() => void) | null
   onAddFolder: () => void
+  onOpenAccounts: () => void
 }) {
-  const { missions, panes, events, workspaces, squads, usageDays } = useOrbit()
+  const { missions, panes, events, workspaces, squads, usageDays, connection, schedules } = useOrbit()
   const [deleting, setDeleting] = useState<Mission | null>(null)
   const [filter, setFilter] = useState<Filter>('todas')
   const [query, setQuery] = useState('')
+  const [showAll, setShowAll] = useState(false)
   const search = useRef<HTMLInputElement>(null)
 
   // ⌘K / Ctrl+K jumps to search while the Base is on screen.
@@ -67,8 +71,8 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
   const matches = (text: string | undefined) => !needle || (text ?? '').toLowerCase().includes(needle)
   const visible = summaries
     .filter((s) => filter === 'todas' || (filter === 'vivas' ? s.live > 0 : s.live === 0))
-    .filter((s) => matches(s.mission.title) || matches(s.mission.objective) || matches(s.workspace?.name) || s.crew.some((p) => matches(p.title)))
-  const shown = needle ? visible : visible.slice(0, RECENT_LIMIT)
+    .filter((s) => matches(s.mission.title) || matches(s.mission.objective) || matches(s.workspace?.name) || !!s.workspace?.folders.some(matches) || s.crew.some((p) => matches(p.title)))
+  const shown = needle || showAll ? visible : visible.slice(0, RECENT_LIMIT)
 
   const liveMissions = summaries.filter((s) => s.live > 0).length
   const liveAgents = panes.filter((p) => p.status !== 'exited').length
@@ -77,73 +81,81 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
   const sortedWorkspaces = [...workspaces].filter((w) => matches(w.name) || w.folders.some((f) => matches(f))).sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
   const busy = sortedWorkspaces.filter((w) => (liveByWorkspace.get(w.id) ?? 0) > 0)
   const quiet = sortedWorkspaces.filter((w) => (liveByWorkspace.get(w.id) ?? 0) === 0)
-  const resume = summaries.find(s => s.mission.status === 'active')
+  const latestId = summaries[0]?.mission.id
+  const loading = connection === 'connecting' && missions.length === 0
 
   return (
-    <div className="home">
+    <div className="home home--base">
       <div className="home__inner">
         <main className="home__main">
-          <div className="home__hero">
-            <div className="home__greeting">
-              <span className="eyebrow home__overline"><OrbitMark size={16} />Seu ambiente de desenvolvimento</span>
-              <h1>Seu trabalho,<br /><span>em órbita.</span></h1>
-              <p className="muted">
-                {workspaces.length ? 'Um lugar para orientar o líder, acompanhar os agentes e conferir cada entrega.' : 'Conecte seu projeto. Defina uma missão. Construa com sua equipe de agentes.'}
-              </p>
+          <header className="home__hero">
+            <div className="home__hero-top">
+              <span className="eyebrow home__overline"><OrbitMark size={16} />Base de operações</span>
+              <span className="home__engine" role="status"><span className={`dot ${connection === 'open' ? 'dot--live' : 'dot--warn'}`} />{connection === 'open' ? 'Motor conectado' : connection === 'connecting' ? 'Conectando…' : 'Motor desconectado'}</span>
             </div>
-            <div className="home__orbit" aria-hidden="true"><MissionGlyph size={120} /></div>
-          </div>
-          <div className="home__launchpad">
-            {resume ? <button type="button" className="home-resume" onClick={() => onOpenMission(resume.mission)}><MissionGlyph size={36} /><span><small>CONTINUAR DE ONDE PAROU</small><strong>{resume.mission.title}</strong><span>{resume.workspace?.name} · {relativeTime(resume.lastActivity)}</span></span><SendIcon size={20} /></button> : <div className="home-resume home-resume--empty"><MissionGlyph size={36} /><span><small>SUA PRÓXIMA ENTREGA</small><strong>{workspaces.length ? 'Tudo pronto para a primeira missão' : 'Comece pelo seu projeto'}</strong><span>{workspaces.length ? 'Dê um objetivo ao líder para começar.' : 'Um workspace reúne as pastas e o contexto da sua equipe.'}</span></span></div>}
-            <button type="button" className="home-create" onClick={onNewMission ?? onAddFolder}><PlusIcon size={20} /><strong>{onNewMission ? 'Nova missão' : 'Criar workspace'}</strong><span>{onNewMission ? 'Transforme uma ideia em trabalho.' : 'Escolha uma pasta do seu Mac.'}</span></button>
-          </div>
-          <div className="home__toolbar">
-            <p className="home__pulse"><span className={`dot ${liveAgents ? 'dot--live' : 'dot--idle'}`} />{liveMissions} {liveMissions === 1 ? 'missão em andamento' : 'missões em andamento'}<span>·</span>{liveAgents} {liveAgents === 1 ? 'agente ativo' : 'agentes ativos'}</p>
-            <div className="home__actions">
-              <label className="search">
-                <SearchIcon size={15} />
+            <div className="home__greeting">
+              <h1>O que vamos construir hoje?</h1>
+              <p>{workspaces.length ? 'Dê um novo objetivo à sua equipe ou retome de onde parou.' : 'Abra um projeto para reunir suas pastas, missões e agentes.'}</p>
+            </div>
+            <div className="home__start-actions">
+              <button type="button" className="btn btn--primary" onClick={onNewMission ?? undefined} disabled={!onNewMission} aria-describedby={!onNewMission ? 'home-project-first' : undefined}><PlusIcon size={18} />Nova missão<SendIcon size={16} /></button>
+              <button type="button" className="btn btn--ghost" onClick={onAddFolder}><FolderIcon size={18} />Abrir projeto</button>
+            </div>
+            {!onNewMission && <p id="home-project-first" className="home__start-hint">Comece abrindo uma pasta do seu Mac.</p>}
+          </header>
+          <section aria-labelledby="home-missions" className="home__section">
+            <div className="home__section-head home__mission-heading">
+              <div><h2 id="home-missions">{needle ? 'Resultado da busca' : 'Suas missões'}</h2><p className="home__pulse"><span className={`dot ${liveAgents ? 'dot--live' : 'dot--idle'}`} />{liveMissions} {liveMissions === 1 ? 'missão em andamento' : 'missões em andamento'}<span aria-hidden="true">·</span>{liveAgents} {liveAgents === 1 ? 'agente ativo' : 'agentes ativos'}</p></div>
+              <label className="search home__search">
+                <SearchIcon size={16} />
                 <span className="sr-only">Buscar missão, agente ou pasta</span>
                 <input ref={search} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar missão ou pasta" />
-                <kbd>⌘K</kbd>
+                <kbd aria-hidden="true">⌘K</kbd>
               </label>
             </div>
-          </div>
-
-          <section aria-labelledby="home-missions" className="home__section">
-            <div className="home__section-head">
-              <h2 id="home-missions" className="eyebrow">{needle ? 'Resultado da busca' : 'Missões recentes'}</h2>
+            <div className="home__filters">
               <div className="segmented" role="group" aria-label="Filtrar missões">
-                {FILTERS.map(([id, label]) => <button key={id} type="button" aria-pressed={filter === id} onClick={() => setFilter(id)}>{label}</button>)}
+                {FILTERS.map(([id, label]) => <button key={id} type="button" aria-pressed={filter === id} onClick={() => { setFilter(id); setShowAll(false) }}>{label}</button>)}
               </div>
+              <span className="home__result-count" role="status">{visible.length} {visible.length === 1 ? 'missão' : 'missões'}</span>
             </div>
             {shown.length === 0 ? (
-              <p className="muted home__empty">{needle ? 'Nada encontrado.' : missions.length === 0 ? 'Nenhuma missão ainda. Abra uma pasta e lance a primeira.' : 'Nenhuma missão neste filtro.'}</p>
+              <div className="home__empty" role="status">
+                <MissionGlyph size={32} />
+                <strong>{loading ? 'Carregando suas missões…' : needle ? 'Nenhuma missão encontrada' : missions.length === 0 ? 'Sua próxima entrega começa aqui' : 'Nenhuma missão neste filtro'}</strong>
+                <p>{loading ? 'Aguardando o motor do Orbit.' : needle ? 'Tente o nome do projeto, da missão ou de um agente.' : missions.length === 0 ? 'Abra um projeto e crie uma missão com o que você quer construir.' : 'Selecione outro filtro para ver as demais missões.'}</p>
+                {(needle || filter !== 'todas') && <button type="button" className="btn btn--ghost" onClick={() => { setQuery(''); setFilter('todas') }}>Limpar filtros</button>}
+              </div>
             ) : (
               <ul className="plain-list home__missions">
                 {shown.map((s) => (
                   <li key={s.mission.id}>
-                    <MissionCard summary={s} squadName={squads.find((q) => q.id === s.mission.squadId)?.name} onOpen={() => onOpenMission(s.mission)} onDelete={() => setDeleting(s.mission)} />
+                    <MissionCard latest={s.mission.id === latestId && !needle} summary={s} squadName={squads.find((q) => q.id === s.mission.squadId)?.name} onOpen={() => onOpenMission(s.mission)} onDelete={() => setDeleting(s.mission)} />
                   </li>
                 ))}
               </ul>
             )}
-            {!needle && visible.length > shown.length && <p className="muted home__more">Mais {visible.length - shown.length} na busca ou nas abas de workspace.</p>}
+            {!needle && visible.length > RECENT_LIMIT && <button type="button" className="btn btn--ghost home__more" onClick={() => setShowAll(!showAll)}>{showAll ? 'Mostrar menos' : `Ver todas as ${visible.length} missões`}<ChevronIcon size={14} /></button>}
           </section>
 
-          <SchedulesSection onOpenMission={onOpenMission} />
-
-          <details className="home__history"><summary>Consumo e histórico de atividade</summary><ActivityMap days={usageDays} /></details>
+          <div className="home__utilities">
+            <details className="home__schedules"><summary><ChevronIcon size={16} /><span>Missões agendadas</span><span className="home__utility-meta">{schedules.length} {schedules.length === 1 ? 'agendamento' : 'agendamentos'}</span></summary><SchedulesSection onOpenMission={onOpenMission} /></details>
+            <details className="home__history"><summary><ChevronIcon size={16} /><span>Consumo e histórico</span><span className="home__utility-meta">Últimos 12 meses</span></summary><ActivityMap days={usageDays} /></details>
+          </div>
         </main>
 
         <aside className="home__aside" aria-labelledby="home-workspaces">
+          <section className="home__projects" aria-labelledby="home-workspaces">
           <div className="home__section-head">
-            <h2 id="home-workspaces" className="eyebrow">Seus projetos</h2>
-            <button className="icon-btn" aria-label="Novo workspace" title="Novo workspace" onClick={onAddFolder}><PlusIcon size={18} /></button>
+            <h2 id="home-workspaces">Projetos <span className="home__count">{workspaces.length}</span></h2>
+            <button className="icon-btn" type="button" aria-label="Abrir outro projeto" title="Abrir outro projeto" onClick={onAddFolder}><PlusIcon size={18} /></button>
           </div>
           {sortedWorkspaces.length === 0 && <p className="muted">{needle ? 'Nenhuma pasta encontrada.' : 'Nenhuma pasta aberta ainda.'}</p>}
           {busy.length > 0 && <WorkspaceGroup label="Em atividade" workspaces={busy} live={liveByWorkspace} onOpen={onOpenWorkspace} />}
           {quiet.length > 0 && <WorkspaceGroup label={busy.length ? 'Recentes' : 'Por último uso'} workspaces={quiet} live={liveByWorkspace} onOpen={onOpenWorkspace} />}
-          <div className="home__guide"><FolderIcon size={20} /><strong>Seu projeto, com contexto.</strong><p>Workspaces reúnem pastas, instruções e memória. Cada missão tem seu próprio objetivo e equipe.</p><button type="button" className="btn btn--ghost" onClick={onAddFolder}>Adicionar projeto</button></div>
+          <p className="home__project-note"><FolderIcon size={16} />Pastas e contexto para suas missões.</p>
+          </section>
+          <HomeAccounts onOpenAccounts={onOpenAccounts} />
         </aside>
       </div>
       {deleting && <DeleteMissionDialog mission={deleting} onClose={() => setDeleting(null)} />}
@@ -151,30 +163,32 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
   )
 }
 
-function MissionCard({ summary, squadName, onOpen, onDelete }: { summary: MissionSummary; squadName: string | undefined; onOpen: () => void; onDelete: () => void }) {
+function MissionCard({ summary, latest, squadName, onOpen, onDelete }: { latest: boolean; summary: MissionSummary; squadName: string | undefined; onOpen: () => void; onDelete: () => void }) {
   const { mission, workspace, crew, live, lastActivity } = summary
   const lead = crew.find((p) => p.role === 'lead')
   const meta = [workspace?.name, lead && [CLI_LABEL[lead.cli], lead.model].filter(Boolean).join(' '), mission.usage.total > 0 && `${tokensText(mission.usage.total)} tokens`, relativeTime(lastActivity)].filter(Boolean).join(' · ')
   return (
-    <article className="home-card">
+    <article className={`home-card${latest ? ' home-card--latest' : ''}`}>
       <div className="home-card__main">
-        <span className={`dot ${live > 0 ? 'dot--live' : 'dot--off'}`} title={live > 0 ? 'em andamento' : 'sem agentes vivos'} />
+        <span className="home-card__glyph" aria-hidden="true"><MissionGlyph size={24} /></span>
         <div className="home-card__text">
           <div className="home-card__title">
-            <h3>{mission.title}</h3>
+            <h3><button type="button" onClick={onOpen}>{mission.title}</button></h3>
+            {latest && <span className="home-card__latest-label">Última atividade</span>}
             <span className={`badge badge--${mission.mode}`}>{MODE_LABEL[mission.mode]}{squadName ? ` · ${squadName}` : ''}</span>
             {mission.status === 'archived' && <span className="badge">Arquivada</span>}
             {mission.scheduleId && <span className="badge">Agendada</span>}
             {mission.readyAt && <span className="badge" title="Conclusão declarada pelo líder. Abra a missão para conferir a revisão do código atual.">Conclusão declarada</span>}
           </div>
           <p className="muted">{meta}</p>
-          {mission.objective && <p className="home-card__objective">{mission.objective}</p>}
+          {mission.objective && <p className="home-card__objective" title={mission.objective}>{mission.objective}</p>}
+          <span className="home-card__state"><span className={`dot ${live > 0 ? 'dot--live' : 'dot--off'}`} />{live > 0 ? `${live} ${live === 1 ? 'agente ativo' : 'agentes ativos'}` : 'Sem agentes ativos'}</span>
         </div>
-        <button className="btn btn--ghost btn--sm" onClick={onOpen} aria-label={`Abrir missão ${mission.title}`}>Abrir</button>
-        <button className="icon-btn icon-btn--danger" onClick={onDelete} aria-label={`Apagar missão ${mission.title}`} title="Apagar para sempre"><TrashIcon size={15} /></button>
+        <div className="home-card__actions"><button type="button" className="btn btn--ghost btn--sm" onClick={onOpen} aria-label={`Abrir missão ${mission.title}`}>{mission.status === 'active' && !mission.readyAt ? 'Retomar' : 'Abrir'}<SendIcon size={15} /></button>
+        <button type="button" className="icon-btn icon-btn--danger" onClick={onDelete} aria-label={`Apagar missão ${mission.title}`} title="Apagar para sempre"><TrashIcon size={15} /></button></div>
       </div>
       {crew.length > 0 && (
-        <details className="home-card__team"><summary>Equipe · {crew.length} {crew.length === 1 ? 'agente' : 'agentes'} · {live} em atividade</summary><ul className="plain-list home-card__crew">
+        <details className="home-card__team"><summary><ChevronIcon size={14} />Ver equipe · {crew.length} {crew.length === 1 ? 'agente' : 'agentes'}</summary><ul className="plain-list home-card__crew">
           {crew.map((p) => (
             <li key={p.id}>
               <span className={`dot dot--${STATUS[p.status].tone}`} />
@@ -198,7 +212,7 @@ function WorkspaceGroup({ label, workspaces, live, onOpen }: { label: string; wo
           return (
             <li key={w.id}>
               <button className="ws-item" onClick={() => onOpen(w)}>
-                <span className={`dot ${count > 0 ? 'dot--live' : 'dot--off'}`} />
+                <FolderIcon size={18} />
                 <span className="ws-item__text">
                   <span className="ws-item__name">{w.name}</span>
                   <span className="ws-item__path" title={w.folders.join('\n')}>{w.folders.length > 1 ? `${w.folders.length} pastas · ` : ''}{pathText(w.path)}</span>
@@ -215,7 +229,7 @@ function WorkspaceGroup({ label, workspaces, live, onOpen }: { label: string; wo
 
 /** Tokens the agents used per day over the last year, split by CLI in each day's tooltip. */
 function ActivityMap({ days }: { days: UsageDay[] }) {
-  const { cells, total, split, months } = useMemo(() => {
+  const { cells, total, split, months, dailyRows } = useMemo(() => {
     const perDay = new Map(days.map((d) => [d.day, d]))
     const today = startOfDay(Date.now())
     const first = new Date(today)
@@ -242,7 +256,7 @@ function ActivityMap({ days }: { days: UsageDay[] }) {
       cells.push({ key, level, label: count ? `${date}: ${tokensText(count)} tokens (${parts})` : `${date}: nenhum token` })
       if (day.getDate() === 1) months.push({ column: Math.floor(i / 7) + 1, label: day.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') })
     }
-    return { cells, total: split.reduce((n, x) => n + x.tokens, 0), split, months }
+    return { cells, total: split.reduce((n, x) => n + x.tokens, 0), split, months, dailyRows: counted.reverse().map(d => ({ day: d.day, total: sum(d), agents: AGENT_CLIS.filter(cli => d[cli]).map(cli => `${CLI_LABEL[cli]}: ${tokensText(d[cli])}`).join(' · ') })) }
   }, [days])
 
   return (
@@ -269,6 +283,18 @@ function ActivityMap({ days }: { days: UsageDay[] }) {
           <span>mais</span>
         </div>
       </div>
+      <details className="home__activity-data">
+        <summary>Ver dados por dia</summary>
+        {dailyRows.length ? (
+          <div className="home__table-scroll">
+            <table>
+              <caption className="sr-only">Consumo diário de tokens nos últimos 12 meses</caption>
+              <thead><tr><th scope="col">Dia</th><th scope="col">Tokens</th><th scope="col">Por agente</th></tr></thead>
+              <tbody>{dailyRows.map(row => <tr key={row.day}><th scope="row">{row.day}</th><td>{tokensText(row.total)}</td><td>{row.agents}</td></tr>)}</tbody>
+            </table>
+          </div>
+        ) : <p className="muted">Nenhum consumo registrado neste período.</p>}
+      </details>
     </section>
   )
 }

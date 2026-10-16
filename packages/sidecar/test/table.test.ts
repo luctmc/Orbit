@@ -10,7 +10,7 @@ import type { AgentLaunch } from '../src/command.ts'
 import { decisionPrompt, decisionSchema, parseDecision } from '../src/decider.ts'
 import { DEFAULT_ROUTING } from '../src/routing.ts'
 import { startServer } from '../src/server.ts'
-import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
+import { seedRoutingQuota, connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
 const textOf = (result: unknown) => ((result as { content: Array<{ text: string }> }).content[0]?.text ?? '')
 const types = DEFAULT_ROUTING.taskTypes
@@ -56,6 +56,7 @@ test('an unclear activity goes to the decider, and the lead proposes table chang
     ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Tabela', objective: '', mode: 'agentica', lead: { cli: 'shell', model: null, title: 'Líder' } })
     const { mission } = await ui.next('mission.updated')
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
+    await seedRoutingQuota(server.core)
     const screen = server.core as unknown as { panes: { screenText: (id: number, lines: number) => string } }
     const sees = async (text: string) => {
       for (let i = 0; i < 100; i++) {
@@ -103,7 +104,7 @@ test('an unclear activity goes to the decider, and the lead proposes table chang
     assert.match(await call('routing_propose', { kind: 'testes', model: 'claude-sonnet-5-5', reason: 'x' }), /Proposta enviada/)
     const proposal = (await ui.next('proposals', (m) => m.proposals.some((p) => p.status === 'pendente'))).proposals.at(-1)!
     assert.deepEqual([proposal.kind, proposal.change], ['testes', { model: 'claude-sonnet-5-5' }])
-    assert.equal(server.core.store.routing().taskTypes.find((t) => t.id === 'testes')!.model, null)
+    assert.equal(server.core.store.routing().taskTypes.find((t) => t.id === 'testes')!.model, 'gpt-6.1-sol')
     await ui.next('event.added', (m) => m.event.kind === 'proposal' && m.event.title === 'Proposta para a tabela: Testes')
 
     const better = await call('routing_propose', { kind: 'testes', agent: 'claude', effort: 'high', reason: 'O Codex errou o runner duas vezes nesta missão' })

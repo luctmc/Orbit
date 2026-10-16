@@ -89,7 +89,8 @@ class Collector {
   private readonly seen = new Set<string>()
 
   add(cli: AgentCliForRole, kind: CatalogKind, name: string, description: string, source: string, offInCli = false, resource?: CatalogItem['resource']): void {
-    const id = catalogId(cli, kind, name)
+    let id = catalogId(cli, kind, name)
+    if (resource?.projectRoot && this.seen.has(id)) id += `@${hash(resource.projectRoot).slice(0, 12)}`
     if (!name || this.seen.has(id)) return
     this.seen.add(id)
     this.items.push({ id, cli, kind, name, description: description.replace(/\s+/g, ' ').trim().slice(0, DESCRIPTION_MAX), source, offInCli, ...(resource ? { resource } : {}) })
@@ -210,6 +211,7 @@ export async function scanCatalog({ claudeDir, codexDir, folders, run, bundledDi
 
   // Codex: skills, and MCP servers as Codex itself lists them (with plugins and on/off state).
   await found.skills('codex', join(codexDir, 'skills'), 'pessoal')
+  await found.skills('codex', join(codexDir, '..', '.agents', 'skills'), 'pessoal')
   await found.skills('codex', join(codexDir, 'skills', '.system'), 'sistema')
   const listed = await run('codex mcp list --json', 30_000)
   let servers: Array<{ name?: string; enabled?: boolean; transport?: Record<string, unknown> }> | null = null
@@ -244,9 +246,10 @@ export function bundledCatalog(dir = BUNDLED_SKILLS): CatalogItem[] {
 /** Filter project resources to this mission, even when the UI catalog covers several workspaces. */
 export function missionSkills(items: CatalogItem[], cli: AgentCliForRole, folders: string[], disabled: ReadonlySet<string>, policy?: SkillPolicy): CatalogItem[] {
   const roots = folders.map(folder => { try { return realpathSync(folder) } catch { return folder } })
-  return items.filter(item => item.cli === cli && item.kind === 'skill' && item.resource && !item.offInCli && !disabled.has(item.id)
+  const eligible = items.filter(item => item.cli === cli && item.kind === 'skill' && item.resource && !item.offInCli && !disabled.has(item.id)
     && (!item.resource.projectRoot || roots.includes(item.resource.projectRoot))
     && (!policy?.only || policy.only.some(name => item.name === name || item.name.endsWith(`:${name}`))))
+  return eligible.filter(item => !eligible.some(other => other !== item && other.name === item.name && other.resource?.origin === 'project' && item.resource?.origin !== 'project'))
 }
 
 /** What a pane may use beyond what is switched off for everyone. */

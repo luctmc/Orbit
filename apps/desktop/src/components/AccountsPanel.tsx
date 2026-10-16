@@ -1,9 +1,12 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
-import { AGENT_CLIS, ACCOUNT_LIMITS, MODEL_ID, type Account, type AccountKind, type AccountLimits, type AccountStatus, type AgentCliForRole } from '@orbit/protocol'
+import { AGENT_CLIS, AGENT_INFO, ACCOUNT_LIMITS, MODEL_ID, type Account, type AccountKind, type AccountLimits, type AccountStatus, type AgentCliForRole } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
-import { accountLabel, CLI_LABEL } from '../orbit/labels.ts'
+import { accountLabel, CLI_LABEL, modelOptions } from '../orbit/labels.ts'
 import { untilTime } from '../orbit/time.ts'
-import { PlusIcon } from './icons.tsx'
+import { QuotaAccess } from './QuotaAccess.tsx'
+import { PlusIcon, OrbitMark } from './icons.tsx'
+import { ProviderMark } from './ProviderMark.tsx'
+import './AccountsPanel.css'
 import { Terminal } from './LazyTerminal.tsx'
 import { limitWindowView, limitReadLabel } from '../orbit/limitPresentation.ts'
 import { useLimitClock } from '../orbit/useLimitClock.ts'
@@ -67,6 +70,8 @@ function LimitsLine({ limits, now }: { limits: AccountLimits | undefined; now: n
 
 function AccountCard({ account, status, limits, liveAgents, onEdit, now }: { account: Account; status: AccountStatus | undefined; limits: AccountLimits | undefined; liveAgents: number; onEdit: () => void; now: number }) {
   const client = useOrbitClient()
+  const { connection } = useOrbit()
+  const offline = connection !== 'open'
   const state = statusText(account, status)
   const loginPane = status?.loginPaneId ?? null
   const remove = () => {
@@ -81,20 +86,22 @@ function AccountCard({ account, status, limits, liveAgents, onEdit, now }: { acc
         <span className="chip">{account.builtin ? 'deste Mac' : account.kind === 'api' ? 'chave de API' : 'assinatura'}</span>
         {account.model && <span className="chip">{account.model}</span>}
         <span className="spacer" />
+        <span className="chip">{liveAgents} {liveAgents === 1 ? 'janela aberta' : 'janelas abertas'}</span>
         {account.kind === 'assinatura' && (
-          <button className="btn btn--ghost btn--sm" disabled={status?.busy === 'login'} onClick={() => client.send({ type: 'account.login', accountId: account.id })}>
-            {status?.loggedIn ? 'Entrar de novo' : 'Entrar'}
+          <button className="btn btn--ghost btn--sm" disabled={offline || !!status?.busy} onClick={() => client.send({ type: 'account.login', accountId: account.id })}>
+            {status?.busy === 'login' ? 'Entrando…' : status?.loggedIn ? 'Entrar de novo' : 'Entrar'}
           </button>
         )}
         {!account.builtin && <button className="btn btn--ghost btn--sm" onClick={onEdit}>Editar</button>}
-        {!account.builtin && <button className="btn btn--ghost btn--sm btn--danger" onClick={remove}>Remover</button>}
+        {!account.builtin && <button className="btn btn--ghost btn--sm btn--danger" disabled={offline} onClick={remove}>Remover</button>}
       </div>
       <div className="account__facts">
         <span className={`account__state account__state--${state.tone}`}>{state.text}</span>
         <LimitsLine limits={limits} now={now} />
       </div>
+      <QuotaAccess account={account} limits={limits} status={status} />
       <label className="check">
-        <input type="checkbox" checked={account.auto} onChange={(e) => client.send({ type: 'account.save', account: { id: account.id, cli: account.cli, kind: account.kind, name: account.name, baseUrl: account.baseUrl, model: account.model, auto: e.target.checked } })} />
+        <input type="checkbox" checked={account.auto} disabled={offline} onChange={(e) => client.send({ type: 'account.save', account: { id: account.id, cli: account.cli, kind: account.kind, name: account.name, baseUrl: account.baseUrl, model: account.model, auto: e.target.checked } })} />
         <span>O Orbit pode escolher esta conta sozinho{account.kind === 'api' ? ' (só quando as assinaturas estiverem no limite)' : ''}</span>
       </label>
       {status?.message && !loginPane && <pre className="cli-card__message cli-card__message--error">{status.message}</pre>}
@@ -105,8 +112,8 @@ function AccountCard({ account, status, limits, liveAgents, onEdit, now }: { acc
           </p>
           <div className="account__terminal"><Terminal paneId={loginPane} interactive /></div>
           <div className="account__login-actions">
-            <button className="btn btn--ghost btn--sm" onClick={() => client.send({ type: 'account.check' })}>Verificar login</button>
-            <button className="btn btn--ghost btn--sm" onClick={() => client.send({ type: 'pane.close', paneId: loginPane })}>Fechar terminal</button>
+            <button className="btn btn--ghost btn--sm" disabled={offline || !!status?.busy} onClick={() => client.send({ type: 'account.check' })}>Verificar login</button>
+            <button className="btn btn--ghost btn--sm" disabled={offline} onClick={() => client.send({ type: 'pane.close', paneId: loginPane })}>Fechar terminal</button>
           </div>
         </div>
       )}
@@ -117,6 +124,7 @@ function AccountCard({ account, status, limits, liveAgents, onEdit, now }: { acc
 function AccountForm({ initial, onDone }: { initial: Draft; onDone: () => void }) {
   const client = useOrbitClient()
   const uid = useId()
+  const { connection } = useOrbit()
   const [draft, setDraft] = useState(initial)
   const [error, setError] = useState<string | null>(null)
   const editing = Boolean(initial.id)
@@ -126,6 +134,7 @@ function AccountForm({ initial, onDone }: { initial: Draft; onDone: () => void }
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    if (connection !== 'open') return setError('Aguarde a conexão com o Orbit para salvar esta conta.')
     const name = draft.name.trim()
     if (!name) return setError('Dê um nome à conta (por exemplo, "Trabalho").')
     const baseUrl = claudeApi ? (provider.url ?? draft.baseUrl.trim()) || null : null
@@ -192,61 +201,127 @@ function AccountForm({ initial, onDone }: { initial: Draft; onDone: () => void }
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="account-form__actions">
         <button type="button" className="btn btn--ghost btn--sm" onClick={onDone}>Cancelar</button>
-        <button type="submit" className="btn btn--primary btn--sm">{editing ? 'Salvar' : 'Adicionar conta'}</button>
+        <button type="submit" className="btn btn--primary btn--sm" disabled={connection !== 'open'}>{editing ? 'Salvar' : 'Adicionar conta'}</button>
       </div>
     </form>
   )
 }
 
-/** Settings › Contas: the logins and API keys agents run as, and how much room each one has. */
+/** Small, truthful overview: missing/stale readings never look like available quota. */
+function AccountMeter({ account, limits, now }: { account: Account; limits?: AccountLimits; now: number }) {
+  return <div className="ias-meter" aria-label={`Limites de ${accountLabel(account, account.cli)}`}>
+    <span className="ias-meter__name">{accountLabel(account, account.cli)}</span>
+    {([['5 h', limits?.fiveHour], ['Semana', limits?.weekly]] as const).map(([name, window]) => {
+      const view = window && limits ? limitWindowView(window, limits, now) : null
+      const percent = view?.percent ?? null
+      return <div className="ias-meter__row" key={name}>
+        <span>{view?.label ?? name}</span>
+        <span className="ias-meter__track" aria-hidden="true">{percent !== null && <span style={{ width: `${percent}%` }} />}</span>
+        <span title={limits ? limitReadLabel(limits, now) : undefined}>{percent === null ? 'Sem leitura atual' : `${Math.round(percent)}% ${view!.metric}`}</span>
+        {window && <small className="ias-meter__renewal">{window.resetsAt <= now ? 'Aguardando nova leitura' : `Renova ${untilTime(window.resetsAt, now)}`}</small>}
+      </div>
+    })}
+    {limits?.refreshError && <p className="ias-meter__notice">Falha na atualização. Confira o painel oficial ou tente novamente.</p>}
+  </div>
+}
+
+function AgentMark({ cli }: { cli: AgentCliForRole }) {
+  // Reuse the bundled official marks. Google CLIs retain a named neutral fallback.
+  return cli === 'codex' || cli === 'claude' ? <ProviderMark brand={cli === 'codex' ? 'openai' : 'anthropic'} /> : <span className="ias-mark" aria-hidden="true"><OrbitMark size={24} /></span>
+}
+
+/** Settings › IAs: provider overview, independent accounts, and real quota actions. */
 export function AccountsPanel() {
   const client = useOrbitClient()
-  const { accounts, accountStatuses, limits, panes } = useOrbit()
+  const { accounts, accountStatuses, limits, panes, catalog, clis, connection, lastError } = useOrbit()
   const [form, setForm] = useState<Draft | null>(null)
+  const [selected, setSelected] = useState<AgentCliForRole>('codex')
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null)
+  const refreshBaseline = useRef<{ limits: typeof limits; statuses: typeof accountStatuses; clis: typeof clis } | null>(null)
   const asked = useRef(false)
+  const details = useRef<HTMLElement>(null)
   const canAdd = accounts.length < ACCOUNT_LIMITS.accounts
   const now = useLimitClock()
+  const connected = accounts.filter(a => accountStatuses.some(s => s.accountId === a.id && s.loggedIn === true))
+  const subscriptions = connected.filter(a => a.kind === 'assinatura').length
+  const unverified = accounts.filter(a => { const status = accountStatuses.find(s => s.accountId === a.id); return !status || status.loggedIn === null }).length
+  const selectedAccounts = accounts.filter(a => a.cli === selected)
 
   useEffect(() => {
     if (asked.current) return
     asked.current = true
     client.send({ type: 'account.check' })
   }, [client])
+  useEffect(() => {
+    const before = refreshBaseline.current
+    if (!before || !refreshing) return
+    // Initial busy/status broadcasts must not unlock the button before limits arrive.
+    if (limits !== before.limits && accountStatuses !== before.statuses && clis !== before.clis && !accountStatuses.some(s => s.busy) && !clis.some(c => c.busy)) {
+      refreshBaseline.current = null
+      setRefreshing(false)
+      setRefreshNotice('Consulta concluída. Leituras indisponíveis ou antigas continuam sinalizadas em cada conta.')
+    }
+  }, [limits, accountStatuses, clis, refreshing])
+  useEffect(() => {
+    if (!refreshing) return
+    const timer = setTimeout(() => {
+      refreshBaseline.current = null
+      setRefreshing(false)
+      setRefreshNotice('A consulta ainda não confirmou todos os dados. Você pode tentar novamente; confira a última leitura de cada conta.')
+    }, 12000)
+    return () => clearTimeout(timer)
+  }, [refreshing])
+  const refresh = () => {
+    refreshBaseline.current = { limits, statuses: accountStatuses, clis }
+    setRefreshNotice(null)
+    setRefreshing(true)
+    client.send({ type: 'account.check' })
+    client.send({ type: 'limits.refresh' })
+    client.send({ type: 'cli.check' })
+  }
+  const select = (cli: AgentCliForRole) => { setSelected(cli); setForm(null) }
+  const add = (cli: AgentCliForRole, kind: AccountKind = 'assinatura') => {
+    setSelected(cli); setForm({ ...blankDraft(cli), kind, auto: kind === 'assinatura' })
+    requestAnimationFrame(() => details.current?.scrollIntoView({ block: 'nearest', behavior: 'instant' }))
+  }
 
   return (
-    <div className="dialog__body clis">
-      <div className="clis__bar">
-        <p className="muted">
-          Mantenha várias contas conectadas e escolha qual cada agente usa. Para conectar outra assinatura, use Adicionar conta na seção do provedor. A escolha automática prioriza as assinaturas com mais limite disponível; chaves de API só participam se você permitir.
-        </p>
-        <span className="spacer" />
-        <button type="button" className="btn btn--ghost btn--sm" onClick={() => client.send({ type: 'limits.refresh' })}>Atualizar limites</button>
-        {!form && canAdd && <button className="btn btn--ghost btn--sm" onClick={() => setForm(blankDraft())}><PlusIcon size={14} />Nova conta</button>}
+    <div className="dialog__body ias">
+      <header className="ias-intro"><span className="eyebrow">IAs / contas</span><h2>Suas IAs</h2><p>As IAs que trabalham com você. Conecte suas assinaturas e mantenha cada conta com seu próprio login e limite.</p></header>
+      <section className="ias-arsenal" aria-label="Resumo das conexões">
+        <div><span className="eyebrow">Seu arsenal</span><h3>{connected.length === 0 && unverified > 0 ? `${accounts.length} ${accounts.length === 1 ? 'conta configurada' : 'contas configuradas'}` : `${connected.length} ${connected.length === 1 ? 'conta conectada' : 'contas conectadas'}`}</h3><p>{subscriptions} assinaturas conectadas · {connected.length - subscriptions} chaves de API · {panes.filter(p => p.status !== 'exited').length} janelas abertas{unverified > 0 && ` · ${unverified} ${unverified === 1 ? 'login a verificar' : 'logins a verificar'}`}</p></div>
+        <div className="ias-arsenal__marks" aria-label="Provedores conectados">{AGENT_CLIS.filter(cli => connected.some(a => a.cli === cli)).map(cli => <span key={cli} title={CLI_LABEL[cli]}><AgentMark cli={cli} /><span className="sr-only">{CLI_LABEL[cli]}</span></span>)}</div>
+        <p className="ias-arsenal__foot">Contas independentes. A seleção automática usa apenas as contas que você permitir.</p>
+      </section>
+      <div className="ias-toolbar"><div><h3>Assinaturas que você já paga</h3><p>Selecione uma IA para gerenciar contas, login e resets.</p></div><button type="button" className="btn btn--ghost btn--sm" disabled={refreshing || connection !== 'open'} onClick={refresh} aria-busy={refreshing}>{refreshing && <span className="ias-spinner" aria-hidden="true" />}{refreshing ? 'Atualizando…' : 'Atualizar limites e status'}</button></div>
+      {refreshNotice && <p className="ias-refresh-status" role="status">{refreshNotice}</p>}
+      {connection !== 'open' && <p role="status" className="ias-notice">Conectando ao Orbit. Os dados serão confirmados quando a conexão voltar.</p>}
+      {lastError && <p className="form-error" role="alert">{lastError}</p>}
+      <div className="ias-grid" aria-label="Provedores de IA">
+        {AGENT_CLIS.map(cli => {
+          const mine = accounts.filter(a => a.cli === cli && a.kind === 'assinatura')
+          const installed = clis.find(c => c.cli === cli)
+          const signed = mine.filter(a => connected.includes(a)).length
+          const models = modelOptions(catalog, cli)
+          return <article key={cli} className={`ias-provider${selected === cli ? ' ias-provider--selected' : ''}`}>
+            <div className="ias-provider__head"><AgentMark cli={cli} /><div><h3>{AGENT_INFO[cli].label}</h3><p>{AGENT_INFO[cli].product} · {mine.length} {mine.length === 1 ? 'conta' : 'contas'}</p></div></div>
+            <p className="ias-provider__status"><span className={`dot ${signed ? 'dot--live' : 'dot--off'}`} />{installed?.busy ? 'Verificando CLI…' : installed?.checkedAt == null ? 'Instalação a confirmar' : !installed.installed ? 'Não instalada neste Mac' : signed ? `${signed} ${signed === 1 ? 'conta conectada' : 'contas conectadas'}` : 'Login a confirmar'}</p>
+            <div className="ias-provider__meters">{mine.length ? mine.map(account => <AccountMeter key={account.id} account={account} limits={limits.find(l => l.accountId === account.id)} now={now} />) : <p className="ias-provider__empty">Nenhuma assinatura adicionada.</p>}</div>
+            <div className="ias-models"><span className="eyebrow">Modelos {catalog?.[cli].source === 'cli' ? '· da CLI' : '· catálogo Orbit'}</span><div>{models.length ? models.map(model => <span className={`ias-model${catalog?.[cli].defaultModel === model.id ? ' ias-model--default' : ''}`} key={model.id} title={model.id}>{model.label}{catalog?.[cli].defaultModel === model.id && <small>padrão</small>}</span>) : <p>Lista ainda não disponível.</p>}</div></div>
+            <button type="button" className="btn btn--ghost btn--sm ias-provider__open" aria-pressed={selected === cli} aria-controls="ias-account-details" onClick={() => select(cli)}>{selected === cli ? 'Contas selecionadas' : 'Gerenciar contas'}<span aria-hidden="true">→</span></button>
+          </article>
+        })}
       </div>
-      {form && !form.id && <AccountForm initial={form} onDone={() => setForm(null)} />}
-      {AGENT_CLIS.map((cli) => (
-        <section key={cli} className="accounts__group" aria-labelledby={`accounts-${cli}`}>
-          <div className="accounts__group-head">
-            <h3 id={`accounts-${cli}`} className="eyebrow">{CLI_LABEL[cli]}</h3>
-            {CLIS.includes(cli) && canAdd && <button type="button" className="btn btn--ghost btn--sm" disabled={form !== null} onClick={() => setForm(blankDraft(cli))}><PlusIcon size={14} />Adicionar conta {CLI_LABEL[cli]}</button>}
-          </div>
-          {accounts.filter((a) => a.cli === cli).map((account) =>
-            form?.id === account.id ? (
-              <AccountForm key={account.id} initial={form} onDone={() => setForm(null)} />
-            ) : (
-              <AccountCard
-                key={account.id}
-                account={account}
-                now={now}
-                status={accountStatuses.find((s) => s.accountId === account.id)}
-                limits={limits.find((l) => l.accountId === account.id)}
-                liveAgents={panes.filter((p) => p.accountId === account.id && p.status !== 'exited').length}
-                onEdit={() => setForm(draftOf(account))}
-              />
-            ),
-          )}
-        </section>
-      ))}
+      <section ref={details} id="ias-account-details" className="ias-details" aria-labelledby="ias-selected-title">
+        <div className="ias-toolbar"><div><span className="eyebrow">Contas e limites independentes</span><h3 id="ias-selected-title">{CLI_LABEL[selected]} <span className="muted">/ {selectedAccounts.length} {selectedAccounts.length === 1 ? 'conta' : 'contas'}</span></h3></div>{CLIS.includes(selected) && canAdd && <button type="button" className="btn btn--primary btn--sm" disabled={form !== null || connection !== 'open'} onClick={() => add(selected)}><PlusIcon size={14} />Adicionar conta {CLI_LABEL[selected]}</button>}</div>
+        {!canAdd && <p className="ias-notice">Limite de {ACCOUNT_LIMITS.accounts} contas atingido. Edite uma conta existente para continuar.</p>}
+        {form && !form.id && <AccountForm key={`${form.cli}-${form.kind}`} initial={form} onDone={() => setForm(null)} />}
+        {!selectedAccounts.length && !form && <p className="ias-empty">Nenhuma conta {CLI_LABEL[selected]} configurada. {selected === 'antigravity' ? 'O login do Antigravity é o deste Mac.' : 'Adicione uma assinatura ou chave de API para começar.'}</p>}
+        {selectedAccounts.map(account => form?.id === account.id ? <AccountForm key={account.id} initial={form} onDone={() => setForm(null)} /> : <AccountCard key={account.id} account={account} now={now} status={accountStatuses.find(s => s.accountId === account.id)} limits={limits.find(l => l.accountId === account.id)} liveAgents={panes.filter(p => p.accountId === account.id && p.status !== 'exited').length} onEdit={() => setForm(draftOf(account))} />)}
+      </section>
+      <section className="ias-api" aria-labelledby="ias-api-title"><div className="ias-toolbar"><div><h3 id="ias-api-title">Chaves pagas por uso</h3><p>Uso cobrado pelo provedor. Só entram na seleção automática com sua permissão.</p></div></div><div className="ias-api__grid">{CLIS.map(cli => <button key={cli} type="button" className="ias-api__item" disabled={!canAdd || form !== null || connection !== 'open'} onClick={() => add(cli, 'api')}><AgentMark cli={cli} /><span><strong>{CLI_LABEL[cli]}</strong><small>{accounts.filter(a => a.cli === cli && a.kind === 'api').length} chaves · adicionar chave</small></span><PlusIcon size={16} /></button>)}</div></section>
+      <p className="ias-footnote">O login adicional abre uma sessão separada. Seus outros logins continuam conectados. Modelos e esforço são escolhidos ao abrir uma janela ou nas regras da missão.</p>
     </div>
   )
 }

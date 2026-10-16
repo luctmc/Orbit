@@ -3,12 +3,13 @@ import type { MissionProgress } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from './context.tsx'
 
 /** Only the visible mission polls. One request at a time, no work in a hidden tab. */
-export function useMissionProgress(missionId: string) {
+export function useMissionProgress(missionId: string, active = true) {
   const client = useOrbitClient()
   const { connection } = useOrbit()
   const refresh = useRef<() => void>(() => {})
   const [state, setState] = useState<{ missionId: string; data: MissionProgress | null; error: string | null; loading: boolean }>({ missionId, data: null, error: null, loading: true })
   useEffect(() => {
+    if (!active) { refresh.current = () => {}; return }
     let alive = true, running = false
     let timer: ReturnType<typeof setTimeout> | undefined
     setState({ missionId, data: null, error: null, loading: connection === 'open' })
@@ -33,7 +34,7 @@ export function useMissionProgress(missionId: string) {
     document.addEventListener('visibilitychange', wake)
     void read()
     return () => { alive = false; clearTimeout(timer); document.removeEventListener('visibilitychange', wake); refresh.current = () => {} }
-  }, [client, connection, missionId])
+  }, [client, connection, missionId, active])
   const current = state.missionId === missionId ? state : { data: null, error: null, loading: connection === 'open' }
   return { ...current, connection, refresh: () => refresh.current() }
 }

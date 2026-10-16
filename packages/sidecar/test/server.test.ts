@@ -35,7 +35,7 @@ test('creates a mission whose lead pane runs a real shell', async () => {
     const { workspace } = await client.next('workspace.updated')
     assert.equal(workspace.path, folder)
 
-    client.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Teste', objective: 'eco', mode: 'livre', lead: { cli: 'shell', model: null, title: '' } })
+    client.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Teste', objective: 'eco', mode: 'livre', lead: { cli: 'shell', model: null, title: '' } })
     const { mission } = await client.next('mission.updated')
     const { pane } = await client.next('pane.updated', (m) => m.pane.missionId === mission.id)
     assert.equal(pane.role, 'lead')
@@ -46,7 +46,7 @@ test('creates a mission whose lead pane runs a real shell', async () => {
     await client.next('event.added', (m) => m.event.kind === 'pane.spawned' && m.event.paneId === pane.id)
 
     // The command bar submits whole messages: pasted, then Enter.
-    client.send({ type: 'pane.submit', paneId: pane.id, text: 'echo via-barra-$((1+1))' })
+    client.send({ type: 'pane.submit', requestId: 'shell-input', paneId: pane.id, text: 'echo via-barra-$((1+1))' })
     await client.next('pane.data', (m) => m.paneId === pane.id && m.data.includes('via-barra-2'))
 
     client.send({ type: 'pane.close', paneId: pane.id })

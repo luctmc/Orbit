@@ -1,5 +1,13 @@
-import type { RateWindow } from '@orbit/protocol'
+import type { RateWindow, ResetCredits } from '@orbit/protocol'
 import type { ReportedLimits } from './usage.ts'
+
+/** Unknown/unavailable remains null. Only individually identified free Codex benefits can be redeemed. */
+export function parseResetCredits(raw: unknown): ResetCredits | null {
+  const r = raw as any
+  if (!r || !Number.isSafeInteger(r.availableCount) || r.availableCount < 0) return null
+  const credits = Array.isArray(r.credits) ? r.credits.filter((c: any) => c && c.status === 'available' && c.resetType === 'codexRateLimits' && typeof c.id === 'string' && c.id.length > 0 && c.id.length <= 256 && (c.expiresAt === null || Number.isFinite(c.expiresAt))).slice(0, 100).map((c: any) => ({ id: c.id, resetType: 'codexRateLimits' as const, expiresAt: c.expiresAt === null ? null : c.expiresAt * 1000 })) : null
+  return { availableCount: r.availableCount, credits }
+}
 
 /** Current account quota from Codex's stable app-server API, not a model's separate bucket. */
 export function parseCodexAccountLimits(raw: unknown, now = Date.now()): ReportedLimits | null {
@@ -13,7 +21,7 @@ export function parseCodexAccountLimits(raw: unknown, now = Date.now()): Reporte
   }
   const fiveHour = window(rate.primary), weekly = window(rate.secondary)
   if (!fiveHour && !weekly) return null
-  return { cli: 'codex', fiveHour, weekly, plan: typeof rate.planType === 'string' ? rate.planType : null, updatedAt: now, checkedAt: now, source: 'provider', refreshError: null }
+  return { resetCredits: parseResetCredits(result.rateLimitResetCredits), cli: 'codex', fiveHour, weekly, plan: typeof rate.planType === 'string' ? rate.planType : null, updatedAt: now, checkedAt: now, source: 'provider', refreshError: null }
 }
 
 /** One read per account; focus/manual refresh cannot overlap or hammer a failing provider. */

@@ -21,14 +21,14 @@ export const FACTORY_METHODS: Record<string, { method: string; readOnly: boolean
 
 /** Each built-in kind's equivalent on the other CLI, for the maestro to balance the load. */
 export const FACTORY_ALTS: Record<string, AgentSeat> = {
-  operacao: { cli: 'codex', model: null, effort: 'low' },
-  bug: { cli: 'codex', model: null, effort: 'medium' },
-  funcionalidade: { cli: 'codex', model: null, effort: 'medium' },
+  operacao: { cli: 'codex', model: 'gpt-6-luna', effort: 'low' },
+  bug: { cli: 'codex', model: 'gpt-6.1-sol', effort: 'medium' },
+  funcionalidade: { cli: 'codex', model: 'gpt-6.1-sol', effort: 'medium' },
   refatoracao: { cli: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' },
   testes: { cli: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' },
-  investigacao: { cli: 'codex', model: null, effort: 'high' },
-  documentacao: { cli: 'codex', model: null, effort: 'low' },
-  revisao: { cli: 'claude', model: 'claude-opus-5-5', effort: 'high' },
+  investigacao: { cli: 'codex', model: 'gpt-6.1-sol', effort: 'medium' },
+  documentacao: { cli: 'codex', model: 'gpt-6-luna', effort: 'low' },
+  revisao: { cli: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' },
 }
 
 /** How the factory methods began in Portuguese (v0.2.10–0.2.11), to move saved tables to English. */
@@ -42,22 +42,40 @@ export const OLD_FACTORY_START: Record<string, string> = {
   revisao: '1. Não edite arquivos.\n2. Leia o diff',
 }
 
+/**
+ * Seats of earlier factory tables (v0.2.14 and before). A saved table still holding one of them
+ * was never edited by the human, so it moves to the cheaper default; any edit is left alone.
+ */
+export const OLD_FACTORY_SEATS: Record<string, { cli: AgentCliForRole; model: string | null; effort: Effort | null }> = {
+  lead: { cli: 'claude', model: 'claude-opus-5-5', effort: 'high' },
+  investigacao: { cli: 'claude', model: 'claude-opus-5-5', effort: 'high' },
+  revisao: { cli: 'codex', model: null, effort: 'high' },
+}
+
 const row = (id: string, name: string, description: string, model: string | null, effort: Effort, cli: AgentCliForRole = 'claude'): TaskType =>
-  ({ id, name, description, cli, model, effort, skills: [], onlySkills: false, method: FACTORY_METHODS[id]?.method ?? '', readOnly: FACTORY_METHODS[id]?.readOnly ?? false, alt: FACTORY_ALTS[id] ?? null })
+  ({ id, name, description, cli, model, effort, automatic: true, skills: [], onlySkills: false, method: FACTORY_METHODS[id]?.method ?? '', readOnly: FACTORY_METHODS[id]?.readOnly ?? false, alt: FACTORY_ALTS[id] ?? null })
 
 /** The table Orbit ships with; the user edits a copy in Settings. */
 export const DEFAULT_ROUTING: Routing = {
-  lead: { cli: 'claude', model: 'claude-opus-5-5', effort: 'high' },
+  // Start cheap, rise with a concrete reason: the difficulty gate (assessDifficulty) lifts hard work to Opus.
+  lead: { cli: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' },
   taskTypes: [
     row('operacao', 'Execução e build', 'Executar o projeto, instalar dependências ou verificar build e testes existentes.', 'claude-haiku-5-5', 'low'),
     row('bug', 'Correção de bug', 'Algo quebrou: erro, regressão, comportamento errado.', 'claude-sonnet-5-5', 'medium'),
     row('funcionalidade', 'Funcionalidade', 'Comportamento novo: tela, fluxo, endpoint, opção.', 'claude-sonnet-5-5', 'medium'),
-    row('refatoracao', 'Refatoração', 'Mudar a estrutura sem mudar o comportamento.', null, 'medium', 'codex'),
-    row('testes', 'Testes', 'Escrever ou consertar testes, aumentar cobertura.', null, 'medium', 'codex'),
-    row('investigacao', 'Investigação', 'Descobrir o porquê, medir, auditar. Não edita código.', 'claude-opus-5-5', 'high'),
+    row('refatoracao', 'Refatoração', 'Mudar a estrutura sem mudar o comportamento.', 'gpt-6.1-sol', 'medium', 'codex'),
+    row('testes', 'Testes', 'Escrever ou consertar testes, aumentar cobertura.', 'gpt-6.1-sol', 'medium', 'codex'),
+    row('investigacao', 'Investigação', 'Descobrir o porquê, medir, auditar. Não edita código.', 'claude-sonnet-5-5', 'medium'),
     row('documentacao', 'Documentação', 'README, comentários, guias e notas de versão.', 'claude-haiku-5-5', 'low'),
-    row('revisao', 'Revisão', 'Conferir o trabalho de outro agente: diff, testes, riscos. Não edita; aponta o que corrigir.', null, 'high', 'codex'),
+    row('revisao', 'Revisão', 'Conferir o trabalho de outro agente: diff, testes, riscos. Não edita; aponta o que corrigir.', 'gpt-6.1-sol', 'medium', 'codex'),
   ],
+}
+
+/** v0.2.15 factory rows before explicit Codex seats. Used only for whole-row migration. */
+export const LEGACY_DEFAULT_ROUTING: Routing = structuredClone(DEFAULT_ROUTING)
+for (const task of LEGACY_DEFAULT_ROUTING.taskTypes) {
+  if (task.cli === 'codex') task.model = null
+  if (task.alt?.cli === 'codex') task.alt.model = null
 }
 
 const CLIS: readonly AgentCliForRole[] = AGENT_CLIS
@@ -94,8 +112,8 @@ export function normalizeRouting(input: Routing): Routing {
     const description = typeof t.description === 'string' ? t.description.trim().slice(0, ROUTING_LIMITS.description) : ''
     const method = typeof t.method === 'string' ? t.method.trim().slice(0, ROUTING_LIMITS.method) : ''
     const rowCli = cli(t.cli, name)
-    const alt = t.alt && t.alt.cli !== rowCli ? { cli: cli(t.alt.cli, `${name} (equivalente)`), model: model(t.alt.model, `${name} (equivalente)`), effort: effort(t.alt.effort, `${name} (equivalente)`) } : null
-    return { id, name, description, cli: rowCli, model: model(t.model, name), effort: effort(t.effort, name), skills, onlySkills: t.onlySkills === true, method, readOnly: t.readOnly === true, alt }
+    const alt = t.alt && t.alt.cli !== rowCli ? { cli: cli(t.alt.cli, `${name} (equivalente)`), model: model(t.alt.model, `${name} (equivalente)`), effort: effort(t.alt.effort, `${name} (equivalente)`), ...(t.alt.pinned === true ? { pinned: true } : {}) } : null
+    return { id, name, description, automatic: t.automatic === true, cli: rowCli, model: model(t.model, name), effort: effort(t.effort, name), skills, onlySkills: t.onlySkills === true, method, readOnly: t.readOnly === true, alt }
   })
 
   return {

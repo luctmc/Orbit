@@ -1,4 +1,4 @@
-import { useCallback, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { AGENT_CLIS, MODEL_ID, type AgentCli, type AgentCliForRole, type Effort, type MissionMode, type Squad } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, EFFORT_LABEL, MODE_LABEL } from '../orbit/labels.ts'
@@ -68,22 +68,29 @@ function invalidModel(choice: AgentChoice): boolean {
 
 export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManageSquads, onManageRouting }: { workspaceId: string; workspaceName: string; onClose: () => void; onManageSquads: () => void; onManageRouting: () => void }) {
   const client = useOrbitClient()
-  const { squads, routing, templates: allTemplates } = useOrbit()
+  const { squads, routing, templates: allTemplates, accounts, settings } = useOrbit()
+  const savedDraft = client.missionDrafts.get(workspaceId)
+  const [translationAccountId, setTranslationAccountId] = useState(savedDraft?.translationAccountId ?? '')
+  const [allowOriginal, setAllowOriginal] = useState(savedDraft?.allowOriginal ?? false)
+  const [launching, setLaunching] = useState(false)
+  const [pending, setPending] = useState(client.inputPending(`mission-${workspaceId}`))
   const templates = allTemplates.filter((t) => t.workspaceId === null || t.workspaceId === workspaceId).sort((a, b) => a.name.localeCompare(b.name))
   const [templateId, setTemplateId] = useState('')
-  const [cards, setCards] = useState<string[]>([])
-  const [title, setTitle] = useState('')
-  const [objective, setObjective] = useState('')
-  const [mode, setMode] = useState<MissionMode>('livre')
-  const [squadId, setSquadId] = useState<string | null>(null)
-  const [lead, setLead] = useState<AgentChoice>(DEFAULT_AGENT)
-  const [adaptiveLead, setAdaptiveLead] = useState(true)
-  const [worktrees, setWorktrees] = useState(false)
-  const [clis, setClis] = useState<AgentCliForRole[]>(['claude', 'codex'])
+  const [cards, setCards] = useState<string[]>(savedDraft?.cards ?? [])
+  const [title, setTitle] = useState(savedDraft?.title ?? '')
+  const [objective, setObjective] = useState(savedDraft?.objective ?? '')
+  const [mode, setMode] = useState<MissionMode>(savedDraft?.mode ?? 'livre')
+  const [squadId, setSquadId] = useState<string | null>(savedDraft?.squadId ?? null)
+  const [lead, setLead] = useState<AgentChoice>(savedDraft ? { cli: savedDraft.lead.cli, model: savedDraft.lead.model ?? '', effort: savedDraft.lead.effort ?? null, accountId: savedDraft.lead.accountId ?? null } : DEFAULT_AGENT)
+  const [adaptiveLead, setAdaptiveLead] = useState(savedDraft?.adaptiveLead ?? true)
+  const [worktrees, setWorktrees] = useState(savedDraft?.isolation === 'worktrees')
+  const [clis, setClis] = useState<AgentCliForRole[]>(savedDraft?.allowedClis ?? ['claude', 'codex'])
   const readiness = useAgentReadiness()
-  const [budgetTokens, setBudgetTokens] = useState('')
-  const [budgetCost, setBudgetCost] = useState('')
+  const [budgetTokens, setBudgetTokens] = useState(savedDraft?.budget?.tokens ? String(savedDraft.budget.tokens / 1000) : '')
+  const [budgetCost, setBudgetCost] = useState(savedDraft?.budget?.costUsd ? String(savedDraft.budget.costUsd) : '')
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => { client.missionDrafts.set(workspaceId, { workspaceId, title, objective, mode, adaptiveLead, squadId, isolation: worktrees ? 'worktrees' : null, cards, allowedClis: clis, budget: budgetFrom(budgetTokens, budgetCost), lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' }, translationAccountId: translationAccountId || undefined, allowOriginal }) }, [client, workspaceId, title, objective, mode, adaptiveLead, squadId, worktrees, cards, clis, budgetTokens, budgetCost, lead, translationAccountId, allowOriginal])
 
   /** A template fills the whole form; everything stays editable. */
   const applyTemplate = (id: string) => {
@@ -113,13 +120,27 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   }
 
   return (
-    <Dialog eyebrow={`Nova missão · ${workspaceName}`} title="O que vamos fazer?" submitLabel="Lançar missão" onClose={onClose} onSubmit={() => {
+    <Dialog eyebrow={`Nova missão · ${workspaceName}`} title="O que vamos fazer?" submitLabel={pending ? "Conferir pedido" : "Lançar missão"} busy={launching} submitDisabled={launching} onClose={onClose} onSubmit={async () => {
       if (!title.trim()) return setError('Dê um título para a missão.')
       if (mode === 'squad' && !squadId) return setError('Escolha o squad da missão.')
       if (invalidModel(lead)) return setError('Modelo inválido: use só letras, números, ponto, hífen, barra ou dois-pontos.')
-      client.send({ type: 'mission.create', workspaceId, title, objective, mode, adaptiveLead: mode === 'agentica' && adaptiveLead, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, cards, allowedClis: clis, budget: budgetFrom(budgetTokens, budgetCost), lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
+      setLaunching(true)
+      try {
+      await (pending ? client.checkPendingInput(`mission-${workspaceId}`) : client.createMission({ translationAccountId: translationAccountId || undefined, allowOriginal, workspaceId, title, objective, mode, adaptiveLead: mode === 'agentica' && adaptiveLead, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, cards, allowedClis: clis, budget: budgetFrom(budgetTokens, budgetCost), lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } }))
+      client.missionDrafts.delete(workspaceId)
       onClose()
+      } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+      finally { setLaunching(false); setPending(client.inputPending(`mission-${workspaceId}`)) }
     }}>
+      <fieldset disabled={launching || pending} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      {settings?.agentsInEnglish && <div className="field">
+        <label htmlFor="mission-translator">Traduzir objetivo para inglês · Codex / gpt-6.1-sol / medium</label>
+        <select id="mission-translator" disabled={allowOriginal} value={translationAccountId} onChange={e => setTranslationAccountId(e.target.value)}>
+          <option value="">Escolha a conta Codex</option>
+          {accounts.filter(a => a.cli === 'codex' && a.kind === 'assinatura').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        <label><input type="checkbox" checked={allowOriginal} onChange={e => setAllowOriginal(e.target.checked)} /> Autorizar objetivo original sem tradução</label>
+      </div>}
       {templates.length > 0 && (
         <div className="field template-pick">
           <label htmlFor="m-template">Modelo</label>
@@ -212,13 +233,14 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
         </span>
       </label>
       {error && <p className="form-error" role="alert">{error}</p>}
+      </fieldset>
     </Dialog>
   )
 }
 
 export function AddAgentDialog({ missionId, onClose }: { missionId: string; onClose: () => void }) {
   const client = useOrbitClient()
-  const { missions, squads, routing } = useOrbit()
+  const { missions, squads, routing, connection } = useOrbit()
   const squad = squads.find((s) => s.id === missions.find((m) => m.id === missionId)?.squadId)
   const [roleId, setRoleId] = useState<string | null>(null)
   const [kindId, setKindId] = useState<string | null>(null)
@@ -226,21 +248,26 @@ export function AddAgentDialog({ missionId, onClose }: { missionId: string; onCl
   const [task, setTask] = useState('')
   const [agent, setAgent] = useState<AgentChoice>(DEFAULT_AGENT)
   const [error, setError] = useState<string | null>(null)
+  const [opening, setOpening] = useState(false)
+  const pending = useRef(false)
   const role = squad?.roles.find((r) => r.id === roleId)
   // Without a squad, the task table can staff the helper.
   const kind = squad ? undefined : routing?.taskTypes.find((t) => t.id === kindId)
   const preset = role ?? kind
 
   return (
-    <Dialog eyebrow="Tripulação" title="Adicionar agente" submitLabel="Abrir agente" onClose={onClose} onSubmit={() => {
+    <Dialog eyebrow="Tripulação" title="Adicionar agente" submitLabel={opening ? 'Abrindo…' : 'Abrir agente'} busy={opening} submitDisabled={opening || connection !== 'open'} onClose={() => { if (!pending.current) onClose() }} onSubmit={() => {
+      if (pending.current || connection !== 'open') return
       if (!preset && invalidModel(agent)) return setError('Modelo inválido: use só letras, números, ponto, hífen, barra ou dois-pontos.')
       const request = role
         ? { missionId, role: 'crew' as const, cli: role.cli, model: role.model, title, task, squadRoleId: role.id }
         : kind
           ? { missionId, role: 'crew' as const, cli: kind.cli, model: kind.model, effort: kind.effort, title, task, taskTypeId: kind.id }
           : { missionId, role: 'crew' as const, cli: agent.cli, model: modelOrNull(agent), effort: agent.cli === 'shell' ? null : agent.effort, accountId: agent.accountId, title, task: agent.cli === 'shell' ? null : task }
-      client.send({ type: 'pane.spawn', request })
-      onClose()
+      pending.current = true
+      setOpening(true); setError(null)
+      void client.spawn(request)
+        .then(onClose, cause => { pending.current = false; setOpening(false); setError(cause instanceof Error ? cause.message : String(cause)) })
     }}>
       {squad && (
         <fieldset className="field">

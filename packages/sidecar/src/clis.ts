@@ -202,15 +202,16 @@ export function parseAntigravityModels(text: string): CliCatalog {
   return { source: 'cli', efforts: ANTIGRAVITY_EFFORTS, models }
 }
 
-/** The `model = "…"` line of the person's Codex config, if any. */
-export function codexDefaultModel(home = process.env.CODEX_HOME ?? join(homedir(), '.codex')): string | null {
+/** Top-level Codex defaults only; nested project/provider tables are not global settings. */
+export function codexDefaults(home = process.env.CODEX_HOME ?? join(homedir(), '.codex')): { defaultModel: string | null; defaultEffort: Effort | null } {
   try {
-    const line = /^model\s*=\s*"([^"]+)"/m.exec(readFileSync(join(home, 'config.toml'), 'utf8'))
-    return line?.[1] ?? null
-  } catch {
-    return null
-  }
+    const top = readFileSync(join(home, 'config.toml'), 'utf8').split(/^\s*\[/m)[0]!
+    const value = (key: string) => new RegExp(`^${key}\\s*=\\s*["']([^"']+)["']`, 'm').exec(top)?.[1] ?? null
+    return { defaultModel: value('model'), defaultEffort: asEffort(value('model_reasoning_effort')) }
+  } catch { return { defaultModel: null, defaultEffort: null } }
 }
+
+export function codexDefaultModel(home?: string): string | null { return codexDefaults(home).defaultModel }
 
 export async function loadCatalog(run: Run): Promise<Catalog> {
   const ask = async (command: string, parse: (out: string) => CliCatalog, fallback: CliCatalog) => {
@@ -226,5 +227,5 @@ export async function loadCatalog(run: Run): Promise<Catalog> {
     ask('codex debug models', parseCodexCatalog, CODEX_FALLBACK),
     ask('agy models', parseAntigravityModels, ANTIGRAVITY_FALLBACK),
   ])
-  return { claude: CLAUDE_CATALOG, codex: { ...codex, defaultModel: codexDefaultModel() }, gemini: GEMINI_CATALOG, antigravity }
+  return { claude: CLAUDE_CATALOG, codex: { ...codex, ...codexDefaults() }, gemini: GEMINI_CATALOG, antigravity }
 }

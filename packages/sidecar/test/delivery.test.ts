@@ -46,7 +46,7 @@ test('helpers always report back: forced handoff, structured status, interrupt, 
     await ui.next('account.status', (m) => m.statuses.some((s) => s.accountId === 'codex' && s.loggedIn === true))
     ui.send({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-'))) })
     const { workspace } = await ui.next('workspace.updated')
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Entrega', objective: 'Cadastro', mode: 'agentica', lead: { cli: 'shell', model: null, title: 'Líder' } })
+    ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Entrega', objective: 'Cadastro', mode: 'agentica', lead: { cli: 'shell', model: null, title: 'Líder' } })
     const { mission } = await ui.next('mission.updated')
     assert.equal(mission.readyAt, null)
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')

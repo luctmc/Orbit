@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 
-export function readCodexLimits({ file = 'codex', args = ['app-server'], timeoutMs = 8000 } = {}) {
+export function readCodexLimits({ file = 'codex', args = ['app-server'], timeoutMs = 8000, reset = null } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, { detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'ignore'] })
     let buffer = '', finished = false
@@ -26,13 +26,17 @@ export function readCodexLimits({ file = 'codex', args = ['app-server'], timeout
         let message; try { message = JSON.parse(line) } catch { continue }
         if (message.id === 0) {
           if (message.error) return done(new Error('Codex recusou a inicialização da consulta.'))
-          send({ method: 'initialized', params: {} }); send({ id: 1, method: 'account/rateLimits/read' })
+          send({ method: 'initialized', params: {} }); send(reset ? { id: 1, method: 'account/rateLimitResetCredit/consume', params: { idempotencyKey: reset.requestId, creditId: reset.creditId } } : { id: 1, method: 'account/rateLimits/read' })
         }
         if (message.id === 1) {
           if (message.error || !message.result) return done(new Error('Codex não disponibilizou os limites desta conta.'))
+          if (reset) {
+            const outcome = message.result.outcome
+            return ['reset', 'nothingToReset', 'noCredit', 'alreadyRedeemed'].includes(outcome) ? done(null, { outcome }) : done(new Error('Resultado de reset desconhecido; confira a conta antes de repetir.'))
+          }
           // Whitelist quota fields; do not forward credits, account identity or other responses.
           const clean = rate => rate ? { limitId: rate.limitId, primary: rate.primary, secondary: rate.secondary, planType: rate.planType } : null
-          return done(null, { rateLimits: clean(message.result.rateLimits), rateLimitsByLimitId: message.result.rateLimitsByLimitId?.codex ? { codex: clean(message.result.rateLimitsByLimitId.codex) } : undefined })
+          return done(null, { rateLimitResetCredits: message.result.rateLimitResetCredits ?? null, rateLimits: clean(message.result.rateLimits), rateLimitsByLimitId: message.result.rateLimitsByLimitId?.codex ? { codex: clean(message.result.rateLimitsByLimitId.codex) } : undefined })
         }
       }
     })
@@ -41,6 +45,6 @@ export function readCodexLimits({ file = 'codex', args = ['app-server'], timeout
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try { console.log(JSON.stringify(await readCodexLimits())) }
+  try { console.log(JSON.stringify(await readCodexLimits({ reset: process.argv[2] === '--reset-credit' ? { requestId: process.argv[3], creditId: process.argv[4] } : null }))) }
   catch (error) { console.error(error.message); process.exitCode = 1 }
 }
