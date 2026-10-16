@@ -27,11 +27,17 @@ test('the decider asks for one of the table ids and reads only a valid answer', 
 
 test('an unclear activity goes to the decider, and the lead proposes table changes the person decides', async () => {
   const asked: string[] = []
+  let inFlight = 0
+  let peak = 0
   const run: Run = async (command) => {
     if (command.endsWith('codex login status')) return { code: 0, stdout: 'Logged in using ChatGPT\n', stderr: '' }
     if (command.endsWith('claude auth status')) return { code: 0, stdout: JSON.stringify({ loggedIn: true, authMethod: 'claude.ai' }), stderr: '' }
     if (command.startsWith('claude -p') && command.includes('--json-schema')) {
       asked.push(command)
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await new Promise((resolve) => setTimeout(resolve, 25))
+      inFlight--
       return { code: 0, stdout: JSON.stringify({ structured_output: { kind: 'investigacao', why: 'lentidão pede medir antes' } }), stderr: '' }
     }
     return { code: 127, stdout: '', stderr: 'offline' }
@@ -74,13 +80,23 @@ test('an unclear activity goes to the decider, and the lead proposes table chang
     assert.equal(asked.length, 1)
     assert.match(asked[0]!, /^claude -p --model claude-haiku-5-5 --settings '\{"disableAllHooks":true\}' --strict-mcp-config --tools "" --no-session-persistence/)
     assert.doesNotMatch(asked[0]!, /oito|8 segundos/, 'the activity goes through a file, never the command line')
+    // Distinct ambiguous activities classify concurrently; the duplicate reserves no model call.
+    const batch = await call('agent_spawn_many', { helpers: [
+      { title: 'Lista B', task: 'A lista de clientes demora muito' },
+      { title: 'Lista C', task: 'A lista de produtos demora muito' },
+      { title: 'Lista B repetida', task: 'A lista de clientes demora muito' },
+    ] })
+    assert.equal(peak, 2, 'batch classification must run in parallel')
+    assert.equal(asked.length, 3, 'one original classification and two distinct batch activities')
+    assert.match(batch, /reutilizado/)
+    const classifiedCount = asked.length
     // A keyword is enough: no model call.
     await call('agent_spawn', { title: 'Testes', task: 'Escreva testes para o carrinho' })
-    assert.equal(asked.length, 1)
+    assert.equal(asked.length, classifiedCount)
     // Switched off: the default stands.
     ui.send({ type: 'settings.save', settings: { resumeOnStart: true, smartClassify: false, agentsInEnglish: true } })
     await ui.next('settings.updated')
-    assert.match(await call('agent_spawn', { title: 'Lista', task: 'A lista de pedidos leva 8 segundos' }), /▸ tipo: Funcionalidade \(o maestro classificou; padrão\)/)
+    assert.match(await call('agent_spawn', { title: 'Lista', task: 'A lista de pedidos leva 8 segundos', readOnly: true }), /▸ tipo: Funcionalidade \(o maestro classificou; padrão\)/)
 
     // The lead proposes; nothing changes until the person decides.
     assert.match(await call('routing_propose', { kind: 'testes', effort: 'turbo', reason: 'x' }), /Invalid|inválid/i)

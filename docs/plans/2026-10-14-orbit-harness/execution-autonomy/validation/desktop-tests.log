@@ -1,0 +1,16 @@
+npm notice run @orbit/desktop@0.2.14 test
+npm notice run node --test "src/**/*.test.ts"
+✔ missing cost, reported zero and partial known subtotals remain distinguishable (0.876125ms)
+✔ a historical ready declaration never overrides disconnected, unknown, stale or waived verification (0.4035ms)
+✔ permission, budget and unresolved work take precedence over a ready declaration (0.100584ms)
+✔ waiting, handoffs and exits become notices as the person chose (1.5215ms)
+✔ a Claude agent finishing a long turn is a notice; quick answers and Codex are not (0.184416ms)
+✔ progress requests ignore unrelated errors and match the response request id (17.464959ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 165.847292

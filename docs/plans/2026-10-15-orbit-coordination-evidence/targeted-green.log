@@ -1,0 +1,19 @@
+✔ an explicit ACK context supplies the delivery contract without accepting code or repeating lookups (367.163125ms)
+✔ ACK context is bounded, identifies superseded results and preserves recipient/epoch authorization (258.559542ms)
+✔ dependencies require acceptance, pin an exact result and become invalid when that prerequisite is retried (668.025667ms)
+✔ a newer done result invalidates an inspection even when source bytes did not change (117.653333ms)
+✔ review persistence fails closed and rolls back acceptance when disk commit fails (201.232333ms)
+✔ lead and helper coordinate through MCP, handoffs and hooks (430.393041ms)
+✔ an agent reads a packaged skill through authenticated MCP without executing its content (82.545625ms)
+✔ recovery evidence retains an observed session after its pane is closed (3.59575ms)
+✔ a later observed session replaces the prior identity instead of concealing a mismatch (0.081583ms)
+✔ recovery audit rejects missing sessions, changed identities and epochs that were not renewed (0.194458ms)
+✔ real Store and simulated PTYs retain recovery identity and zero replay after the helper is closed (286.904125ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1186.913042

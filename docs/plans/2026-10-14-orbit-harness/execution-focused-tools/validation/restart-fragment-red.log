@@ -1,0 +1,21 @@
+✔ resuming continues the CLI conversation; the role is not sent again, only a new message (0.593ms)
+Restart diagnostic: timeout waiting for pane.data
+✖ agents are renamed, duplicated, reopened, and resumed even after Orbit restarts (5122.943292ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5368.465291
+
+✖ failing tests:
+
+test at packages/sidecar/test/restart.test.ts:28:1
+✖ agents are renamed, duplicated, reopened, and resumed even after Orbit restarts (5122.943292ms)
+  Error: timeout waiting for pane.data
+      at Object.next (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/helpers.ts:37:40)
+      at async TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/restart.test.ts:60:47)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)

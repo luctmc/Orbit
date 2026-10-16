@@ -1,0 +1,17 @@
+✔ an explicit ACK context supplies the delivery contract without accepting code or repeating lookups (340.206833ms)
+✔ ACK context is bounded, identifies superseded results and preserves recipient/epoch authorization (306.610167ms)
+✔ lead and helper coordinate through MCP, handoffs and hooks (415.611916ms)
+ℹ {"measurement":"same-delivery-context","baselineReads":4,"compactReads":1,"baselineReplyBytes":2979,"compactReplyBytes":1512,"unit":"UTF-8 bytes; not provider tokens"}
+✔ an agent reads a packaged skill through authenticated MCP without executing its content (86.498417ms)
+✔ recovery evidence retains an observed session after its pane is closed (0.86025ms)
+✔ a later observed session replaces the prior identity instead of concealing a mismatch (0.085417ms)
+✔ recovery audit rejects missing sessions, changed identities and epochs that were not renewed (0.203334ms)
+✔ real Store and simulated PTYs retain recovery identity and zero replay after the helper is closed (279.352083ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 834.828792

@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "checks": [
+    {
+      "command": "apps/desktop/build/node/node --test packages/sidecar/test/**/*.test.ts",
+      "exitCode": 0,
+      "passed": 201,
+      "log": "node24-tests.log"
+    },
+    {
+      "command": "apps/desktop/build/node/node --test apps/desktop/src/orbit/*.test.ts",
+      "exitCode": 0,
+      "passed": 6,
+      "log": "desktop-tests.log"
+    },
+    {
+      "command": "apps/desktop/build/node/node --test packages/sidecar/test/toolProfile.test.ts packages/sidecar/test/restart.test.ts",
+      "exitCode": 0,
+      "passed": 7,
+      "log": "profile-final.log"
+    },
+    {
+      "command": "apps/desktop/build/node/node --test scripts/lib/autonomy-observations.test.mjs",
+      "exitCode": 0,
+      "passed": 2,
+      "log": "observations-green.log"
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "log": "typecheck.log"
+    },
+    {
+      "command": "npm run tauri -w @orbit/desktop -- build --debug",
+      "exitCode": 0,
+      "log": "build.log"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "log": "diff-check.log"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "packages/sidecar/hooks/codex-profile.mjs",
+      "sha256": "85d9033f230a0d3532864067a7c311b93c4beb5e8231afcd13dc05d026264ae5"
+    },
+    {
+      "path": "apps/desktop/build/sidecar/hooks/codex-profile.mjs",
+      "sha256": "85d9033f230a0d3532864067a7c311b93c4beb5e8231afcd13dc05d026264ae5"
+    },
+    {
+      "path": "apps/desktop/src-tauri/target/debug/bundle/macos/Orbit.app/Contents/Resources/sidecar/hooks/codex-profile.mjs",
+      "sha256": "85d9033f230a0d3532864067a7c311b93c4beb5e8231afcd13dc05d026264ae5"
+    },
+    {
+      "path": "apps/desktop/src-tauri/target/debug/bundle/macos/Orbit.app/Contents/Resources/sidecar/dist/index.mjs",
+      "sha256": "5fa565924a24fe578578c0c97dbd58a1dffe382b29e6d9e85b55e82f734aadfc"
+    },
+    {
+      "path": "apps/desktop/src-tauri/target/debug/bundle/macos/Orbit.app/Contents/Resources/node/node",
+      "sha256": "e4b5a3af0e05c75de2eae013904145f40fe7fc2a6e6f17510128bf45cca4e79b"
+    },
+    {
+      "path": "apps/desktop/src-tauri/target/debug/bundle/macos/Orbit.app/Contents/MacOS/orbit-desktop",
+      "sha256": "1283a4251aaa42950089cdf32da791843421e33cd2ba6c0c4ec34bca63ec20e3"
+    }
+  ],
+  "nativeManifests": [
+    {
+      "name": "forward-1",
+      "manifestSha256": "a2e1524a552c548f6e3d0a8528c8bb49820023ad17f3adf3d73dfe168eb6e603",
+      "sourceRevision": "b7c1ebcf4a187bdab5e02abf0482c01a619dd25d394d3134ab6230b982b1b0dc",
+      "runtime": {
+        "node": "v24.21.0",
+        "claude": "2.1.296 (Claude Code)",
+        "codex": "codex-cli 0.162.1"
+      },
+      "pins": {
+        "claude": "claude-haiku-5-5",
+        "codex": "gpt-6-luna"
+      }
+    },
+    {
+      "name": "reverse-1",
+      "manifestSha256": "1420383db2f481e03916bdac8e7651dd8b2bb3a5d7f8d2035db2fa0bc661eb08",
+      "sourceRevision": "b7c1ebcf4a187bdab5e02abf0482c01a619dd25d394d3134ab6230b982b1b0dc",
+      "runtime": {
+        "node": "v24.21.0",
+        "claude": "2.1.296 (Claude Code)",
+        "codex": "codex-cli 0.162.1"
+      },
+      "pins": {
+        "claude": "claude-haiku-5-5",
+        "codex": "gpt-6-luna"
+      }
+    }
+  ],
+  "postPilotSupervisorFix": {
+    "path": "scripts/lib/autonomy-observations.mjs",
+    "sha256": "b4191f36bfc1992db1310653436358159d33c185ce11feb136b1a940384b8962",
+    "nativeRetest": false
+  },
+  "ui": {
+    "origin": "http://127.0.0.1:5275",
+    "fixtureOnly": true,
+    "defaultChecked": true,
+    "inheritPersistedAfterReload": true,
+    "keyboardSpaceRestored": true,
+    "screenshot": "../settings-focused.png",
+    "tabClosed": true,
+    "serverClosed": true
+  }
+}

@@ -196,6 +196,10 @@ function ResumeOnStart() {
   return (
     <div className="routing__options">
       <label className="check">
+        <input type="checkbox" checked={(settings.agentToolProfile ?? 'orbit') === 'orbit'} onChange={(e) => save({ agentToolProfile: e.target.checked ? 'orbit' : 'inherit' })} />
+        <span>Claude e Codex carregam só as ferramentas do Orbit, além das ferramentas nativas de código. Desmarque para incluir todas as integrações configuradas. Vale na próxima abertura ou retomada; uma conversa nova evita carregar o contexto antigo.</span>
+      </label>
+      <label className="check">
         <input type="checkbox" checked={settings.smartClassify} onChange={(e) => save({ smartClassify: e.target.checked })} />
         <span>Quando nenhuma palavra diz o tipo da atividade, o Claude Haiku decide pela tabela (alguns segundos e uma fração de centavo; sem ele, vale o tipo padrão)</span>
       </label>

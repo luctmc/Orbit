@@ -12,6 +12,8 @@ import { connect, offline, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 const CLAUDE_STATUS = {
   model: { id: 'claude-haiku-5-5', display_name: 'Haiku 5.5' },
   effort: { level: 'medium' },
+  // Explicit normalized cumulative transcript fixture, separate from current context.
+  orbit_session_usage: { format: 'claude-transcript-v1', input: 41242, output: 4, cacheRead: 0, cacheWrite: 0, total: 41246 },
   cost: { total_cost_usd: 0.0051 },
   context_window: { total_input_tokens: 41242, total_output_tokens: 4, context_window_size: 1000000, current_usage: { input_tokens: 2, output_tokens: 4, cache_creation_input_tokens: 41240, cache_read_input_tokens: 0 }, used_percentage: 4 },
   rate_limits: { five_hour: { used_percentage: 51, resets_at: 1791947400 }, seven_day: { used_percentage: 27, resets_at: 1792368000 } },
@@ -21,7 +23,7 @@ const codexLine = (total: number, primary = 1) => JSON.stringify({
   type: 'event_msg',
   payload: {
     type: 'token_count',
-    info: { total_token_usage: { input_tokens: total - 100, cached_input_tokens: 80, output_tokens: 90, reasoning_output_tokens: 10, total_tokens: total }, last_token_usage: { input_tokens: 47500 }, model_context_window: 475000 },
+    info: { total_token_usage: { input_tokens: total - 90, cached_input_tokens: 80, output_tokens: 90, reasoning_output_tokens: 10, total_tokens: total }, last_token_usage: { input_tokens: 47500 }, model_context_window: 475000 },
     rate_limits: { primary: { used_percent: primary, window_minutes: 300, resets_at: 1791948272 }, secondary: { used_percent: 0, window_minutes: 10080, resets_at: 1792535072 }, plan_type: 'plus' },
   },
 })
@@ -38,7 +40,7 @@ test("Codex's session file gives the latest totals and limits", () => {
   const text = [JSON.stringify({ type: 'session_meta', payload: {} }), codexLine(1000), 'linha quebrada {', codexLine(5000, 7)].join('\n')
   const report = fromCodexRollout(text, 1)
   assert.equal(report.usage!.total, 5000)
-  assert.equal(report.usage!.output, 100, 'reasoning counts as output')
+  assert.equal(report.usage!.output, 90, 'reasoning is already included in output')
   assert.equal(report.contextPercent, 10)
   assert.equal(report.limits!.fiveHour!.usedPercent, 7)
   assert.equal(report.limits!.plan, 'plus')
@@ -102,11 +104,11 @@ test('agents report usage: missions and days add up, account limits reach the UI
     await ui.next('usage.day', (m) => m.day.claude === 41246)
     await ui.next('limits', (m) => m.limits.some((l) => l.cli === 'claude' && l.fiveHour?.usedPercent === 51))
     // A later report counts only the difference.
-    await post({ ...CLAUDE_STATUS, context_window: { ...CLAUDE_STATUS.context_window, total_input_tokens: 50000 } })
+    await post({ ...CLAUDE_STATUS, context_window: { ...CLAUDE_STATUS.context_window, total_input_tokens: 50000 }, orbit_session_usage: { ...CLAUDE_STATUS.orbit_session_usage, input: 50000, total: 50004 } })
     await ui.next('mission.updated', (m) => m.mission.usage.total === 50004)
 
     // Codex agents are read from their session file.
-    ui.send({ type: 'pane.spawn', request: { missionId: mission.id, role: 'crew', cli: 'codex', model: null, title: 'codex' } })
+    ui.send({ type: 'pane.spawn', request: { missionId: mission.id, role: 'crew', cli: 'codex', model: null, title: 'codex', readOnly: true } })
     const { pane: codex } = await ui.next('pane.updated', (m) => m.pane.cli === 'codex')
     codexSession(home, cwd, Date.now(), [codexLine(7000, 3)])
     await ui.next('pane.updated', (m) => m.pane.id === codex.id && m.pane.usage?.total === 7000, 9000)

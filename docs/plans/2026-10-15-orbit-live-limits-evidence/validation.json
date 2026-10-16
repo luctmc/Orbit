@@ -1,0 +1,35 @@
+{
+  "validatedAt": "2026-10-16T01:29:03.199Z",
+  "sources": {
+    "packages/protocol/src/index.ts": "0ab508789b3d08c1e982271a1b7c87a7acb2d91645405ed7d72ae911e251a4f7",
+    "packages/sidecar/src/accountLimits.ts": "2083624815fc35ea928b8288a54b794ab8930b056f75e6ba391504f80e0ce083",
+    "packages/sidecar/hooks/read-codex-limits.mjs": "9bb2c7164b9450896c9a38d393a9f0244c9a61eb029a223e8eaa4c4332b86fff",
+    "packages/sidecar/src/core.ts": "ade85b7a6c1551b36aae0b7807922cdc94833ffd1e7de0bf34406e055957aa5b",
+    "packages/sidecar/src/store.ts": "a0ddbf699e797bd03d5c54da57bc9e7086886d996b2328091dec8cbe1356a632",
+    "packages/sidecar/src/usage.ts": "e76a9567bdf9072dbfe7a63f18896e27a607e8d07c749e5341d90816a197ce03",
+    "packages/sidecar/src/claudeUsage.ts": "d62e8e1b388e2ca6673b1015c058886079ec60e8cf5ec11acca71fb1c6be7c4a",
+    "apps/desktop/src/orbit/limitPresentation.ts": "fc59badcb20583892ae0be738da991bb97b253464ba48a24f8d4e5710c029d7f",
+    "apps/desktop/src/orbit/useLimitClock.ts": "c2da88287d31dc6f95ecc57fe398ffecb03d8b5799c3daee2fece9e20fd0effb",
+    "apps/desktop/src/components/chrome.tsx": "63a35e79c6c21468762826a5cc9d02a745daf020939287dd4d7cd13a08b39ac2",
+    "apps/desktop/src/components/AccountsPanel.tsx": "7a23113a52f5842c8155aaa99f6d52d4d66fd7d00f7baa434a25fc57ea32b631",
+    "apps/desktop/src/App.tsx": "e38d98e0734992e21fb7de472d8fa2746de0da339aabf30ffd9c0d92dafed815",
+    "apps/desktop/src/styles.css": "a786cc3c8c56701278e0e7a20a6ad16fa03c4bbe36b8befaae1e20249d1d83ff"
+  },
+  "binaryHashes": {
+    "apps/desktop/src-tauri/target/release/bundle/macos/Orbit.app/Contents/MacOS/orbit-desktop": "eb5d7482fa3927c60a98e5d530de4b984f822baeece0d775189ea6d717459230",
+    "apps/desktop/src-tauri/target/release/orbit-desktop": "eb5d7482fa3927c60a98e5d530de4b984f822baeece0d775189ea6d717459230"
+  },
+  "checks": {
+    "sidecarTests": {
+      "passed": 233,
+      "failed": 0,
+      "concurrency": 4
+    },
+    "desktopTests": {
+      "passed": 21,
+      "failed": 0
+    },
+    "typecheckExit": 0,
+    "releaseBuildExit": 0
+  }
+}

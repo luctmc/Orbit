@@ -1,0 +1,32 @@
+{
+  "id": 2,
+  "cursor": {
+    "row": 17,
+    "column": 1,
+    "before": " ",
+    "after": "❯ Yes, I trust this folder"
+  },
+  "lines": [
+    "",
+    "────────────────────────────────────────────────────────────────────────────────",
+    "────────────────────",
+    " Accessing workspace:",
+    "",
+    " /private/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-native-tab-yrC8Z",
+    "M/claude",
+    "",
+    " Quick safety check: Is this a project you created or one you trust? (Like your",
+    " own code, a well-known open source project, or work from your team). If not,",
+    " take a moment to review what's in this folder first.",
+    "",
+    " Claude Code'll be able to read, edit, and execute files here.",
+    "",
+    " Security guide",
+    "",
+    "   No, exit",
+    " ❯ Yes, I trust this folder",
+    "",
+    " Enter to confirm · Esc to cancel",
+    ""
+  ]
+}

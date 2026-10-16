@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "id": "3fa2ce01-4224-469a-90ab-16af92d6ed71",
+  "taskId": "bug-escape",
+  "taskRevision": "ff7d8800dfbc75f320c9a8aaa0f8f32be7f669a9c37b1ecd089c8fba798a621b",
+  "corpusRevision": "69d519eefdc4120ecfa27ed8476d85c2c446e49ef35b52fded37c0b02c200893",
+  "sourceRevision": "c4d7a9ffcf334a1e72e28a2f6b5e4c98d280ff84d90e5d4c759a1172f9f20eb7",
+  "mode": "offline",
+  "configuration": "eager",
+  "repetition": 2,
+  "runtime": {
+    "node": "v24.21.0",
+    "claude": null,
+    "codex": null
+  },
+  "models": {
+    "worker": "claude:claude-haiku-5-5:low",
+    "reviewer": "codex:gpt-6-luna:low"
+  },
+  "limits": {
+    "tokens": 750000,
+    "knownClaudeCostUsd": 0.1
+  },
+  "durationMs": 1005.4419589999961,
+  "firstResponseMs": null,
+  "checks": [
+    {
+      "command": "verify immutable fixture and declared write scope",
+      "exitCode": 0,
+      "summary": "Protected fixture unchanged; writes stay in declared paths"
+    },
+    {
+      "command": "node .benchmark/check-0.mjs",
+      "exitCode": 0,
+      "summary": "All reserved characters without double escaping"
+    }
+  ],
+  "accepted": true,
+  "resultReviewed": true,
+  "integrationReviewed": true,
+  "waived": false,
+  "error": null,
+  "executions": [
+    {
+      "usageSources": [],
+      "epoch": "b95aff42-9673-40eb-9e56-f46b1410863d",
+      "paneId": 1,
+      "missionId": "8ac7939f-0e2f-4cdb-914e-a526b23afee8",
+      "cli": "shell",
+      "model": null,
+      "role": "lead",
+      "spawnMs": 1.0471249999973224,
+      "firstPtyOutputMs": 982.6088749999981,
+      "initialBytes": 0,
+      "sourceBytes": 0,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 904,
+      "submittedMessages": 2,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    },
+    {
+      "usageSources": [],
+      "epoch": "791f7b80-23d0-4fdf-bafc-79549af2ca14",
+      "paneId": 2,
+      "missionId": "8ac7939f-0e2f-4cdb-914e-a526b23afee8",
+      "cli": "claude",
+      "model": "claude-haiku-5-5",
+      "role": "crew",
+      "spawnMs": 4.787834000002476,
+      "firstPtyOutputMs": null,
+      "initialBytes": 4217,
+      "sourceBytes": 4217,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    },
+    {
+      "usageSources": [],
+      "epoch": "771ca4ec-3311-4c3a-9aad-fc76492f51b2",
+      "paneId": 3,
+      "missionId": "8ac7939f-0e2f-4cdb-914e-a526b23afee8",
+      "cli": "codex",
+      "model": "gpt-6-luna",
+      "role": "crew",
+      "spawnMs": 5.578125,
+      "firstPtyOutputMs": null,
+      "initialBytes": 4278,
+      "sourceBytes": 4278,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    }
+  ],
+  "auxiliaryCalls": [],
+  "attempts": 2,
+  "retries": 0,
+  "reopenings": 0,
+  "results": 2
+}

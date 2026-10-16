@@ -1,0 +1,54 @@
+{
+  "at": "2026-10-16T01:31:28.098Z",
+  "automaticRefreshVerified": true,
+  "limits": [
+    {
+      "cli": "codex",
+      "fiveHour": {
+        "usedPercent": 81,
+        "resetsAt": 1792125808000,
+        "windowMinutes": 300
+      },
+      "weekly": {
+        "usedPercent": 58,
+        "resetsAt": 1792657499000,
+        "windowMinutes": 10080
+      },
+      "plan": "plus",
+      "updatedAt": 1792114278440,
+      "checkedAt": 1792114278440,
+      "source": "provider",
+      "refreshError": null,
+      "accountId": "codex"
+    },
+    {
+      "accountId": "claude",
+      "cli": "claude",
+      "fiveHour": {
+        "usedPercent": 0,
+        "resetsAt": 1792127940000,
+        "windowMinutes": 300
+      },
+      "weekly": {
+        "usedPercent": 84,
+        "resetsAt": 1792367940000,
+        "windowMinutes": 10080
+      },
+      "plan": null,
+      "updatedAt": 1792114278619,
+      "checkedAt": 1792114278619,
+      "source": "provider",
+      "refreshError": null
+    }
+  ],
+  "panes": [
+    {
+      "id": 7,
+      "status": "idle"
+    },
+    {
+      "id": 8,
+      "status": "idle"
+    }
+  ]
+}

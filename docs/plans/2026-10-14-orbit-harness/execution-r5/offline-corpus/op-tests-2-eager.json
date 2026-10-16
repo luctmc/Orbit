@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "id": "104742b8-8bb2-41d2-be24-2f64dd0f5528",
+  "taskId": "op-tests",
+  "taskRevision": "86dba3abec8bb1fca3091e443f2e0896a2b69577d2342d8db983c4d0495fb891",
+  "corpusRevision": "69d519eefdc4120ecfa27ed8476d85c2c446e49ef35b52fded37c0b02c200893",
+  "sourceRevision": "6dfdf3c91327b03fc947a8db8292300dd2fd58d1cb4a2bdf2b5bb20c5dec16aa",
+  "mode": "offline",
+  "configuration": "eager",
+  "repetition": 2,
+  "runtime": {
+    "node": "v24.21.0",
+    "claude": null,
+    "codex": null
+  },
+  "models": {
+    "worker": "claude:claude-haiku-5-5:low",
+    "reviewer": "codex:gpt-6-luna:low"
+  },
+  "durationMs": 1058.5449579999986,
+  "firstResponseMs": null,
+  "checks": [
+    {
+      "command": "verify immutable fixture and declared write scope",
+      "exitCode": 0,
+      "summary": "Protected fixture unchanged; writes stay in declared paths"
+    },
+    {
+      "command": "node .benchmark/check-0.mjs",
+      "exitCode": 0,
+      "summary": "The fixed unit suite passes"
+    }
+  ],
+  "accepted": true,
+  "resultReviewed": true,
+  "integrationReviewed": true,
+  "waived": false,
+  "error": null,
+  "executions": [
+    {
+      "epoch": "d61b0e45-e63f-4ff4-9b7a-545448dc37c0",
+      "paneId": 1,
+      "missionId": "3bcbc516-ace3-4c4f-aec3-4dab8515e54f",
+      "cli": "shell",
+      "model": null,
+      "role": "lead",
+      "spawnMs": 1.2114589999982854,
+      "firstPtyOutputMs": 1038.9832089999982,
+      "initialBytes": 0,
+      "sourceBytes": 0,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 902,
+      "submittedMessages": 2,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    },
+    {
+      "epoch": "ad033807-bac8-42f8-813a-f2d7b50ff6d1",
+      "paneId": 2,
+      "missionId": "3bcbc516-ace3-4c4f-aec3-4dab8515e54f",
+      "cli": "claude",
+      "model": "claude-haiku-5-5",
+      "role": "crew",
+      "spawnMs": 3.8004170000021986,
+      "firstPtyOutputMs": null,
+      "initialBytes": 4120,
+      "sourceBytes": 4120,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    },
+    {
+      "epoch": "da139cf7-18a6-4bf8-ab4f-ebd12b3183eb",
+      "paneId": 3,
+      "missionId": "3bcbc516-ace3-4c4f-aec3-4dab8515e54f",
+      "cli": "codex",
+      "model": "gpt-6-luna",
+      "role": "crew",
+      "spawnMs": 4.69800000000032,
+      "firstPtyOutputMs": null,
+      "initialBytes": 4276,
+      "sourceBytes": 4276,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    }
+  ],
+  "auxiliaryCalls": [],
+  "attempts": 2,
+  "retries": 0,
+  "reopenings": 0,
+  "results": 2
+}

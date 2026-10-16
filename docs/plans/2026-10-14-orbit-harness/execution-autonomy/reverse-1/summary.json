@@ -1,0 +1,33 @@
+{
+  "initialExit": {
+    "code": 0,
+    "signal": null
+  },
+  "recoveryExit": null,
+  "recoveryError": null,
+  "passed": false,
+  "error": "Stopped or six-minute phase timeout; no automatic retry",
+  "evaluation": {
+    "passed": false,
+    "issues": [
+      "No ready mission with a current final integration review",
+      "Independent protected oracle did not pass",
+      "Expected exactly implementation and review, without duplicated attempts",
+      "No worker result independently accepted by a helper on the opposite CLI",
+      "Reviewer did not deliver an independently accepted result",
+      "Expected two final deliveries, without repeated implementation"
+    ],
+    "workerResultId": null,
+    "reviewerResultId": null
+  },
+  "missionUsage": {
+    "input": 603460,
+    "output": 3815,
+    "cacheRead": 546037,
+    "cacheWrite": 57407,
+    "total": 607275,
+    "costUsd": 0.014789
+  },
+  "openings": 2,
+  "output": "/Users/lucas/Documents/GitHub/Orbit/docs/plans/2026-10-14-orbit-harness/execution-autonomy/reverse-1"
+}

@@ -1,9 +1,13 @@
-import type { Account, AccountLimits, RateWindow, Workspace } from '@orbit/protocol'
+import type { Account, AccountLimits, Workspace } from '@orbit/protocol'
 import type { OrbitState } from '../orbit/client.ts'
 import { accountLabel } from '../orbit/labels.ts'
 import { untilTime } from '../orbit/time.ts'
 import { useAppUpdater } from '../orbit/updater.ts'
-import { HomeIcon, OrbitMark, PlusIcon } from './icons.tsx'
+import { HomeIcon, OrbitMark, PlusIcon, ReloadIcon } from './icons.tsx'
+import { useOrbitClient } from '../orbit/context.tsx'
+import { limitWindowView, limitReadLabel, limitMetric } from '../orbit/limitPresentation.ts'
+import { useLimitClock } from '../orbit/useLimitClock.ts'
+import { ActionMenu } from './ActionMenu.tsx'
 
 const CONNECTION_LABEL: Record<OrbitState['connection'], string> = {
   connecting: 'Conectando ao motor…',
@@ -13,6 +17,8 @@ const CONNECTION_LABEL: Record<OrbitState['connection'], string> = {
 
 export function TitleBar({ connection, liveAgents, limits, accounts, onAbout }: { connection: OrbitState['connection']; liveAgents: number; limits: AccountLimits[]; accounts: Account[]; onAbout: () => void }) {
   const updater = useAppUpdater()
+  const client = useOrbitClient()
+  const now = useLimitClock()
   return (
     // data-tauri-drag-region only applies to the element itself, so every non-interactive piece carries it.
     <header className="titlebar" data-tauri-drag-region>
@@ -28,8 +34,9 @@ export function TitleBar({ connection, liveAgents, limits, accounts, onAbout }: 
       <div className="titlebar__status">
         {accounts.map((a) => {
           const l = limits.find((x) => x.accountId === a.id)
-          return l ? <LimitMeter key={a.id} limits={l} name={accountLabel(a, a.cli)} /> : null
+          return l ? <LimitMeter key={a.id} limits={l} name={accountLabel(a, a.cli)} now={now} /> : null
         })}
+        <button type="button" className="icon-btn limits-refresh" aria-label="Atualizar limites" title="Consultar limites atuais. Atualização automática a cada 30 s; falhas usam espera progressiva." disabled={connection !== 'open'} onClick={() => client.send({ type: 'limits.refresh' })}><ReloadIcon size={14} /></button>
         <span className="muted">{liveAgents} {liveAgents === 1 ? 'agente vivo' : 'agentes vivos'}</span>
         <span className="status-pill" data-state={connection}>
           <span className={`dot ${connection === 'open' ? 'dot--live' : connection === 'closed' ? 'dot--wait' : 'dot--idle'}`} />
@@ -40,36 +47,25 @@ export function TitleBar({ connection, liveAgents, limits, accounts, onAbout }: 
   )
 }
 
-/** A window that already reset counts as unused until the next report. */
-function windowUse(w: RateWindow | null, now: number): { percent: number; reset: string } | null {
-  if (!w) return null
-  const fresh = w.resetsAt > now
-  return { percent: fresh ? Math.round(w.usedPercent) : 0, reset: fresh ? `renova ${untilTime(w.resetsAt, now)}` : 'renovado' }
-}
-
 const level = (percent: number) => (percent >= 90 ? 'danger' : percent >= 70 ? 'wait' : 'ok')
 
-/** The account's 5-hour and weekly use, as the CLI last reported it. */
-function LimitMeter({ limits, name: label }: { limits: AccountLimits; name: string }) {
-  const now = Date.now()
-  const windows: Array<[string, { percent: number; reset: string }]> = []
-  for (const [label, raw] of [['5 h', limits.fiveHour], ['semana', limits.weekly]] as const) {
-    const use = windowUse(raw, now)
-    if (use) windows.push([label, use])
-  }
-  if (windows.length === 0) return null
+/** Each provider's native metric: Claude used, Codex remaining. */
+function LimitMeter({ limits, name: label, now }: { limits: AccountLimits; name: string; now: number }) {
+  const windows = [limits.fiveHour, limits.weekly].filter(raw => raw !== null).map(raw => ({ ...limitWindowView(raw, limits, now), reset: raw.resetsAt > now ? `renova ${untilTime(raw.resetsAt, now)}` : 'aguardando atualização' }))
   const name = `${label}${limits.plan ? ` (${limits.plan})` : ''}`
-  const detail = windows.map(([label, w]) => `${label}: ${w.percent}% usado, ${w.reset}`).join('\n')
+  const detail = `${windows.map(w => `${w.label}: ${w.percent === null ? 'sem leitura atual' : `${w.percent}% ${w.metric}`}, ${w.reset}`).join('\n')}\n${limitReadLabel(limits, now)}`
   return (
     <span className="limit" role="group" aria-label={`Limites de ${name}. ${detail}`} title={`Limites de ${name}\n${detail}`}>
-      <span className="limit__cli">{label}</span>
-      {windows.map(([label, w]) => (
-        <span key={label} className="limit__window" data-level={level(w.percent)}>
-          <span className="limit__label">{label}</span>
-          <span className="limit__bar" aria-hidden="true"><span style={{ width: `${Math.min(100, w.percent)}%` }} /></span>
-          <span className="limit__value">{w.percent}%</span>
+      <span className="limit__cli">{label} · {limitMetric(limits.cli)}</span>
+      {windows.length === 0 && <span className="limit__label">sem leitura</span>}
+      {windows.map(w => (
+        <span key={w.label} className="limit__window" data-level={level(w.used ?? 0)}>
+          <span className="limit__label">{w.label}</span>
+          <span className="limit__bar" aria-hidden="true"><span style={{ width: `${w.percent ?? 0}%` }} /></span>
+          <span className="limit__value">{w.percent === null ? '—' : `${w.percent}%`}</span>
         </span>
       ))}
+      {limits.refreshError && <span title={limits.refreshError} aria-label="Falha na atualização dos limites">!</span>}
     </span>
   )
 }
@@ -89,7 +85,7 @@ export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSele
 }) {
   return (
     <nav className="tabs" aria-label="Workspaces">
-      <button className="tabs__home" aria-label="Base" aria-current={homeActive} title="Base" onClick={onHome}><HomeIcon size={18} /></button>
+      <button className="tabs__home" aria-label="Início" aria-current={homeActive} title="Início" onClick={onHome}><HomeIcon size={18} /><span>Início</span></button>
       <div className="tabs__list">
         {workspaces.map((w) => (
           <button key={w.id} aria-current={w.id === activeId} className="tab" title={w.folders.join('\n')} onClick={() => onSelect(w.id)}>
@@ -98,10 +94,12 @@ export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSele
         ))}
         <button className="icon-btn" aria-label="Novo workspace" onClick={onOpen}><PlusIcon size={15} /></button>
       </div>
-      <button className="btn btn--ghost btn--sm" onClick={onSquads}>Squads</button>
-      <button className="btn btn--ghost btn--sm" onClick={onSettings} aria-label={pendingProposals ? `Ajustes, ${pendingProposals} ${pendingProposals === 1 ? 'proposta' : 'propostas'} para a tabela` : 'Ajustes'} title="Quem faz cada tarefa">
-        Ajustes{pendingProposals > 0 && <span className="count-badge" aria-hidden="true">{pendingProposals}</span>}
-      </button>
+      <ActionMenu label="Ambiente">
+        <span className="eyebrow">Seu Orbit</span>
+        <button type="button" onClick={onOpen}>Novo workspace<span>Conectar pastas de um projeto</span></button>
+        <button type="button" onClick={onSquads}>Equipes e squads<span>Organizar papéis e especialidades</span></button>
+        <button type="button" onClick={onSettings}>Configurações{pendingProposals > 0 && <span className="count-badge">{pendingProposals} propostas</span>}<span>Contas, CLIs, modelos e ferramentas</span></button>
+      </ActionMenu>
       {onNewMission && (
         <button className="btn btn--primary btn--sm" onClick={onNewMission}><PlusIcon size={14} />Nova missão</button>
       )}

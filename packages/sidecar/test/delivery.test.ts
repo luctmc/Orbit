@@ -1,4 +1,5 @@
 import { test } from 'node:test'
+import { acceptSyntheticResult } from './reviewFixture.ts'
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -114,19 +115,24 @@ test('helpers always report back: forced handoff, structured status, interrupt, 
     assert.equal(await hook(helperToken, { hook_event_name: 'Stop', stop_hook_active: false }), null)
     assert.match((await asLead('agent_close', { agent: helperId })).text, /ainda não entregou/)
     assert.match((await asLead('mission_ready', { summary: 'Cadastro feito' })).text, new RegExp(`falta retorno de #${helperId}`))
+    assert.match((await asLead('mission_ready', { summary: 'Cadastro feito', force: true })).text, /dispensar/)
+    const pendingStatus = JSON.parse((await asLead('mission_status', {})).text)
+    assert.ok(pendingStatus.pendingDeliveries.some((d: { paneId: number; status: string }) => d.paneId === helperId && d.status === 'progress'))
 
     // A real delivery reaches the lead with its status and evidence; then the mission can be ready.
     const delivered = leadSees(`Retorno de #${helperId} (Banco), conclu`)
-    assert.match((await asHelper('handoff_submit', { summary: 'Tabela clientes criada', evidence: 'sqlite3 .schema mostra clientes' })).text, new RegExp(`entregue a #${lead.id}`))
+    assert.match((await asHelper('handoff_submit', { summary: 'Tabela clientes criada', evidence: 'sqlite3 .schema mostra clientes' })).text, new RegExp(`enfileirado para #${lead.id}`))
     await delivered
     assert.match(lastHandoff().body, /^Tabela clientes criada\n\nEvidência: sqlite3/)
+    const deliveredResult = server.core.store.activityHistory(mission.id).results.findLast(r => r.status === 'done')!
+    acceptSyntheticResult(server.core, lead, deliveredResult.id)
     assert.match((await asLead('mission_ready', { summary: 'Cadastro feito por #' + helperId })).text, /pronta/)
     const ready = (await ui.next('mission.updated', (m) => m.mission.id === mission.id && m.mission.readyAt !== null)).mission
     assert.equal(ready.readySummary, `Cadastro feito por #${helperId}`)
     await ui.next('event.added', (m) => m.event.kind === 'mission.ready')
 
     // New work after "ready" reopens the mission. A handoff can go to another agent, who then owes one.
-    const reviewerId = Number(/#(\d+) Revisor/.exec((await asLead('agent_spawn', { title: 'Revisor', task: 'Revise o que #N mandar', agent: 'codex' })).text)![1])
+    const reviewerId = Number(/#(\d+) Revisor/.exec((await asLead('agent_spawn', { title: 'Revisor', task: 'Revise o que #N mandar', agent: 'codex', readOnly: true })).text)![1])
     assert.equal(server.core.store.mission(mission.id)!.readyAt, null)
     await asLead('agent_send', { agent: helperId, message: 'Mande a tabela para o revisor' })
     await asHelper('handoff_submit', { summary: 'Para revisar: tabela clientes', evidence: 'schema anexo', to: reviewerId })

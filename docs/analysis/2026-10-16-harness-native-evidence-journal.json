@@ -1,0 +1,174 @@
+{
+  "version": 1,
+  "batches": [
+    {
+      "id": "63c3fd24-d524-4dce-abcd-791a12112ccf",
+      "mode": "simulated",
+      "manifest": {
+        "version": 1,
+        "sourceRevision": "b436f5f0eb8e8cd3cfad97eae2f846805445304d68495123c28e6bb917f68a70",
+        "corpusRevision": "69d519eefdc4120ecfa27ed8476d85c2c446e49ef35b52fded37c0b02c200893",
+        "oracleRevision": "28ea22fedd5aba2d940b0ae972ab95818d0d9e171d45b90e3cf25cba0f1c05b5",
+        "candidates": [
+          {
+            "cli": "codex",
+            "model": "offline-fixture",
+            "effort": "low",
+            "cliVersion": "simulation",
+            "catalogRevision": "a66666dbce2d2689a2a0b1e03db0b8e8364a597baf252b300337e5b2dd7a6eff"
+          }
+        ],
+        "strategies": [
+          {
+            "version": 1,
+            "policyVersion": "orbit-harness-v1",
+            "stratum": "[\"operacao\",\"normal\",false,false]",
+            "key": "5a3c36f96644395eab283f5d0755c05b34b6585851f5ab5b3ebb8ea8fcab98cc",
+            "modules": [
+              "inspect",
+              "implement",
+              "verify",
+              "deliver"
+            ],
+            "optionalContextBytes": 2000,
+            "readOnly": false,
+            "requireReadOnlySandbox": false,
+            "independentReviewRequired": true,
+            "qualityFloor": 0.85
+          },
+          {
+            "version": 1,
+            "policyVersion": "orbit-harness-v1",
+            "stratum": "[\"bug\",\"normal\",false,false]",
+            "key": "68294c3d36aceb31f891c5b4afa5d3f2af339d034a849549f31d7d5449ed517b",
+            "modules": [
+              "inspect",
+              "reproduce",
+              "implement",
+              "verify",
+              "deliver"
+            ],
+            "optionalContextBytes": 2000,
+            "readOnly": false,
+            "requireReadOnlySandbox": false,
+            "independentReviewRequired": true,
+            "qualityFloor": 0.85
+          }
+        ],
+        "repetitions": 1,
+        "cases": [
+          {
+            "id": "op-build",
+            "revision": "85fa410b5c7006772ce92e54013ec5f84bdcf78fa678f0d02bda5fbd71baaeac",
+            "projectId": "synthetic-project-0",
+            "partition": "calibration",
+            "strategyKey": "5a3c36f96644395eab283f5d0755c05b34b6585851f5ab5b3ebb8ea8fcab98cc"
+          },
+          {
+            "id": "bug-mean",
+            "revision": "3dd6aec9bb8b9bcd64959928d32ef04516ffb5f54c5e87366e770319683a218c",
+            "projectId": "synthetic-project-1",
+            "partition": "holdout",
+            "strategyKey": "68294c3d36aceb31f891c5b4afa5d3f2af339d034a849549f31d7d5449ed517b"
+          }
+        ]
+      },
+      "cells": [
+        {
+          "id": "f986fc86-461d-4b0c-82e1-e0d77b158f83",
+          "caseId": "op-build",
+          "candidate": {
+            "cli": "codex",
+            "model": "offline-fixture",
+            "effort": "low",
+            "cliVersion": "simulation",
+            "catalogRevision": "a66666dbce2d2689a2a0b1e03db0b8e8364a597baf252b300337e5b2dd7a6eff"
+          },
+          "repetition": 1,
+          "reservedAt": 1792156071466,
+          "observation": {
+            "exitCode": 0,
+            "error": null,
+            "durationMs": 50.778042,
+            "observedAt": 1792156071520,
+            "checks": [
+              {
+                "command": "verify immutable fixture and declared write scope",
+                "exitCode": 0,
+                "summary": "Protected fixture unchanged; writes stay in declared paths"
+              },
+              {
+                "command": "node .benchmark/check-0.mjs",
+                "exitCode": 0,
+                "summary": "Build artifact contains actual source routes and build flag"
+              }
+            ],
+            "identity": {
+              "models": [],
+              "efforts": [],
+              "level": "unknown",
+              "complete": false
+            },
+            "usage": {
+              "input": null,
+              "output": null,
+              "cacheRead": null,
+              "cacheWrite": null,
+              "total": null,
+              "costUsd": null
+            }
+          }
+        },
+        {
+          "id": "d002b40b-4b01-49f2-8e68-19290c834d68",
+          "caseId": "bug-mean",
+          "candidate": {
+            "cli": "codex",
+            "model": "offline-fixture",
+            "effort": "low",
+            "cliVersion": "simulation",
+            "catalogRevision": "a66666dbce2d2689a2a0b1e03db0b8e8364a597baf252b300337e5b2dd7a6eff"
+          },
+          "repetition": 1,
+          "reservedAt": 1792156071529,
+          "observation": {
+            "exitCode": 0,
+            "error": null,
+            "durationMs": 24.058290999999997,
+            "observedAt": 1792156071556,
+            "checks": [
+              {
+                "command": "verify immutable fixture and declared write scope",
+                "exitCode": 0,
+                "summary": "Protected fixture unchanged; writes stay in declared paths"
+              },
+              {
+                "command": "node .benchmark/check-0.mjs",
+                "exitCode": 0,
+                "summary": "Empty and mixed numeric arrays"
+              }
+            ],
+            "identity": {
+              "models": [],
+              "efforts": [],
+              "level": "unknown",
+              "complete": false
+            },
+            "usage": {
+              "input": null,
+              "output": null,
+              "cacheRead": null,
+              "cacheWrite": null,
+              "total": null,
+              "costUsd": null
+            }
+          }
+        }
+      ],
+      "createdAt": 1792156071460
+    }
+  ],
+  "promotions": [],
+  "activeId": null,
+  "transitions": []
+}

@@ -32,7 +32,7 @@ if (status.effort?.level) parts.push(`esforço ${status.effort.level}`)
 const ctx = status.context_window
 if (ctx && typeof ctx.total_input_tokens === 'number') {
   const total = ctx.total_input_tokens + (ctx.total_output_tokens ?? 0)
-  parts.push(`${total >= 1e6 ? `${(total / 1e6).toFixed(1)} mi` : total >= 1e3 ? `${Math.round(total / 1e3)} mil` : total} tokens`)
+  parts.push(`${total >= 1e6 ? `${(total / 1e6).toFixed(1)} mi` : total >= 1e3 ? `${Math.round(total / 1e3)} mil` : total} tokens no contexto`)
 }
 if (typeof ctx?.used_percentage === 'number') parts.push(`contexto ${ctx.used_percentage}%`)
 const five = status.rate_limits?.five_hour

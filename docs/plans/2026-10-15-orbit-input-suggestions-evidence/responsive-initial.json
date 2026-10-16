@@ -1,0 +1,74 @@
+[
+  {
+    "buttons": [
+      {
+        "h": 44,
+        "w": 97.578125
+      },
+      {
+        "h": 44,
+        "w": 44
+      }
+    ],
+    "ghostFont": "16px",
+    "inputFont": "16px",
+    "inputVisible": false,
+    "overflow": false,
+    "suggestionVisible": true,
+    "width": 375
+  },
+  {
+    "buttons": [
+      {
+        "h": 44,
+        "w": 97.578125
+      },
+      {
+        "h": 44,
+        "w": 44
+      }
+    ],
+    "ghostFont": "14px",
+    "inputFont": "16px",
+    "inputVisible": false,
+    "overflow": false,
+    "suggestionVisible": true,
+    "width": 768
+  },
+  {
+    "buttons": [
+      {
+        "h": 44,
+        "w": 97.578125
+      },
+      {
+        "h": 44,
+        "w": 44
+      }
+    ],
+    "ghostFont": "14px",
+    "inputFont": "14px",
+    "inputVisible": true,
+    "overflow": false,
+    "suggestionVisible": true,
+    "width": 1024
+  },
+  {
+    "buttons": [
+      {
+        "h": 44,
+        "w": 97.578125
+      },
+      {
+        "h": 44,
+        "w": 44
+      }
+    ],
+    "ghostFont": "14px",
+    "inputFont": "14px",
+    "inputVisible": true,
+    "overflow": false,
+    "suggestionVisible": true,
+    "width": 1440
+  }
+]

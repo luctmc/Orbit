@@ -1,0 +1,59 @@
+{
+  "checkedAt": "2026-10-16T00:33:13.456Z",
+  "tabNativeBoth": true,
+  "escapeNativeBoth": true,
+  "composerTabBoth": true,
+  "submittedMessages": 0,
+  "startupConfirmations": [
+    {
+      "id": 2,
+      "kind": "startup-confirmation",
+      "data": "\r",
+      "at": 1792110524690
+    }
+  ],
+  "processes": [
+    {
+      "pid": 38931,
+      "alive": false
+    },
+    {
+      "pid": 38936,
+      "alive": false
+    },
+    {
+      "pid": 38960,
+      "alive": false
+    },
+    {
+      "pid": 38942,
+      "alive": false
+    },
+    {
+      "pid": 38684,
+      "alive": false
+    },
+    {
+      "pid": 38689,
+      "alive": false
+    },
+    {
+      "pid": 38695,
+      "alive": false
+    }
+  ],
+  "emptyRoots": [
+    {
+      "path": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-native-tab-yrC8ZM/codex",
+      "files": []
+    },
+    {
+      "path": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-native-tab-yrC8ZM/claude",
+      "files": []
+    }
+  ],
+  "commands": 2,
+  "firstAttemptCommands": 2,
+  "consoleErrors": [],
+  "scope": "Prompt input only; provider network traffic not measured"
+}

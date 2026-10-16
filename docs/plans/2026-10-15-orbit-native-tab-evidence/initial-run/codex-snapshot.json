@@ -1,0 +1,5 @@
+{
+  "data": "\u001b[?1049h\u001b[H \u001b[1C/init\u001b[2m - create an AGENTS.md file with instructions for Codex\r\n\u001b[2C\u001b[0m/status\u001b[2m - show current session configuration\r\n\u001b[2C\u001b[0m/permissions\u001b[2m - choose what Codex is allowed to do\r\n\u001b[2C\u001b[0m/model\u001b[2m - choose what model and reasoning effort to use\r\n\u001b[2C\u001b[0m/review\u001b[2m - review any changes and find issues\r\n\r\n\r\n\u001b[1;22m›\u001b[1C\u001b[0mRe\r\n\r\n\u001b[2CGPT-6-Luna\u001b[1Clow\u001b[1C·\u001b[1C/private/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orb…\r\n\u001b[2C \u001b[1C   \u001b[1C         \u001b[38C⚠\u001b[1C1\u001b[1Cwarning\u001b[1C·\u001b[1C\u001b[1mf2\u001b[1C\u001b[0mto\u001b[1Cview\u001b[3A\u001b[75D\u001b[?2004h\u001b[?1004h\u001b[?1003h",
+  "cols": 80,
+  "rows": 11
+}

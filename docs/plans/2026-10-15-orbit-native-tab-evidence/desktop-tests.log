@@ -1,0 +1,27 @@
+✔ missing cost, reported zero and partial known subtotals remain distinguishable (0.911958ms)
+✔ suggestions follow real activity state and do not certify readiness from readyAt (0.661542ms)
+✔ unknown, stale and other-mission context cannot produce an old action (0.121916ms)
+✔ predictions stay out of shell, helpers, permission prompts, exhausted budgets and disconnected missions (0.296958ms)
+✔ prefix completion preserves spelling/case and never substitutes unrelated or multiline input (0.943875ms)
+✔ Tab accepts only without modifiers or composition (0.078666ms)
+✔ a historical ready declaration never overrides disconnected, unknown, stale or waived verification (0.391916ms)
+✔ permission, budget and unresolved work take precedence over a ready declaration (0.104083ms)
+✔ waiting, handoffs and exits become notices as the person chose (0.872833ms)
+✔ a Claude agent finishing a long turn is a notice; quick answers and Codex are not (0.168125ms)
+✔ progress requests ignore unrelated errors and match the response request id (12.617166ms)
+✔ Codex native focus/cursor replies and its empty placeholder do not consume the first draft (1.821708ms)
+✔ Claude native Try placeholder anchors typing without accepting existing text or a permission choice (0.52275ms)
+✔ an empty recognized prompt offers a visual next step without owning or changing the buffer (0.212333ms)
+✔ an echoed draft may mark Codex running; starting, permission and exited panes remain excluded (0.13625ms)
+✔ native prediction appears only after the exact draft echo and returns only a suffix (0.17125ms)
+✔ unknown prompt, existing native draft and shell menus are never owned by the predictor (0.092791ms)
+✔ cursor controls, multiline and bracketed paste suspend until a new line (0.624375ms)
+✔ dismissal, backspace and execution reset never insert or submit text (0.066209ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 101.836458

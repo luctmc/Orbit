@@ -3,9 +3,13 @@
 import { build } from 'esbuild'
 import { chmodSync, cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { bundledCatalog } from '../packages/sidecar/src/skills.ts'
 
 const root = join(import.meta.dirname, '..')
 const out = join(root, 'apps/desktop/build/sidecar')
+// Refuse to ship modified/missing skill packages without updating the reviewed manifest.
+const skills = bundledCatalog(join(root, 'packages/sidecar/resources/skills'))
+if (skills.length !== 20) throw new Error('Orbit requires its five skill packages for all four adapters')
 rmSync(out, { recursive: true, force: true })
 
 await build({
@@ -24,6 +28,7 @@ await build({
 })
 
 cpSync(join(root, 'packages/sidecar/hooks'), join(out, 'hooks'), { recursive: true })
+cpSync(join(root, 'packages/sidecar/resources'), join(out, 'resources'), { recursive: true })
 
 const pty = join(root, 'node_modules/node-pty')
 const ptyOut = join(out, 'node_modules/node-pty')

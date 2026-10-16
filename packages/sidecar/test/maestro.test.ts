@@ -1,4 +1,5 @@
 import { test } from 'node:test'
+import { initRepository } from './gitFixture.ts'
 import assert from 'node:assert/strict'
 import { mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -74,9 +75,9 @@ test('the maestro picks CLI and account by itself, falls back when one is used u
     const work = (await ui.next('accounts', (m) => m.accounts.some((a) => a.name === 'Codex trabalho'))).accounts.find((a) => a.name === 'Codex trabalho')!
     await ui.next('account.status', (m) => m.statuses.some((s) => s.accountId === work.id && s.loggedIn === true))
 
-    ui.send({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-'))) })
+    ui.send({ type: 'workspace.open', path: initRepository(realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-')))) })
     const { workspace } = await ui.next('workspace.updated')
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Maestro', objective: 'Cobrir o login com testes', mode: 'agentica', lead: { cli: 'claude', model: 'haiku', title: '' } })
+    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Maestro', objective: 'Cobrir o login com testes', mode: 'agentica', isolation: 'worktrees', lead: { cli: 'claude', model: 'haiku', title: '' } })
     const { mission } = await ui.next('mission.updated')
     assert.deepEqual(mission.allowedClis, ['claude', 'codex'])
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
@@ -90,8 +91,8 @@ test('the maestro picks CLI and account by itself, falls back when one is used u
       return res.status === 200 ? res.json() : null
     }
 
-    // The lead is reminded at every message and cannot edit files.
-    assert.match((await hook({ hook_event_name: 'UserPromptSubmit', prompt: 'oi' })).hookSpecificOutput.additionalContext, /you are the maestro/)
+    // The role is configured at launch; messages do not reinject it, and edits remain blocked.
+    assert.equal(await hook({ hook_event_name: 'UserPromptSubmit', prompt: 'oi' }), null)
     assert.equal((await hook({ hook_event_name: 'PreToolUse', tool_name: 'Edit', tool_input: { file_path: '/x' } })).hookSpecificOutput.permissionDecision, 'deny')
     assert.equal(await hook({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/x' } }), null)
 
@@ -121,7 +122,7 @@ test('the maestro picks CLI and account by itself, falls back when one is used u
 
     // A mission limited to Claude keeps helpers on Claude even when the table says Codex.
     server.core.store.setLimits({ ...full('claude'), cli: 'claude', fiveHour: { usedPercent: 10, resetsAt: Date.now() + 3_600_000, windowMinutes: 300 } })
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Só Claude', objective: '', mode: 'agentica', allowedClis: ['claude'], lead: { cli: 'shell', model: null, title: '' } })
+    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Só Claude', objective: '', mode: 'agentica', isolation: 'worktrees', allowedClis: ['claude'], lead: { cli: 'shell', model: null, title: '' } })
     const only = (await ui.next('mission.updated', (m) => m.mission.title === 'Só Claude')).mission
     const onlyLead = (await ui.next('pane.updated', (m) => m.pane.missionId === only.id && m.pane.role === 'lead')).pane
     const helper = await server.core.spawnHelper(onlyLead, { title: 'Testes', task: 'Escreva testes', model: null })

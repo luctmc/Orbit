@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "id": "0db3f54f-3a18-438a-bd21-b0b964a724b2",
+  "taskId": "op-health",
+  "taskRevision": "3a331360e0bc8ea2f556bcffebc1aca51a97f01f8f4e96dfc6691fdd31bbef85",
+  "corpusRevision": "69d519eefdc4120ecfa27ed8476d85c2c446e49ef35b52fded37c0b02c200893",
+  "sourceRevision": "6dfdf3c91327b03fc947a8db8292300dd2fd58d1cb4a2bdf2b5bb20c5dec16aa",
+  "mode": "offline",
+  "configuration": "eager",
+  "repetition": 1,
+  "runtime": {
+    "node": "v24.21.0",
+    "claude": null,
+    "codex": null
+  },
+  "models": {
+    "worker": "claude:claude-haiku-5-5:low",
+    "reviewer": "codex:gpt-6-luna:low"
+  },
+  "durationMs": 909.9331249999996,
+  "firstResponseMs": null,
+  "checks": [
+    {
+      "command": "verify immutable fixture and declared write scope",
+      "exitCode": 0,
+      "summary": "Protected fixture unchanged; writes stay in declared paths"
+    },
+    {
+      "command": "node .benchmark/check-0.mjs",
+      "exitCode": 0,
+      "summary": "Health report preserves pending services"
+    }
+  ],
+  "accepted": true,
+  "resultReviewed": true,
+  "integrationReviewed": true,
+  "waived": false,
+  "error": null,
+  "executions": [
+    {
+      "epoch": "5eb0745f-d35c-469b-802b-e0f265241428",
+      "paneId": 1,
+      "missionId": "e2f2f319-7c15-410b-8142-77744c53f649",
+      "cli": "shell",
+      "model": null,
+      "role": "lead",
+      "spawnMs": 1.8741250000002765,
+      "firstPtyOutputMs": 885.8136250000007,
+      "initialBytes": 0,
+      "sourceBytes": 0,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 903,
+      "submittedMessages": 2,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    },
+    {
+      "epoch": "92e10241-2517-487f-b86c-a1ac8b985486",
+      "paneId": 2,
+      "missionId": "e2f2f319-7c15-410b-8142-77744c53f649",
+      "cli": "claude",
+      "model": "claude-haiku-5-5",
+      "role": "crew",
+      "spawnMs": 6.385540999999648,
+      "firstPtyOutputMs": null,
+      "initialBytes": 4156,
+      "sourceBytes": 4156,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    },
+    {
+      "epoch": "101f8569-2e35-441e-a70f-cda6f1cbe4ee",
+      "paneId": 3,
+      "missionId": "e2f2f319-7c15-410b-8142-77744c53f649",
+      "cli": "codex",
+      "model": "gpt-6-luna",
+      "role": "crew",
+      "spawnMs": 4.955416000000696,
+      "firstPtyOutputMs": null,
+      "initialBytes": 4277,
+      "sourceBytes": 4277,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    }
+  ],
+  "auxiliaryCalls": [],
+  "attempts": 2,
+  "retries": 0,
+  "reopenings": 0,
+  "results": 2
+}

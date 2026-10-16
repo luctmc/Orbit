@@ -1,0 +1,17 @@
+{
+  "root": "/private/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-source-oracle-NUqV3R",
+  "fileCount": 223,
+  "bytes": 2830363,
+  "checks": [
+    {
+      "command": "verify repository write scope and protected oracle",
+      "exitCode": 0,
+      "summary": "All protected repository sources and oracle unchanged"
+    },
+    {
+      "command": "/Users/lucas/Documents/GitHub/Orbit/apps/desktop/build/node/node .benchmark/all.mjs",
+      "exitCode": 1,
+      "summary": "✖ Codex output already includes reasoning (1024) (0.67125ms)\n✔ Codex output already includes reasoning (0) (0.076875ms)\n✔ Codex output already includes reasoning (absent) (0.056541ms)\nℹ tests 3\nℹ suites 0\nℹ pass 2\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 67.651708\n\n✖ failing tests:\n\ntest at packages/sidecar/test/usageCounters.test.ts:13:47\n✖ Codex output already includes reasoning (1024) (0.67125ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  2210 !== 1186\n  \n      at TestContext.<anonymous> (file:///private/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-source-oracle-NUqV3R/packages/sidecar/test/usageCounters.test.ts:15:10)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.start (node:internal/test_runner/test:1262:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 2210,\n    expected: 1186,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\n"
+    }
+  ]
+}

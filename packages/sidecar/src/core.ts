@@ -1,31 +1,52 @@
 import { readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { needsDelivery, noticeText } from './deliveryQueue.ts'
+import { claudeHook, claudeStatus } from './adapters/claude.ts'
+import { codexRollout, freshCodexTurn } from './adapters/codex.ts'
+import { geminiHook, geminiAnswer } from './adapters/gemini.ts'
+import { adapterCapabilities } from './adapters/types.ts'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type MemoryEntry, type MemoryKind, MEMORY_KINDS, MEMORY_LIMITS, type Difficulty, type AgentSeat, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { ATTACHMENT_LIMITS, ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type MemoryEntry, type MemoryKind, MEMORY_KINDS, MEMORY_LIMITS, type Difficulty, type AgentSeat, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { Attachments } from './attachments.ts'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
-import { codexDisabledMcp, gateTool, scanCatalog, type SkillPolicy } from './skills.ts'
-import { accountRooms, BALANCE_GAP, chooseAccount, classifyTask, cliLoad, LIVE_WEIGHT, seatForDifficulty, type AccountRoom } from './maestro.ts'
+import { bundledCatalog, codexDisabledMcp, gateTool, missionSkills, readSkill, scanCatalog, type SkillPolicy } from './skills.ts'
+import { SkillSessions } from './skillSessions.ts'
+import { accountRooms, BALANCE_GAP, chooseAccount, classifyTask, assessDifficulty, cliLoad, LIVE_WEIGHT, seatForDifficulty, decisionReceipt, type AccountRoom } from './maestro.ts'
 import { dueSchedules, nextRun, normalizeWhen } from './schedules.ts'
 import { fileDiff, folderStatus, folderTree, readFile } from './files.ts'
 import { Updates } from './updates.ts'
 import { missionReport } from './report.ts'
 import { addWorktree, BRANCH, commitsAhead, deleteBranches, forceRemoveWorktree, dirtyFiles, filesChanged, hasRemote, pushBranch, removeWorktree, repoInfo } from './git.ts'
 import { slugify } from './squads.ts'
-import { normalizeRouting } from './routing.ts'
-import { decideTaskType } from './decider.ts'
+import { normalizeRouting, routingRevision } from './routing.ts'
+import { decideTaskType, decisionPrompt, DECIDER_MODEL } from './decider.ts'
+import { performance } from 'node:perf_hooks'
+import { composeHarness, harnessNote, selectHarnessCandidate } from './harness.ts'
+import { harnessAccounts, harnessCandidates } from './harnessEligibility.ts'
+import { HarnessMeasurements, type AuxiliaryObservation } from './measurements.ts'
+import { CodexUsageReader, type ExecutionIdentity } from './adapters/codexUsage.ts'
+import { ClaudeUsageReader } from './adapters/claudeUsage.ts'
+import type { MissionProgress } from '@orbit/protocol'
 import { CLAUDE_USAGE_COMMAND, parseClaudeUsage, usageText } from './claudeUsage.ts'
-import { codexHome, codexLastTurn, findCodexRolloutById, latestCodexRollout, codexSessionId, findCodexRollout, fromClaudeStatus, fromCodexRollout, readTail, usageDelta, type UsageReport } from './usage.ts'
+import { LimitRefreshGate, parseCodexAccountLimits } from './accountLimits.ts'
+import { codexHome, findCodexRolloutById, codexSessionId, findCodexRollout, fromCodexRollout, fromClaudeStatus, readTail, type UsageReport } from './usage.ts'
+import { contractHash, normalizedAcceptance } from './activityLedger.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
 import { claudeTranscript, claudeTurns, codexTurns, deleteClaudeConversation, tailTurns, turnsMarkdown, type Turn } from './transcripts.ts'
-import { fromGeminiHook, statusFromHook, toGeminiHook, type HookPayload } from './hooks.ts'
+import { statusFromHook, type HookPayload } from './hooks.ts'
 import { PaneManager, type PaneSnapshot } from './panes.ts'
-import { acceptanceNote, commandToolsNote, crewRole, projectMemoryNote, HANDOFF_NUDGE, instructionsNote, leadRole, MAESTRO_RULE, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
+import { acceptanceNote, commandToolsNote, crewRole, projectMemoryNote, HANDOFF_NUDGE, instructionsNote, leadRole, objectiveTask, workspaceNote, worktreeNote } from './prompts.ts'
 import { normalizeSquad } from './squads.ts'
 import { dayKey, Store } from './store.ts'
+import { deliveryPending } from './deliveryLedger.ts'
+import { buildContextPack, ContextLibrary, type ContextSection } from './contextPack.ts'
+import { assertNoDependencyCycle, copyRoots } from './scheduler.ts'
+import { sourceRevision, validateReview } from './verification.ts'
+import type { ActivityRecord, ActivityResult, ExecutionPolicy, VerificationInput, DecisionReceipt, ResultInspection } from '@orbit/protocol'
 
 const CLIS: readonly AgentCli[] = [...AGENT_CLIS, 'shell']
 const MODES: readonly MissionMode[] = ['livre', 'squad', 'agentica']
@@ -37,7 +58,8 @@ const ORBIT_CLI_SCRIPT = join(dirname(HOOK_SCRIPT), 'orbit-cli.mjs')
 /** How often live Codex agents' session files are read for usage. */
 const CODEX_POLL_MS = 5000
 /** How often the accounts' room is read again when no agent reports it. */
-const USAGE_WATCH_MS = 10 * 60_000
+const USAGE_WATCH_MS = 30_000
+const CODEX_LIMITS_SCRIPT = join(dirname(HOOK_SCRIPT), 'read-codex-limits.mjs')
 /** Time for a CLI to stop its turn after Esc before new orders are typed. */
 const INTERRUPT_SETTLE_MS = 700
 const HANDOFF_STATUSES: readonly HandoffStatus[] = ['done', 'blocked', 'progress']
@@ -50,9 +72,22 @@ const MAX_CHILDREN = 2
 const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'write_file', 'replace']
 const RESUME_NOTE = 'O Orbit foi reaberto. Continue a tarefa de onde parou e, ao terminar, entregue com handoff_submit.'
 
+export interface HelperRequest {
+  title: string; task: string; cli?: AgentCli; model: string | null; effort?: Effort | null
+  squadRoleId?: string | null; taskTypeId?: string | null; accept?: string[]; folder?: string | null
+  difficulty?: Difficulty | null; retryReason?: string; activityId?: string
+  dependsOn?: string[]
+  requireReadOnlySandbox?: boolean
+  readOnly?: boolean
+}
+
 export type Broadcast = (message: ServerMessage) => void
 
 export interface CoreOptions {
+  /** Opt-in local benchmark measurement; never calls a model or stores message content. */
+  measurements?: HarnessMeasurements
+  /** Benchmark-only control: include optional context eagerly, within the same byte budget. */
+  benchmarkEagerContext?: boolean
   dataDir: string
   shell: string
   broadcast: Broadcast
@@ -66,13 +101,24 @@ export interface CoreOptions {
 
 /** Orbit's domain logic: UI messages, MCP tool calls and hook reports all land here. */
 export class OrbitCore {
+  private readonly measurements?: HarnessMeasurements
+  private readonly benchmarkEagerContext: boolean
+  private readonly harnessMode: 'live' | 'simulated'
+  private readonly claudeUsage = new ClaudeUsageReader()
+  private readonly codexUsage = new CodexUsageReader()
   readonly store: Store
   private readonly panes: PaneManager
   private readonly broadcast: Broadcast
   private readonly dataDir: string
+  private readonly attachments: Attachments
+  private readonly contexts: ContextLibrary
+  private readonly skillSessions: SkillSessions
   /** Per-pane secret used by that agent's MCP client and hooks. Lives only in memory. */
   private readonly paneTokens = new Map<string, number>()
+  private readonly sendingNotices = new Set<string>()
+  private readonly deliveryTimer: NodeJS.Timeout
   private endpoint = ''
+  private readonly delegating = new Map<string, Promise<{ pane: Pane; receipt: string[] }>>()
   private readonly run: Run
   /** Models and effort levels per CLI; null until first loaded. */
   private catalog: Catalog | null = null
@@ -80,7 +126,6 @@ export class OrbitCore {
   /** Codex agent → its session file, once found. */
   private readonly codexRollouts = new Map<number, string>()
   /** The last Codex turn already handled per agent, so each turn end is seen once. */
-  private readonly codexTurns = new Map<number, string>()
   /** Codex helpers already asked once to deliver since their last assignment. */
   private readonly nudged = new Set<number>()
   /** Acceptance criteria each helper must answer when it delivers done. */
@@ -89,6 +134,7 @@ export class OrbitCore {
   private readonly readOnly = new Set<number>()
   private codexTimer: NodeJS.Timeout | null = null
   private usageTimer: NodeJS.Timeout | null = null
+  private readonly limitRefreshes = new LimitRefreshGate()
   private readonly accountFiles: AccountFiles
   /** Login state per account, from the CLIs; kept in memory and asked again on start. */
   private readonly accountStatus = new Map<string, AccountStatus>()
@@ -107,10 +153,16 @@ export class OrbitCore {
   /** Files Claude agents edited (real path → who, in order), from their PostToolUse hooks. */
   private readonly touched = new Map<string, Array<{ paneId: number; missionId: string }>>()
 
-  constructor({ dataDir, shell, broadcast, agentCommand, run, browser }: CoreOptions) {
+  constructor({ dataDir, shell, broadcast, agentCommand, run, browser, measurements, benchmarkEagerContext }: CoreOptions) {
+    this.harnessMode = agentCommand ? 'simulated' : 'live'
+    this.measurements = measurements
+    this.benchmarkEagerContext = benchmarkEagerContext === true
     this.broadcast = broadcast
     this.run = run ?? loginShellRunner(shell)
     this.dataDir = dataDir
+    this.attachments = new Attachments(dataDir)
+    this.contexts = new ContextLibrary(join(dataDir, 'context'))
+    this.skillSessions = new SkillSessions(join(dataDir, 'skill-sessions'))
     this.store = new Store(dataDir)
     this.accountFiles = new AccountFiles(dataDir)
     this.updates = new Updates(this.run, join(dataDir, 'updates'))
@@ -120,7 +172,15 @@ export class OrbitCore {
     this.browser.on('frame', (missionId, data, width, height) => this.broadcast({ type: 'browser.frame', missionId, data, width, height }))
     removeAgentFiles(join(dataDir, 'panes'))
     this.panes = new PaneManager(shell, agentCommand)
-    this.panes.on('data', (paneId, data) => this.broadcast({ type: 'pane.data', paneId, data }))
+    this.panes.on('terminated', (id, epoch) => this.store.releaseExecution(id, epoch))
+    this.panes.on('receiptError', () => { /* Keep the persisted notice pending for a later dispatch. */ })
+    this.deliveryTimer = setInterval(() => this.dispatchDeliveries(), 2000)
+    this.deliveryTimer.unref()
+    this.panes.on('data', (paneId, data) => {
+      const epoch = this.store.pane(paneId)?.executionEpoch
+      if (epoch) this.measurements?.output(epoch)
+      this.broadcast({ type: 'pane.data', paneId, data })
+    })
     this.panes.on('resized', (paneId, cols, rows) => this.broadcast({ type: 'pane.resized', paneId, cols, rows }))
     this.panes.on('status', (pane, previous) => {
       if (this.loginPanes.has(pane.id)) return
@@ -137,16 +197,19 @@ export class OrbitCore {
         return
       }
       if (!this.store.pane(pane.id)) return // closed by the user
+      // Publish the process state before applying its final counters. Otherwise this stale exit
+      // snapshot would overwrite the newer usage baseline that applyReport just persisted.
+      this.syncPane(pane)
       // Last word from a Codex session before it is gone.
+      if (pane.cli === 'claude') this.applyClaudeConsumption(pane)
       const rollout = this.codexRollouts.get(pane.id)
       if (rollout) {
         try {
-          this.applyReport(pane.id, fromCodexRollout(readTail(rollout)))
+          this.applyReport(pane.id, codexRollout(readTail(rollout)).report, 'rollout')
         } catch {
           // nothing more to count
         }
       }
-      this.syncPane(pane)
       this.event(pane.missionId, 'pane.exited', `#${pane.id} encerrou`, `Processo terminou com código ${pane.exitCode ?? '?'}.`, pane.id)
       if (this.owesHandoff(pane)) this.tellAssigner(pane, `[Orbit] #${pane.id} (${pane.title}) encerrou sem entregar o retorno (código ${pane.exitCode ?? '?'}). Retome com agent_resume ou abra outro ajudante.`)
     })
@@ -328,7 +391,10 @@ export class OrbitCore {
     for (const card of templateCards(message.cards)) this.addCard(mission.id, 'modelo', { title: card })
     // Agentic and squad leads start working on the objective right away.
     const task = mission.mode !== 'livre' && mission.objective ? objectiveTask(mission) : null
-    this.spawn({ ...message.lead, missionId: mission.id, role: 'lead', task })
+    const assessment = assessDifficulty(mission.title, mission.objective)
+    const automatic = message.adaptiveLead === true && mission.mode === 'agentica'
+    const lead = automatic ? { ...message.lead, ...this.store.routing().lead, accountId: null } : message.lead
+    this.spawn({ ...lead, missionId: mission.id, role: 'lead', task }, automatic ? { tier: { difficulty: assessment.difficulty, by: assessment.why } } : {})
     return mission
   }
 
@@ -608,6 +674,8 @@ export class OrbitCore {
     }
     if (options.conversations) for (const pane of panes) this.forgetConversation(pane)
     this.store.forgetMission(missionId, options.memory)
+    this.attachments.remove(missionId)
+    this.contexts.remove(missionId)
     if (options.memory) this.broadcast({ type: 'memory', workspaceId: mission.workspaceId, entries: this.store.memory(mission.workspaceId) })
     if (!quiet) this.broadcast({ type: 'snapshot', snapshot: this.store.snapshot() })
   }
@@ -645,8 +713,8 @@ export class OrbitCore {
    * The project's memory for a lead, within a budget: pinned entries first, then decisions,
    * facts and lessons (newest first), then the latest missions' summaries.
    */
-  projectMemory(workspaceId: string, budget = 6000): string {
-    const entries = this.store.memory(workspaceId)
+  projectMemory(workspaceId: string, budget = 6000, scope: 'all' | 'required' | 'optional' = 'all'): string {
+    const entries = this.store.memory(workspaceId).filter(e => scope === 'all' || ((e.pinned || !e.source) === (scope === 'required')))
     if (entries.length === 0) return ''
     const label: Record<MemoryKind, string> = { decisao: 'decision', fato: 'fact', licao: 'lesson', missao: 'mission' }
     const line = (e: MemoryEntry) => `- [${label[e.kind]}${e.pinned ? ', pinned' : ''}${e.source ? ` · ${e.source.missionTitle}` : ' · the user'} · ${new Date(e.at).toISOString().slice(0, 10)}] ${oneLine(e.text)}`
@@ -654,7 +722,7 @@ export class OrbitCore {
     const ordered = [
       ...entries.filter((e) => e.pinned).sort(newest),
       ...entries.filter((e) => !e.pinned && e.kind !== 'missao').sort(newest),
-      ...entries.filter((e) => !e.pinned && e.kind === 'missao').sort(newest).slice(0, 8),
+      ...entries.filter((e) => !e.pinned && e.kind === 'missao').sort(newest).slice(0, Number.isFinite(budget) ? 8 : Infinity),
     ]
     const out: string[] = []
     let used = 0
@@ -713,7 +781,7 @@ export class OrbitCore {
     const who = (p: Pane) => [CLI_LABEL[p.cli], p.model].filter(Boolean).join(' · ')
     const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text)
     const out: string[] = [`# Mission briefing: "${mission.title}"`]
-    if (previous) out.push(`You take over as lead from #${previous.pane.id} (${who(previous.pane)}). Nothing was lost: it is all below. Read it before acting and carry on from where the lead stopped; do not redo what was already delivered.`)
+    if (previous) out.push(`You take over as lead from #${previous.pane.id} (${who(previous.pane)}). Read this briefing and any relevant context_read references before acting; reuse delivered work.`)
     out.push(`## Objective (written by the user)\n\n${mission.objective || '(no objective written: ask the user)'}`)
     const facts = [
       `mode ${mission.mode}`,
@@ -722,11 +790,17 @@ export class OrbitCore {
       mission.budget && `budget: ${mission.usage.total.toLocaleString('en-US')} tokens used${mission.budget.tokens ? ` of ${mission.budget.tokens.toLocaleString('en-US')}` : ''}${mission.budget.exceeded ? ' (used up)' : ''}`,
     ].filter(Boolean)
     out.push(`## State\n\n${facts.map((f) => `- ${f}`).join('\n')}`)
-    const memory = this.projectMemory(mission.workspaceId, 4000)
+    const workspace = this.missionWorkspace(missionId)
+    if (workspace?.instructions) out.push(`## User instructions\n\n${workspace.instructions}`)
+    const requiredMemory = this.projectMemory(mission.workspaceId, Infinity, 'required')
+    if (requiredMemory) out.push(`## Required project memory (pinned or written by the user)\n\n${requiredMemory}`)
+    const memory = this.projectMemory(mission.workspaceId, Infinity, 'optional')
     if (memory) out.push(`## Project memory (from earlier missions and the user)\n\n${memory}`)
     if (mission.notes.length) out.push(`## Decisions the leads wrote down\n\n${mission.notes.map((n) => `- (#${n.paneId}) ${n.text}`).join('\n')}`)
     const cards = this.store.cards(missionId)
     if (cards.length) out.push(`## Board\n\n${cards.map((c) => `- [${c.column}] T${c.number} ${c.title}${c.assignee !== null ? ` (#${c.assignee})` : ''}`).join('\n')}`)
+    const pending = this.pendingDeliveries(missionId)
+    if (pending.length) out.push(`## Required results still pending (including closed terminals)\n\n${pending.map(d => `- ${d.id}: #${d.paneId} ${d.title} — ${d.status}${d.summary ? `; ${d.summary}` : ''}${d.acceptance.length ? `\n  Acceptance: ${d.acceptance.join('; ')}` : ''}`).join('\n')}`)
     const crew = panes.filter((p) => p.role === 'crew' && p.id !== lead?.id)
     if (crew.length) {
       // Whoever worked for the previous lead now works for the reader of this briefing.
@@ -734,17 +808,36 @@ export class OrbitCore {
       const state = (p: Pane) => p.handoffStatus === null ? (p.assignedBy !== null ? `owes a result to ${owner(p.assignedBy)}` : 'no task from the lead') : p.handoffStatus === 'progress' ? 'in progress' : `delivered (${p.handoffStatus})`
       out.push(`## Helpers\n\n${crew.map((p) => `- #${p.id} ${p.title} — ${who(p)}${p.taskType ? `, ${p.taskType}` : ''}; ${p.status}; ${state(p)}`).join('\n')}`)
     }
-    const handoffs = this.missionEvents(missionId, 'handoff').slice(-8)
-    if (handoffs.length) out.push(`## Results received\n\n${handoffs.map((e) => `### ${e.title}\n${clip(e.body, 1800)}`).join('\n\n')}`)
+    const archived = this.store.delegations(missionId).filter((d) => !panes.some((p) => p.id === d.pane.id))
+    if (archived.length) out.push(`## Closed activities (reuse completed results)\n\n${archived.map((d) => `- #${d.pane.id} ${d.pane.title}: ${d.pane.handoffStatus ?? 'stopped without delivery'}${d.result ? `; ${d.result.summary}; evidence: ${d.result.evidence}` : ''}`).join('\n')}`)
+    const history = this.store.activityHistory(missionId)
+    const results = history.results.slice(-8)
+    if (results.length) out.push(`## Results received (submitted evidence, not independent validation)\n\n${results.map(r => `### ${r.id} (${r.status})\n${[r.summary, r.evidence && `Evidence: ${r.evidence}`, r.details].filter(Boolean).join('\n\n')}`).join('\n\n')}`)
+    else {
+      const handoffs = this.missionEvents(missionId, 'handoff').slice(-8)
+      if (handoffs.length) out.push(`## Results received\n\n${handoffs.map((e) => `### ${e.title}\n${clip(e.body, 1800)}`).join('\n\n')}`)
+    }
     if (mission.git) {
       const summary = safe(() => this.gitSummary(missionId), null)
       if (summary) out.push(`## Branches\n\nMission on branch ${summary.branch} (base ${summary.base}), ${summary.commits.length} commit(s).${summary.agents.length ? `\n${summary.agents.map((a) => `- #${a.paneId} ${a.branch}: ${a.ahead} commit(s) to integrate, ${a.dirty.length} uncommitted file(s)`).join('\n')}` : ''}`)
     }
-    if (previous?.turns.length) out.push(`## End of the previous lead's conversation (#${previous.pane.id})\n\n${turnsMarkdown(previous.turns, 6000, 1200)}`)
+    if (previous?.turns.length) out.push(`## End of the previous lead's conversation (#${previous.pane.id})\n\n${turnsMarkdown(previous.turns, Infinity, Infinity)}`)
     const flow = this.missionEvents(missionId).filter((e) => e.kind !== 'handoff').slice(-25)
     if (flow.length) out.push(`## Recent flow\n\n${flow.map((e) => `- ${new Date(e.at).toISOString().slice(5, 16).replace('T', ' ')} ${e.title}`).join('\n')}`)
-    out.push('## How to carry on\n\nHelpers that owe a result now deliver it to you. Write important decisions down with mission_note: they pass to any lead after you. To read this briefing again, call mission_briefing.')
-    return clip(out.join('\n\n'), 18_000)
+    out.push('## How to carry on\n\nHelpers that owe a result now deliver it to you. Write important decisions down with mission_note. Submitted results are not independently validated. Pending required results block mission_ready. Retrieve referenced details with context_read; handoff_list supports resultId and after cursors. To read this briefing again, call mission_briefing.')
+    const optional = /^(## Project memory|## Board|## Closed activities|## Results received|## End of the previous|## Recent flow)/
+    return this.contextPack(missionId, out.map((text, i) => ({ id: `briefing-${i}`, text, required: !optional.test(text), maxBytes: 3000 })), 18_000).text
+  }
+
+  private contextPack(missionId: string, sections: ContextSection[], budget: number) {
+    return buildContextPack(this.benchmarkEagerContext ? sections.map(s => ({ ...s, maxBytes: Infinity })) : sections, budget, section => this.contexts.put(missionId, section))
+  }
+
+  readContext(caller: Pane, sha256: string, offset?: number, limit?: number) {
+    this.assertCurrent(caller)
+    const result = this.contexts.read(caller.missionId, sha256, offset, limit)
+    this.measurements?.bytes(caller.executionEpoch!, 'contextReadBytes', result.text)
+    return result
   }
 
   /**
@@ -761,6 +854,7 @@ export class OrbitCore {
       const helper = this.store.pane(to.paneId)
       if (!helper || helper.missionId !== missionId || helper.role !== 'crew') throw new Error('Escolha um ajudante desta missão')
       if (helper.cli === 'shell' || !this.panes.isAlive(helper.id)) throw new Error(`#${helper.id} não é um agente rodando`)
+      if (mission.mode !== 'livre' && !this.store.executionPolicy(helper.id)?.readOnly) throw new Error('Este ajudante é um writer. Abra um líder novo: promover o papel não altera o sandbox do processo existente.')
       if (mission.git && helper.branch !== mission.git.branch) throw new Error('Numa missão com um branch por agente, o líder trabalha no branch da missão: troque por um agente novo')
       this.panes.setSeat(helper.id, { role: 'lead', assignedBy: null })
       lead = this.store.pane(helper.id) ?? helper
@@ -771,12 +865,14 @@ export class OrbitCore {
     }
     // Who owed the old lead owes the new one; the old lead's conversation stays in its CLI.
     for (const p of this.missionPanes(missionId)) if (old && p.assignedBy === old.id && p.id !== lead.id) this.panes.setSeat(p.id, { assignedBy: lead.id })
+    if (old) this.store.reassignDeliveries(missionId, old.id, lead.id)
     if (old) this.closePane(old.id)
     const from = old ? `#${old.id} (${[CLI_LABEL[old.cli], old.model].filter(Boolean).join(' · ')})` : 'ninguém'
     this.event(missionId, 'lead.changed', `Liderança: ${from} → #${lead.id}`, `${[CLI_LABEL[lead.cli], lead.model].filter(Boolean).join(' · ')} assumiu com o dossiê da missão${previous?.turns.length ? ` e o fim da conversa de #${previous.pane.id}` : ''}.`, lead.id)
     if (to.kind === 'promote') {
       this.submitTo(lead.id, `[Orbit] You are now the lead of this mission, taking over from ${from}. First of all, call mission_briefing from "orbit" and read the whole briefing: objective, decisions, board, helpers, results and the end of the previous lead's conversation. From now on you orchestrate: delegate with agent_spawn, do not execute, and results come to you. Answer the user in Brazilian Portuguese.`)
     }
+    this.dispatchDeliveries(missionId)
     return this.store.pane(lead.id) ?? lead
   }
 
@@ -864,8 +960,43 @@ export class OrbitCore {
     const names = off.map((id) => id.split(':').slice(2).join(':'))
     const lines: string[] = []
     if (policy?.only) lines.push(policy.only.length ? `In this role use only these skills: ${policy.only.join(', ')}.` : 'In this role do not use skills.')
-    if (names.length) lines.push(`Switched off in Orbit (do not use): ${names.slice(0, 40).join(', ')}${names.length > 40 ? '…' : ''}.`)
-    return lines.length ? `${lines.join('\n')}\n\n` : ''
+    if (names.length) lines.push(`Switched off in Orbit (do not use): ${names.join(', ')}.`)
+    lines.push('Use skill_catalog for eligible metadata and selected packages, then skill_load with the exact id and sha256 when relevant. Selection does not load instructions. Loading serves text; it does not prove compliance. Native CLI skill visibility filtering is unverified; Orbit enforces its resource tools separately.')
+    return `${lines.join('\n')}\n\n`
+  }
+
+  private eligibleSkills(caller: Pane) {
+    if (caller.cli === 'shell') return []
+    const items = [...bundledCatalog(), ...this.catalogItems.filter(i => i.resource?.origin !== 'bundled')]
+    return missionSkills(items, caller.cli, this.missionWorkspace(caller.missionId)?.folders ?? [], new Set(this.store.disabledCatalog()), this.skillPolicies.get(caller.id))
+      .sort((a, b) => a.id.localeCompare(b.id))
+  }
+
+  skillCatalog(caller: Pane, cursor?: string, limit = 15) {
+    this.assertCurrent(caller)
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw new Error('Limite de catálogo inválido')
+    const items = this.eligibleSkills(caller)
+    const revision = createHash('sha256').update(JSON.stringify([caller.missionId, caller.id, caller.executionEpoch, items.map(i => [i.id, i.resource!.sha256])])).digest('hex')
+    const match = cursor && /^([a-f0-9]{64}):(\d+)$/.exec(cursor)
+    if (cursor && (!match || match[1] !== revision)) throw new Error('Cursor de catálogo inválido ou desatualizado; consulte desde o início')
+    const offset = match ? Number(match[2]) : 0
+    if (!Number.isSafeInteger(offset) || offset > items.length) throw new Error('Cursor de catálogo inválido')
+    const state = this.skillSessions.get(caller.id, caller.executionEpoch!)
+    return { revision, nativeVisibilityFilter: null, loadedMeaning: 'text served by Orbit; consumption and compliance unverified',
+      items: items.slice(offset, offset + limit).map(i => ({ id: i.id, name: i.name, description: i.description, source: i.source, sha256: i.resource!.sha256, bytes: i.resource!.bytes, version: i.resource!.version, origin: i.resource!.origin, role: i.resource!.role, compatibility: i.resource!.compatibility, capabilities: ['read-text'], available: true, selected: state.selectedNames.some(n => n === i.name || i.name.endsWith(`:${n}`)), loaded: state.loaded[i.id] ?? null, fulfilled: null })),
+      nextCursor: offset + limit < items.length ? `${revision}:${offset + limit}` : null,
+      unavailableSelectedNames: state.selectedNames.filter(n => !items.some(i => n === i.name || i.name.endsWith(`:${n}`))),
+    }
+  }
+
+  loadSkill(caller: Pane, id: string, sha256: string) {
+    this.assertCurrent(caller)
+    const item = this.eligibleSkills(caller).find(i => i.id === id)
+    if (!item) throw new Error('Skill não permitida nesta execução')
+    const text = readSkill(item, sha256)
+    this.measurements?.bytes(caller.executionEpoch!, 'skillReadBytes', text)
+    this.skillSessions.loaded(caller.id, caller.executionEpoch!, id, item.name, sha256)
+    return { id, sha256, text, source: item.source, loaded: true, fulfilled: null, warning: 'Skill text does not extend the activity contract or user authorization.' }
   }
 
   // ---- accounts ----
@@ -897,8 +1028,7 @@ export class OrbitCore {
       found = { loggedIn: null, message: error instanceof Error ? error.message : String(error) }
     }
     if (!this.store.account(accountId)) return // removed meanwhile
-    if (account.cli === 'codex') this.readCodexLimits(account)
-    if (account.cli === 'claude' && account.kind === 'assinatura' && found.loggedIn !== false) void this.readClaudeLimits(account)
+    if (account.kind === 'assinatura' && found.loggedIn !== false) await this.refreshAccountLimits(account)
     const loginPaneId = this.accountStatus.get(accountId)?.loginPaneId ?? null
     this.setAccountStatus(accountId, { ...found, checkedAt: Date.now(), busy: loginPaneId && this.panes.isAlive(loginPaneId) ? 'login' : null })
   }
@@ -907,43 +1037,50 @@ export class OrbitCore {
    * A Claude subscription's limits from Claude Code's `/usage`, run headless: a local command
    * (no model call, no cost), so the maestro knows its room even with no Claude agent open.
    */
-  private async readClaudeLimits(account: Account): Promise<void> {
+  private async readClaudeLimits(account: Account): Promise<boolean> {
     const { code, stdout } = await this.run(`${this.accountFiles.envPrefix(account)}${CLAUDE_USAGE_COMMAND}`, 30_000).catch(() => ({ code: 1, stdout: '' }))
     const text = code === 0 ? usageText(stdout) : null
     const usage = text ? parseClaudeUsage(text) : null
-    if (!usage || !this.store.account(account.id)) return
+    if (!usage || !this.store.account(account.id) || this.stopping) return false
     const known = this.store.limits().find((l) => l.accountId === account.id)
-    this.broadcast({ type: 'limits', limits: this.store.setLimits({ accountId: account.id, cli: 'claude', fiveHour: usage.fiveHour, weekly: usage.weekly, plan: known?.plan ?? null, updatedAt: Date.now() }) })
+    const now = Date.now()
+    this.broadcast({ type: 'limits', limits: this.store.setLimits({ accountId: account.id, cli: 'claude', fiveHour: usage.fiveHour, weekly: usage.weekly, plan: known?.plan ?? null, updatedAt: now, checkedAt: now, source: 'provider', refreshError: null }) })
+    return true
   }
 
-  /** Every few minutes, the room of each Claude subscription (Codex's comes from its session files). */
+  /** Current provider quotas, including consumption outside Orbit. No model turns are started. */
   startUsageWatch(): void {
     if (this.usageTimer) return
     this.usageTimer = setInterval(() => {
-      for (const account of this.store.accounts()) {
-        const signedOut = this.accountStatus.get(account.id)?.loggedIn === false
-        if (account.cli === 'claude' && account.kind === 'assinatura' && !signedOut) void this.readClaudeLimits(account)
-        if (account.cli === 'codex') this.readCodexLimits(account)
-      }
+      void this.refreshLimits()
     }, USAGE_WATCH_MS)
     this.usageTimer.unref()
   }
 
-  /**
-   * A Codex account's limits from its latest session file, so the maestro knows its room even
-   * when no agent of Orbit is running on it (Codex writes them with every turn).
-   */
-  private readCodexLimits(account: Account): void {
-    try {
-      const home = this.accountFiles.configDir(account) ?? codexHome()
-      const latest = latestCodexRollout(home)
-      const known = this.store.limits().find((l) => l.accountId === account.id)
-      if (!latest || (known && known.updatedAt >= latest.mtime)) return
-      const { limits } = fromCodexRollout(readTail(latest.path), latest.mtime)
-      if (limits) this.broadcast({ type: 'limits', limits: this.store.setLimits({ ...limits, accountId: account.id }) })
-    } catch {
-      // no readable session: the account stays "sem leitura"
-    }
+  private async readCodexLimits(account: Account): Promise<boolean> {
+    const result = await this.run(`${this.accountFiles.envPrefix(account)}${shellQuote(process.execPath)} ${shellQuote(CODEX_LIMITS_SCRIPT)}`, 12000).catch(() => null)
+    if (!result || result.code !== 0 || this.stopping || !this.store.account(account.id)) return false
+    let limits
+    try { limits = parseCodexAccountLimits(JSON.parse(result.stdout)) } catch { return false }
+    if (!limits) return false
+    this.broadcast({ type: 'limits', limits: this.store.setLimits({ ...limits, accountId: account.id }) })
+    return true
+  }
+
+  private refreshAccountLimits(account: Account): Promise<void> {
+    if (this.stopping || account.kind !== 'assinatura' || !['claude', 'codex'].includes(account.cli)) return Promise.resolve()
+    return this.limitRefreshes.run(account.id, async () => {
+      const ok = account.cli === 'claude' ? await this.readClaudeLimits(account) : await this.readCodexLimits(account)
+      if (!ok && !this.stopping && this.store.account(account.id)) {
+        const known = this.store.limits().find(l => l.accountId === account.id)
+        this.broadcast({ type: 'limits', limits: this.store.setLimits({ ...(known ?? { accountId: account.id, cli: account.cli, fiveHour: null, weekly: null, plan: null, updatedAt: 0 }), checkedAt: Date.now(), refreshError: 'Não foi possível atualizar os limites. Uma nova tentativa será feita automaticamente.' }) })
+      }
+      return ok
+    })
+  }
+
+  async refreshLimits(): Promise<void> {
+    await Promise.all(this.store.accounts().filter(a => this.accountStatus.get(a.id)?.loggedIn !== false).map(a => this.refreshAccountLimits(a)))
   }
 
   async checkAccounts(): Promise<void> {
@@ -1029,7 +1166,12 @@ export class OrbitCore {
   }
 
   private rooms(cli: AgentCliForRole, live = this.liveByAccount()): AccountRoom[] {
-    return accountRooms(cli, this.store.accounts(), this.statuses(), this.store.limits(), live)
+    // Injected stand-ins run offline in tests. Production auto-routing needs observed CLI/auth,
+    // rather than silently treating an unchecked or missing executable as available.
+    const detected = this.clis.get(cli)
+    if (this.harnessMode === 'live' && (!detected?.checkedAt || !detected.installed || detected.busy)) return []
+    const rooms = accountRooms(cli, this.store.accounts(), this.statuses(), this.store.limits(), live)
+    return this.harnessMode === 'live' ? rooms.filter(r => r.account.kind === 'api' || this.accountStatus.get(r.account.id)?.loggedIn === true) : rooms
   }
 
   /** What the lead sees with accounts_status: every usable account of each CLI the mission allows. */
@@ -1070,8 +1212,18 @@ export class OrbitCore {
     return this.panes.snapshot(paneId)
   }
 
-  handle(message: ClientMessage, reply: (message: ServerMessage) => void = this.broadcast): void {
+  handle(message: ClientMessage, reply: (message: ServerMessage) => void = this.broadcast): void | Promise<void> {
     switch (message.type) {
+      case 'mission.progress': {
+        const requestId = typeof message.requestId === 'string' ? message.requestId.slice(0, 100) : ''
+        try {
+          if (!requestId || typeof message.missionId !== 'string') throw new Error('Consulta de progresso inválida')
+          reply({ type: 'mission.progress', requestId, progress: this.missionProgress(message.missionId) })
+        } catch (error) {
+          reply({ type: 'mission.progress.error', requestId, missionId: message.missionId, message: error instanceof Error ? error.message : String(error) })
+        }
+        return
+      }
       case 'files.status':
       case 'files.tree':
       case 'files.diff':
@@ -1084,18 +1236,33 @@ export class OrbitCore {
         return
       }
       case 'workspace.create': {
-        const folders = validFolders(message.folders)
-        this.broadcast({ type: 'workspace.updated', workspace: this.store.createWorkspace(workspaceName(message.name), folders) })
+        try {
+          const folders = validFolders(message.folders)
+          const workspace = this.store.createWorkspace(workspaceName(message.name), folders)
+          this.broadcast({ type: 'workspace.updated', workspace })
+          if (message.requestId) reply({ type: 'workspace.saved', requestId: message.requestId, workspace })
+        } catch (error) {
+          if (!message.requestId) throw error
+          reply({ type: 'workspace.error', requestId: message.requestId, message: error instanceof Error ? error.message : String(error) })
+        }
         return
       }
       case 'workspace.update': {
+        try {
         if (!this.store.workspace(message.workspaceId)) throw new Error('Workspace desconhecido')
         const workspace = this.store.updateWorkspace(message.workspaceId, {
           name: message.name === undefined ? undefined : workspaceName(message.name),
           folders: message.folders === undefined ? undefined : validFolders(message.folders),
           instructions: message.instructions === undefined ? undefined : typeof message.instructions === 'string' ? message.instructions.trim().slice(0, WORKSPACE_LIMITS.instructions) : '',
         })
-        if (workspace) this.broadcast({ type: 'workspace.updated', workspace })
+        if (workspace) {
+          this.broadcast({ type: 'workspace.updated', workspace })
+          if (message.requestId) reply({ type: 'workspace.saved', requestId: message.requestId, workspace })
+        }
+        } catch (error) {
+          if (!message.requestId) throw error
+          reply({ type: 'workspace.error', requestId: message.requestId, message: error instanceof Error ? error.message : String(error) })
+        }
         return
       }
       case 'mission.create':
@@ -1113,7 +1280,7 @@ export class OrbitCore {
         return
       }
       case 'routing.save': {
-        this.store.saveRouting(normalizeRouting(message.routing))
+        this.store.saveRouting({ ...normalizeRouting(message.routing), revision: message.routing.revision })
         this.broadcast({ type: 'routing.updated', routing: this.store.routing() })
         return
       }
@@ -1133,6 +1300,8 @@ export class OrbitCore {
       case 'account.check':
         void this.checkAccounts()
         return
+      case 'limits.refresh':
+        return this.refreshLimits()
       case 'account.login':
         this.startLogin(message.accountId)
         return
@@ -1205,7 +1374,7 @@ export class OrbitCore {
         return
       }
       case 'pane.spawn':
-        this.spawn(message.request)
+        this.spawn(message.request, { ...(message.request.cli !== 'shell' ? { explicitCli: message.request.cli } : {}) })
         return
       case 'pane.attach':
         return // per-connection: handled by the server
@@ -1213,11 +1382,46 @@ export class OrbitCore {
         if (typeof message.data === 'string' && message.data.includes('\r')) this.panes.answered(message.paneId)
         this.panes.write(message.paneId, message.data)
         return
-      case 'pane.submit':
-        this.panes.answered(message.paneId)
-        // Text and Enter in one write look like a paste to TUIs, which then keep the Enter as a newline.
-        if (!this.submitTo(message.paneId, message.text)) throw new Error(`#${message.paneId} não está rodando`)
+      case 'attachment.add': {
+        try {
+          const pane = this.store.pane(message.paneId)
+          if (!pane || pane.cli === 'shell' || !this.panes.isAlive(pane.id)) throw new Error('Selecione um agente ativo para anexar arquivos')
+          this.activeMission(pane.missionId)
+          const attachment = this.attachments.add(pane.missionId, message)
+          reply({ type: 'attachment.added', requestId: message.requestId, attachment })
+        } catch (error) {
+          reply({ type: 'attachment.error', requestId: message.requestId, message: error instanceof Error ? error.message : String(error) })
+        }
         return
+      }
+      case 'pane.conversation': {
+        const pane = this.store.pane(message.paneId)
+        if (!pane) throw new Error('Agente inexistente')
+        reply({ type: 'pane.conversation', paneId: pane.id, turns: this.conversationOf(pane).slice(-60).map((t) => ({ ...t, text: t.text.slice(0, 12_000) })) })
+        return
+      }
+      case 'pane.submit': {
+        try {
+          const pane = this.store.pane(message.paneId)
+          if (!pane || !this.panes.isAlive(pane.id)) throw new Error(`#${message.paneId} não está rodando`)
+          this.activeMission(pane.missionId)
+          if (typeof message.text !== 'string' || message.text.length > 20_000) throw new Error('A mensagem pode ter até 20.000 caracteres')
+          const ids = message.attachments ?? []
+          if (!Array.isArray(ids) || ids.length > ATTACHMENT_LIMITS.files) throw new Error('Envie até 8 anexos por mensagem')
+          if (ids.length && pane.cli === 'shell') throw new Error('Anexos precisam de um agente de IA')
+          const files = [...new Set(ids)].map((id) => this.attachments.get(pane.missionId, id))
+          if (files.reduce((n, f) => n + f.size, 0) > ATTACHMENT_LIMITS.totalBytes) throw new Error('Os anexos da mensagem podem somar até 8 MB')
+          if (!message.text.trim() && !files.length) throw new Error('Escreva uma mensagem ou adicione um anexo')
+          const text = message.text + (files.length ? `\n\nUser attachments (local files; inspect using your file/image tools):\n${files.map((f) => JSON.stringify({ name: f.name, path: f.path, mime: f.mime })).join('\n')}` : '')
+          this.panes.answered(pane.id)
+          if (!this.submitTo(pane.id, text)) throw new Error(`#${pane.id} não está rodando`)
+          if (message.requestId) reply({ type: 'pane.submitted', requestId: message.requestId, paneId: pane.id })
+        } catch (error) {
+          if (!message.requestId) throw error
+          reply({ type: 'pane.submit.error', requestId: message.requestId, message: error instanceof Error ? error.message : String(error) })
+        }
+        return
+      }
       case 'pane.resize':
         this.panes.resize(message.paneId, message.cols, message.rows)
         return
@@ -1228,8 +1432,7 @@ export class OrbitCore {
         this.renamePane(message.paneId, message.title)
         return
       case 'pane.restart':
-        this.restartPane(message.paneId, message.resume === true)
-        return
+        return this.restartPane(message.paneId, message.resume === true).then(() => {})
       case 'git.summary':
         reply({ type: 'git.summary', missionId: message.missionId, summary: this.gitSummary(message.missionId) })
         return
@@ -1324,7 +1527,61 @@ export class OrbitCore {
   /** The pane a bearer token belongs to, if it is still open. */
   identify(token: string | undefined): Pane | undefined {
     const id = token ? this.paneTokens.get(token) : undefined
-    return id === undefined ? undefined : this.store.pane(id)
+    const pane = id === undefined ? undefined : this.store.pane(id)
+    return pane && { ...pane, activityAttemptId: this.store.currentPaneAttempt(pane.id)?.id }
+  }
+
+  assertCurrent(caller: Pane): void {
+    const current = this.store.pane(caller.id)
+    const obsolete = !current || current.status === 'exited' || current.missionId !== caller.missionId
+      || current.executionEpoch !== caller.executionEpoch || this.store.executionEpoch(caller.id) !== caller.executionEpoch
+      || current.role !== caller.role
+      || (caller.activityAttemptId !== undefined && caller.activityAttemptId !== this.store.currentPaneAttempt(caller.id)?.id)
+    if (obsolete) throw new Error('Esta execução ou tentativa foi substituída ou encerrada. Consulte a execução atual antes de agir.')
+  }
+
+  dispatchDeliveries(missionId?: string): void {
+    for (const notice of this.store.notifications(missionId, true)) {
+      if (this.store.mission(notice.missionId)?.status !== 'active') continue
+      const target = notice.recipient.kind === 'pane' ? this.store.pane(notice.recipient.paneId) : this.missionPanes(notice.missionId).find(p => p.role === 'lead')
+      if (!target || target.missionId !== notice.missionId || !this.panes.canReceiveDelivery(target.id) || !needsDelivery(notice, target)) continue
+      const key = `${notice.id}:${target.executionEpoch}`
+      if (this.sendingNotices.has(key)) continue
+      this.sendingNotices.add(key)
+      const recipient = { ...target }
+      const queued = this.panes.submitWithReceipt(target.id, noticeText(notice), () => {
+        this.measurements?.wakeup(recipient.executionEpoch!)
+        try { this.store.markNoticeAccepted(notice.id, recipient) }
+        finally { this.sendingNotices.delete(key) }
+      })
+      if (queued) this.measurements?.bytes(target.executionEpoch!, 'submittedBytes', noticeText(notice))
+      if (!queued) this.sendingNotices.delete(key)
+    }
+  }
+
+  acknowledgeDelivery(caller: Pane, deliveryId: string, includeResult = false) {
+    this.assertCurrent(caller)
+    const notice = this.store.acknowledgeNotice(deliveryId, caller)
+    if (!includeResult) return notice
+    const history = this.store.activityHistory(caller.missionId)
+    const result = history.results.find(r => r.id === notice.resultId)
+    const activity = result && history.activities.find(a => a.id === result.activityId)
+    const attempt = result && history.attempts.find(a => a.id === result.attemptId)
+    const { text: _text, ...receipt } = notice
+    // ACK is receipt only. Do not scan source, create an inspection or imply acceptance.
+    if (!result || !activity || !attempt) return { ...receipt, context: null }
+    const limits = { summary: 2000, evidence: 4000, details: 2000 }
+    const truncatedFields = (Object.keys(limits) as Array<keyof typeof limits>).filter(key => result[key].length > limits[key])
+    return { ...receipt, context: {
+      current: activity.state !== 'waived' && activity.activeAttemptId === result.attemptId && activity.revision === result.activityRevision && history.results.findLast(r => r.attemptId === result.attemptId)?.id === result.id,
+      sourceFreshness: 'not_checked' as const,
+      result: { id: result.id, activityId: result.activityId, activityRevision: result.activityRevision, attemptId: result.attemptId, status: result.status, state: result.state,
+        summary: result.summary.slice(0, limits.summary), evidence: result.evidence.slice(0, limits.evidence), details: result.details.slice(0, limits.details), acceptance: attempt.acceptance },
+      activity: { id: activity.id, title: activity.title, revision: activity.revision, activeAttemptId: activity.activeAttemptId, state: activity.state },
+      producer: { paneId: attempt.paneId, cli: attempt.cli, sessionId: attempt.sessionId },
+      truncatedFields,
+      more: { tool: 'handoff_list', arguments: { resultId: result.id, view: 'detail' } },
+    } }
   }
 
   mission(id: string): Mission | undefined {
@@ -1343,6 +1600,20 @@ export class OrbitCore {
     return this.store.routing()
   }
 
+  modelCatalog(missionId: string) {
+    return this.store.mission(missionId)?.allowedClis.map((cli) => ({
+      cli,
+      adapter: adapterCapabilities(cli, this.clis.get(cli)?.version ?? null),
+      source: this.catalog?.[cli].source ?? 'unavailable',
+      models: this.catalog?.[cli].models.map((m) => ({ ...m, description: m.description.slice(0, 240) })) ?? [],
+      selection: ['simples', 'normal', 'dificil'].map((difficulty) => ({
+        difficulty,
+        ...seatForDifficulty(cli, null, 'medium', difficulty as Difficulty, (model) => effortsFor(this.catalog, cli, model), this.catalog?.[cli]),
+      })),
+      costBasis: 'Relative model tiers; no live price quotes. Account limits and live agent load govern balancing.',
+    })) ?? []
+  }
+
   /** The workspace a mission runs in. */
   missionWorkspace(missionId: string) {
     const workspaceId = this.store.mission(missionId)?.workspaceId
@@ -1359,27 +1630,105 @@ export class OrbitCore {
    * A helper opened by an agent. In agentic missions an activity without a role, type or explicit
    * CLI is classified by the maestro; the receipt says what was chosen and why.
    */
-  async spawnHelper(caller: Pane, input: { title: string; task: string; cli?: AgentCli; model: string | null; effort?: Effort | null; squadRoleId?: string | null; taskTypeId?: string | null; accept?: string[]; folder?: string | null; difficulty?: Difficulty | null }): Promise<{ pane: Pane; receipt: string[] }> {
+  delegationKey(input: HelperRequest): string {
+    if (input.activityId) {
+      if (!/^[a-zA-Z0-9_-]{1,100}$/.test(input.activityId)) throw new Error('Identificador da atividade inválido')
+      return createHash('sha256').update(`activity:${input.activityId}`).digest('hex')
+    }
+    return createHash('sha256').update(JSON.stringify({ task: input.task.trim().replaceAll('\r\n', '\n'),
+      folder: input.folder ?? null, role: input.squadRoleId ?? null, kind: input.taskTypeId ?? null,
+      accept: (input.accept ?? []).map((c) => c.trim()).filter(Boolean).slice(0, 8), ...(input.dependsOn?.length ? { dependsOn: [...new Set(input.dependsOn)].sort() } : {}), ...(input.requireReadOnlySandbox ? { requireReadOnlySandbox: true } : {}), ...(input.readOnly ? { readOnly: true } : {}) })).digest('hex')
+  }
+
+  async spawnHelper(caller: Pane, input: HelperRequest): Promise<{ pane: Pane; receipt: string[] }> {
+    this.assertCurrent(caller)
+    this.activeMission(caller.missionId)
+    // Receipts expose the ledger id; accepting it here keeps a resumed leader on the same work.
+    const identified = input.activityId && this.store.activity(caller.missionId, input.activityId)
+    const key = identified ? identified.key : this.delegationKey(input)
+    const lock = `${caller.missionId}:${key}`
+    const pending = this.delegating.get(lock)
+    if (pending) {
+      const result = await pending
+      return { pane: result.pane, receipt: [`reutilizado: #${result.pane.id}, delegação já em abertura`] }
+    }
+    const retry = input.retryReason?.trim()
+    if (input.retryReason !== undefined && !retry) throw new Error('Explique por que esta tarefa precisa ser executada novamente')
+    const activity = this.store.activity(caller.missionId, key)
+    const dependencies: NonNullable<ActivityRecord['dependencies']> = []
+    if (!Array.isArray(input.dependsOn ?? []) || (input.dependsOn?.length ?? 0) > 16 || input.dependsOn?.some(id => typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(id))) throw new Error('Dependências inválidas')
+    for (const id of [...new Set(input.dependsOn ?? [])]) {
+      const upstream = this.store.activity(caller.missionId, id) ?? this.store.activity(caller.missionId, this.delegationKey({ title: '', task: '', model: null, activityId: id }))
+      if (!upstream) throw new Error(`Dependência ${id} não existe nesta missão`)
+      const result = this.acceptedResult(caller.missionId, upstream.id, new Set(), true)
+      dependencies.push({ activityId: upstream.id, revision: upstream.revision, attemptId: upstream.activeAttemptId, resultId: result.id })
+    }
+    if (activity) assertNoDependencyCycle(activity.id, dependencies.map(d => d.activityId), this.store.activityHistory(caller.missionId).activities)
+    const previous = activity && this.store.activityAttempt(activity.activeAttemptId)
+    if (retry && previous && retry !== previous.retryReason && previous.state !== 'delivered' && this.panes.isAlive(previous.paneId)) {
+      throw new Error(`A atividade de #${previous.paneId} ainda está em execução. Interrompa e feche a tentativa antes de substituí-la, para evitar trabalho concorrente duplicado.`)
+    }
+    if (retry && previous?.state === 'delivered' && this.panes.isAlive(previous.paneId)) this.closeHelper(caller, previous.paneId, false)
+    const ticket = this.store.reserveActivity({ missionId: caller.missionId, key, title: input.title, contractHash: contractHash(input), acceptance: normalizedAcceptance(input.accept), retryReason: retry ?? null, assignedBy: caller.id, requiresDelivery: input.cli !== 'shell', dependencies })
+    if (ticket.reused) {
+      const attempt = ticket.attempt
+      const pane = attempt.state === 'delivered' ? attempt.pane : this.store.pane(attempt.paneId) ?? attempt.pane
+      if (!pane || (attempt.state !== 'delivered' && !this.panes.isAlive(attempt.paneId))) throw new Error(`Tentativa de #${attempt.paneId} já reservada ou parada sem concluir. Confira o histórico e use agent_resume ou retryReason com uma justificativa nova.`)
+      return { pane, receipt: [`reutilizado: #${pane.id} (${pane.handoffStatus ?? pane.status}); atividade ${ticket.activity.id}, tentativa ${attempt.id}`] }
+    }
+    const reservedMission = this.store.mission(caller.missionId)
+    if (reservedMission) this.broadcast({ type: 'mission.updated', mission: reservedMission })
+    const opening = (async () => {
+      if (retry && previous) await this.panes.waitForExit(previous.paneId)
+      this.assertCurrent(caller)
+      return this.openHelper(caller, input, ticket.attempt)
+    })().then((result) => {
+      this.store.saveDelegation({ missionId: caller.missionId, key, pane: result.pane, acceptance: (input.accept ?? []).map((c) => c.trim()).filter(Boolean).slice(0, 8), retryReason: retry ?? null })
+      if (previous && retry) this.store.replaceDelivery(caller.missionId, previous.paneId, result.pane.id, caller.id, retry)
+      this.store.flush()
+      return result
+    }).catch(error => {
+      this.store.failAttempt(ticket.attempt.id, error)
+      throw error
+    })
+    this.delegating.set(lock, opening)
+    try { return await opening } finally { this.delegating.delete(lock) }
+  }
+
+  private async openHelper(caller: Pane, input: HelperRequest, attempt: { id: string; paneId: number }): Promise<{ pane: Pane; receipt: string[] }> {
     const receipt: string[] = []
+    const policyRevision = routingRevision(this.store.routing())
+    let decisionSource: DecisionReceipt['source'] = input.cli || input.model || input.effort ? 'explicit' : 'rule'
     const mission = this.store.mission(caller.missionId)
     if (caller.role === 'crew') {
       const slots = this.childSlots(caller)
       if (slots === 0) throw new Error(this.missionPanes(caller.missionId).some((p) => p.assignedBy === caller.id && this.panes.isAlive(p.id)) ? `Você já tem ${MAX_CHILDREN} sub-ajudantes abertos. Feche um que já entregou (agent_close) antes de abrir outro.` : 'Sub-ajudantes não podem abrir ajudantes.')
     }
     let taskTypeId = input.taskTypeId ?? null
-    let difficulty: Difficulty | null = input.difficulty ?? null
-    let difficultyBy = 'líder'
+    const assessed = assessDifficulty(input.title, input.task)
+    let difficulty: Difficulty = input.difficulty ?? assessed.difficulty
+    let difficultyBy = input.difficulty ? 'líder' : assessed.why
     if ((mission?.mode === 'agentica' || caller.role === 'crew') && !taskTypeId && !input.squadRoleId && !input.cli && !input.model) {
       const text = `${input.title}\n${input.task}`
       const types = this.store.routing().taskTypes
       let { type, via, sure } = classifyTask(text, types, input.title)
       // No keyword, or two types close: a small model reads the activity against the table; the
       // keywords' answer stands if it fails.
-      if (!sure && this.store.settings().smartClassify) {
-        const decided = await decideTaskType(this.run, join(this.dataDir, 'decisor'), text, types).catch(() => null)
+      if (!sure && assessed.difficulty !== 'simples' && this.store.settings().smartClassify) {
+        if (this.budgetBlocks(caller.missionId)) throw new Error('O orçamento desta missão acabou antes da classificação')
+        const call = this.store.startAuxiliaryCall({ missionId: caller.missionId, attemptId: attempt.id, model: DECIDER_MODEL, promptBytes: Buffer.byteLength(decisionPrompt(text, types)) })
+        let observation!: AuxiliaryObservation
+        const decided = await decideTaskType(this.run, join(this.dataDir, 'decisor'), text, types, value => { observation = value }).catch(() => null)
+        if (!observation) throw new Error('Classificador não iniciou nem reportou resultado; chamada permanece incompleta para diagnóstico')
+        const accounted = this.store.finishAuxiliaryCall(call.id, observation)
+        if (accounted.added) {
+          this.broadcast({ type: 'mission.updated', mission: this.checkBudget(accounted.added.mission) })
+          this.broadcast({ type: 'usage.day', day: accounted.added.day })
+        }
         if (decided) {
+          decisionSource = 'classifier';
           ({ type, via } = { type: decided.type, via: `decidido pelo Haiku${via === 'padrão' ? '' : ` (as palavras: ${via})`}: ${decided.why}` })
-          if (!difficulty) [difficulty, difficultyBy] = [decided.difficulty, 'Haiku']
+          if (!input.difficulty && assessed.difficulty === 'normal') [difficulty, difficultyBy] = [decided.difficulty, 'Haiku']
         }
         else via = `${via}; o decisor não respondeu`
       }
@@ -1392,14 +1741,25 @@ export class OrbitCore {
     const accept = (input.accept ?? []).map((c) => c.trim()).filter(Boolean).slice(0, 8)
     if (accept.length) receipt.push(`critérios de aceite: ${accept.length}`)
     if (input.folder) receipt.push(`pasta: ${input.folder}`)
+    receipt.push(`complexidade: ${difficulty} (${difficultyBy})`)
+    if (input.retryReason) receipt.push(`nova execução: ${input.retryReason.trim().slice(0, 600)}`)
     const children = caller.role === 'lead' && (mission?.mode === 'agentica' || mission?.mode === 'squad') ? MAX_CHILDREN : 0
-    const { accept: _, difficulty: __, ...request } = input
+    const { accept: _, difficulty: __, retryReason: ___, activityId: ____, ...request } = input
     // A model the lead named stays; otherwise the activity's difficulty picks the tier.
-    const tier = difficulty && difficulty !== 'normal' && !input.model ? { difficulty, by: difficultyBy } : undefined
-    const opened = this.spawn({ missionId: caller.missionId, role: 'crew', ...request, task: input.task + acceptanceNote(accept), cli: input.cli ?? 'claude', taskTypeId }, { receipt, boss: caller, children, tier })
+    const tier = difficulty !== 'normal' && !input.model && !input.squadRoleId ? { difficulty, by: difficultyBy } : undefined
+    // Classification may have awaited a model; enforce the sub-helper cap at launch too.
+    if (caller.role === 'crew' && this.childSlots(caller) === 0) throw new Error('Não há vaga para outro sub-ajudante; aguarde ou feche um que entregou')
+    this.assertCurrent(caller)
+    if (policyRevision !== routingRevision(this.store.routing())) throw new Error('A tabela de roteamento mudou durante a classificação; confira e repita com uma nova justificativa')
+    const activity = this.store.activityHistory(caller.missionId).activities.find(a => a.activeAttemptId === attempt.id)
+    for (const dependency of activity?.dependencies ?? []) {
+      if (this.acceptedResult(caller.missionId, dependency.activityId, new Set(), true).id !== dependency.resultId) throw new Error('A dependência mudou antes do lançamento')
+    }
+    const opened = this.spawn({ missionId: caller.missionId, role: 'crew', ...request, task: input.task + acceptanceNote(accept), cli: input.cli ?? 'claude', taskTypeId }, { receipt, boss: caller, children, tier, explicitCli: input.cli, id: attempt.paneId, attemptId: attempt.id, requireReadOnlySandbox: input.requireReadOnlySandbox, decisionSource, harnessTask: { difficulty, retry: !!input.retryReason } })
     if (accept.length) this.acceptance.set(opened.id, accept)
     this.assign(opened.id, caller.id)
     const pane = this.store.pane(opened.id) ?? opened
+    receipt.push(`atividade: ${activity!.id}; tentativa: ${attempt.id}`)
     receipt.push(`abriu: ${[CLI_LABEL[pane.cli], pane.model ?? 'modelo padrão', pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}`)
     return { pane, receipt }
   }
@@ -1417,7 +1777,7 @@ export class OrbitCore {
     // Must make a valid table (a model of the right CLI, an effort it takes…).
     normalizeRouting({ ...routing, taskTypes: routing.taskTypes.map((t) => (t.id === row.id ? { ...t, ...change, ...(change.cli && change.cli !== t.cli && !('model' in change) ? { model: null } : {}) } : t)) })
     if (this.store.proposals().filter((p) => p.missionId === caller.missionId && p.status === 'pendente').length >= 5) throw new Error('Já há 5 propostas desta missão esperando o usuário')
-    const proposal = this.store.addProposal({ missionId: caller.missionId, paneId: caller.id, kind: row.id, change, reason })
+    const proposal = this.store.addProposal({ missionId: caller.missionId, paneId: caller.id, kind: row.id, change, reason, baseRevision: routing.revision })
     this.broadcast({ type: 'proposals', proposals: this.store.proposals() })
     this.event(caller.missionId, 'proposal', `Proposta para a tabela: ${row.name}`, `${describeChange(row, change)}\n\nMotivo: ${reason}\n\nDecida em Ajustes › Quem faz cada tarefa.`, caller.id)
     return proposal
@@ -1431,12 +1791,13 @@ export class OrbitCore {
     const routing = this.store.routing()
     const row = routing.taskTypes.find((t) => t.id === proposal.kind)
     if (accept) {
+      if (proposal.baseRevision !== routing.revision) throw new Error('A tabela mudou desde esta proposta. Peça uma proposta atualizada antes de aceitar.')
       if (!row) throw new Error('O tipo dessa proposta saiu da tabela')
       const { change } = proposal
-      this.store.saveRouting(normalizeRouting({ ...routing, taskTypes: routing.taskTypes.map((t) => (t.id === row.id ? { ...t, ...change, ...(change.cli && change.cli !== t.cli && !('model' in change) ? { model: null } : {}) } : t)) }))
+      this.store.acceptRoutingProposal(id, normalizeRouting({ ...routing, taskTypes: routing.taskTypes.map((t) => (t.id === row.id ? { ...t, ...change, ...(change.cli && change.cli !== t.cli && !('model' in change) ? { model: null } : {}) } : t)) }))
       this.broadcast({ type: 'routing.updated', routing: this.store.routing() })
     }
-    this.store.decideProposal(id, accept ? 'aceita' : 'recusada')
+    if (!accept) this.store.decideProposal(id, 'recusada')
     this.broadcast({ type: 'proposals', proposals: this.store.proposals() })
     const name = row?.name ?? proposal.kind
     this.event(proposal.missionId, 'proposal', `Proposta ${accept ? 'aceita' : 'recusada'}: ${name}`, describeChange(row, proposal.change), proposal.paneId)
@@ -1460,15 +1821,16 @@ export class OrbitCore {
   }
 
   /** When Orbit opens: the agents that were running come back in their conversations. */
-  resumeCrews(): void {
+  async resumeCrews(): Promise<void> {
     if (!this.store.settings().resumeOnStart) return
     const ids = this.store.wasRunning.splice(0)
     const panes = ids.map((id) => this.store.pane(id)).filter((p): p is Pane => Boolean(p && p.cli !== 'shell' && p.sessionId && this.store.paneSpec(p.id) && this.store.mission(p.missionId)?.status === 'active'))
     // Leads first, so helpers that deliver find them running.
     panes.sort((a, b) => Number(b.role === 'lead') - Number(a.role === 'lead') || a.id - b.id)
     for (const pane of panes) {
+      if (this.stopping) break
       try {
-        this.restartPane(pane.id, true, this.owesHandoff(pane) ? RESUME_NOTE : undefined)
+        await this.restartPane(pane.id, true, this.owesHandoff(pane) ? RESUME_NOTE : undefined)
       } catch (error) {
         this.event(pane.missionId, 'pane.exited', `#${pane.id} não voltou`, error instanceof Error ? error.message : String(error), pane.id)
       }
@@ -1491,34 +1853,182 @@ export class OrbitCore {
     this.panes.report(target.id, 'idle', null)
     if (!message?.trim()) return
     await new Promise((resolve) => setTimeout(resolve, INTERRUPT_SETTLE_MS))
+    this.assertCurrent(caller)
+    this.assertCurrent(target)
     this.sendTo(caller, targetId, message.trim())
   }
 
   /** Opens a helper again in the same conversation, with a message to carry on; returns the new agent. */
-  resumeHelper(caller: Pane, targetId: number, message: string | null): Pane {
+  async resumeHelper(caller: Pane, targetId: number, message: string | null): Promise<Pane> {
     const target = this.sameMission(caller, targetId)
     if (target.role !== 'crew' || target.cli === 'shell') throw new Error(`#${targetId} não é um ajudante`)
     if (this.panes.isAlive(target.id) && (target.status === 'running' || target.status === 'starting')) {
       throw new Error(`#${targetId} está trabalhando. Para mudar o rumo use agent_interrupt; para falar com ele, agent_send.`)
     }
-    const pane = this.restartPane(target.id, true, message?.trim() || 'Continue a tarefa de onde parou. Ao terminar, entregue com handoff_submit.')
+    const pane = await this.restartPane(target.id, true, message?.trim() || 'Continue a tarefa de onde parou. Ao terminar, entregue com handoff_submit.')
+    this.assertCurrent(caller)
     this.assign(pane.id, caller.id)
     return this.store.pane(pane.id) ?? pane
   }
 
   /** The lead declares the objective met: the mission shows as ready and the person is told. */
-  missionReady(caller: Pane, summary: string, force: boolean): Mission {
+  pendingDeliveries(missionId: string) {
+    return this.store.deliveries(missionId).filter(deliveryPending)
+  }
+
+  private currentResult(missionId: string, resultId: string) {
+    const history = this.store.activityHistory(missionId)
+    const result = history.results.find(r => r.id === resultId)
+    const activity = result && history.activities.find(a => a.id === result.activityId)
+    const attempt = result && history.attempts.find(a => a.id === result.attemptId)
+    if (!result || !activity || !attempt || result.status !== 'done' || activity.state === 'waived' || activity.activeAttemptId !== result.attemptId || activity.revision !== result.activityRevision || history.results.findLast(r => r.attemptId === attempt.id && r.status === 'done')?.id !== result.id) throw new Error('Resultado não é a entrega atual desta atividade; confira tentativa e revisão')
+    return { result, activity, attempt }
+  }
+
+  private refreshSource(result: ActivityResult) {
+    if (!result.source) throw new Error('Resultado sem revisão de código capturada; entregue novamente antes de validar')
+    const source = sourceRevision(result.source.roots.map(r => r.root), [this.dataDir])
+    if (source.digest !== result.source.digest) throw new Error('O código foi alterado desde a entrega; novo resultado e revisão são necessários')
+    return source
+  }
+
+  private integrationState(missionId: string) {
+    const mission = this.store.mission(missionId)
+    const workspace = this.missionWorkspace(missionId)
+    if (!mission || !workspace) throw new Error('Missão ou workspace inexistente')
+    const source = sourceRevision(copyRoots([mission.git?.leadPath ?? workspace.path, ...workspace.folders.slice(1)]), [this.dataDir])
+    const history = this.store.activityHistory(missionId)
+    const contracts = history.activities.filter(a => a.verificationRequired && a.state !== 'waived').map(a => [a.id, a.revision, a.contractHash, a.activeAttemptId, history.results.findLast(r => r.attemptId === a.activeAttemptId && r.status === 'done')?.id ?? null])
+    return { source, contractDigest: createHash('sha256').update(JSON.stringify([mission.objective, workspace.instructions, contracts])).digest('hex') }
+  }
+
+  private acceptedResult(missionId: string, activityId: string, seen = new Set<string>(), currentSource = false): ActivityResult {
+    if (seen.has(activityId)) throw new Error('Dependência circular na validação')
+    seen.add(activityId)
+    const history = this.store.activityHistory(missionId)
+    const activity = history.activities.find(a => a.id === activityId)
+    const result = activity && history.results.findLast(r => r.attemptId === activity.activeAttemptId && r.status === 'done')
+    if (!activity || !result || activity.state === 'waived') throw new Error(`Falta validação da atividade ${activityId}`)
+    this.currentResult(missionId, result.id)
+    const reviews = this.store.verifications(missionId).filter(v => v.resultId === result.id && v.scope === 'result')
+    if (reviews.some(v => v.verdict === 'changes_required')) throw new Error(`Resultado rejeitado da atividade ${activityId} exige nova entrega`)
+    const review = reviews.at(-1)
+    if (!review || review.verdict !== 'accepted' || review.source.digest !== result.source?.digest) throw new Error(`Falta revisão independente da atividade ${activityId}`)
+    if (currentSource) this.refreshSource(result)
+    for (const dependency of activity.dependencies ?? []) {
+      const upstream = this.acceptedResult(missionId, dependency.activityId, new Set(seen))
+      if (upstream.id !== dependency.resultId || upstream.attemptId !== dependency.attemptId || upstream.activityRevision !== dependency.revision) throw new Error('A dependência mudou depois da atribuição; revise o contrato da atividade')
+    }
+    return result
+  }
+
+  inspectResult(caller: Pane, resultId: string, scope: 'result' | 'integration' = 'result') {
+    this.assertCurrent(caller)
+    const { result, activity } = this.currentResult(caller.missionId, resultId)
+    if (!['result', 'integration'].includes(scope)) throw new Error('Escopo de revisão inválido')
+    const source = scope === 'result' ? this.refreshSource(result) : this.acceptedResult(caller.missionId, activity.id).source!
+    const integration = this.integrationState(caller.missionId)
+    const inspection = this.store.saveInspection({ scope, missionId: caller.missionId, resultId, source, integration: integration.source, contractDigest: integration.contractDigest, reviewer: { paneId: caller.id, epoch: caller.executionEpoch!, attemptId: this.store.currentPaneAttempt(caller.id)?.id ?? null } })
+    const acceptance = scope === 'result' ? activity.acceptance : this.integrationAcceptance(caller.missionId)
+    return { ...inspection, acceptance, result: { summary: result.summary, evidence: result.evidence, details: result.details }, provenance: 'Fingerprint observed by Orbit; check outcomes must be independently reported by the reviewer' }
+  }
+
+  private integrationAcceptance(missionId: string): string[] {
+    const mission = this.store.mission(missionId)!
+    return [`Mission objective: ${mission.objective || mission.title}`, 'All required activity results are integrated and their acceptance criteria remain satisfied in the final source.']
+  }
+
+  verifyResult(caller: Pane, input: VerificationInput, readySummary?: string) {
+    this.assertCurrent(caller)
+    if (readySummary !== undefined) {
+      if (caller.role !== 'lead') throw new Error('Só o líder declara a missão pronta')
+      if (typeof readySummary !== 'string' || !readySummary.trim() || readySummary.length > 4000) throw new Error('Escreva um resumo de conclusão válido, até 4000 caracteres')
+      if (input.verdict !== 'accepted') throw new Error('Conclusão exige um parecer aceito de integração')
+    }
+    const inspection = this.store.inspection(caller.missionId, input.inspectionId)
+    if (!inspection || inspection.reviewer.paneId !== caller.id || inspection.reviewer.epoch !== caller.executionEpoch || inspection.reviewer.attemptId !== (this.store.currentPaneAttempt(caller.id)?.id ?? null)) throw new Error('Inspeção não pertence a esta execução/atribuição')
+    if (readySummary !== undefined && inspection.scope !== 'integration') throw new Error('Conclusão conjunta exige escopo de integração')
+    const { result, activity, attempt } = this.currentResult(caller.missionId, inspection.resultId)
+    if (attempt.paneId === caller.id) throw new Error('Revisão independente exige outro agente: o executor não aceita o próprio resultado')
+    if (inspection.scope === 'result' && this.refreshSource(result).digest !== inspection.source.digest) throw new Error('O código mudou depois da inspeção')
+    const integration = this.integrationState(caller.missionId)
+    if (integration.source.digest !== inspection.integration.digest || integration.contractDigest !== inspection.contractDigest) throw new Error('A integração ou os contratos da missão mudaram depois da inspeção; faça outra inspeção')
+    if (inspection.scope === 'integration' && input.verdict === 'accepted' && (this.pendingDeliveries(caller.missionId).length || this.verificationStatus(caller.missionId).some(v => !v.valid))) throw new Error('A revisão final exige todas as atividades entregues e aceitas primeiro')
+    validateReview(input, inspection.scope === 'result' ? activity.acceptance : this.integrationAcceptance(caller.missionId))
+    if (readySummary !== undefined) {
+      const { pending, unverified, integrationReviewed } = this.readiness(caller.missionId, inspection)
+      if (pending.length || unverified.length || !integrationReviewed) throw new Error('Conclusão exige todas as atividades e a integração atual aceitas, sem dispensa')
+    }
+    const alreadyCompleted = readySummary !== undefined && this.store.verifications(caller.missionId).some(v => v.inspectionId === input.inspectionId && v.completion)
+    const record = this.store.saveVerification(inspection, result, input, readySummary)
+    if (readySummary !== undefined && record.completion) {
+      const mission = this.store.mission(caller.missionId)!
+      this.broadcast({ type: 'mission.updated', mission: { ...mission } })
+      if (!alreadyCompleted) {
+        const event = this.store.snapshot().events.find(e => e.id === record.completion!.eventId)
+        if (event) this.broadcast({ type: 'event.added', event })
+      }
+      // A replay can repair a missed memory projection without duplicating its entry.
+      this.remember(mission.workspaceId, { id: record.completion.eventId, kind: 'missao', text: `${mission.title}: ${record.completion.summary}`, source: { missionId: mission.id, missionTitle: mission.title, paneId: caller.id } })
+    }
+    return record
+  }
+
+  verificationStatus(missionId: string) {
+    return this.store.activityHistory(missionId).activities.filter(a => a.verificationRequired && a.state !== 'waived').map(activity => {
+      try { const result = this.acceptedResult(missionId, activity.id); return { activityId: activity.id, resultId: result.id, valid: true, reason: null } }
+      catch (error) { return { activityId: activity.id, resultId: null, valid: false, reason: error instanceof Error ? error.message : String(error) } }
+    })
+  }
+
+  missionProgress(missionId: string): MissionProgress {
+    if (!this.store.mission(missionId)) throw new Error('Missão inexistente')
+    const history = this.store.activityHistory(missionId)
+    const verifications = this.store.verifications(missionId)
+    const validation = this.verificationStatus(missionId)
+    const managed = history.activities.some(a => a.verificationRequired && a.state !== 'waived' && history.attempts.find(t => t.id === a.activeAttemptId)?.cli !== 'shell')
+    const review = verifications.findLast(v => v.scope === 'integration')
+    let integration: MissionProgress['integration'] = { state: managed ? 'pending' : 'none', reviewId: review?.id ?? null, checkedAt: null, reason: managed ? 'Falta revisão final da integração.' : 'Sem resultado gerenciado com revisão final obrigatória.' }
+    if (review) {
+      try {
+        const current = this.integrationState(missionId)
+        const valid = review.verdict === 'accepted' && review.integration.digest === current.source.digest && review.contractDigest === current.contractDigest && validation.every(v => v.valid) && !this.pendingDeliveries(missionId).length
+        integration = { state: valid ? 'current' : 'stale', reviewId: review.id, checkedAt: Date.now(), reason: valid ? null : 'O código, os contratos ou as entregas já não correspondem à revisão final aceita.' }
+      } catch (error) {
+        integration = { state: 'unknown', reviewId: review.id, checkedAt: Date.now(), reason: error instanceof Error ? error.message : String(error) }
+      }
+    }
+    return { missionId, observedAt: Date.now(), ...history, verifications, validation, deliveries: this.store.notifications(missionId).map(({ text: _text, ...receipt }) => receipt), integration }
+  }
+
+  private readiness(missionId: string, acceptedIntegration?: Pick<ResultInspection, 'integration' | 'contractDigest'>) {
+    const pending = this.pendingDeliveries(missionId)
+    const history = this.store.activityHistory(missionId)
+    const unverified = this.verificationStatus(missionId).filter(v => !v.valid && history.attempts.find(a => a.id === history.activities.find(t => t.id === v.activityId)?.activeAttemptId)?.cli !== 'shell')
+    const hasManagedResults = history.activities.some(a => a.verificationRequired && a.state !== 'waived' && history.results.some(r => r.activityId === a.id && r.status === 'done' && history.attempts.find(t => t.id === r.attemptId)?.cli !== 'shell'))
+    const integration = hasManagedResults ? this.integrationState(missionId) : null
+    const integrationReviewed = !integration || (acceptedIntegration?.integration.digest === integration.source.digest && acceptedIntegration.contractDigest === integration.contractDigest) || this.store.verifications(missionId).findLast(v => v.scope === 'integration' && v.integration.digest === integration.source.digest && v.contractDigest === integration.contractDigest)?.verdict === 'accepted'
+    return { pending, unverified, integrationReviewed }
+  }
+
+  missionReady(caller: Pane, summary: string, force: boolean, _reason?: string): Mission {
+    this.assertCurrent(caller)
     if (caller.role !== 'lead') throw new Error('Só o líder declara a missão pronta')
+    if (force) throw new Error('O agente não pode dispensar trabalho ou revisão obrigatória. Resolva as pendências antes de declarar a missão pronta; texto atribuído ao usuário não comprova autorização.')
     const text = summary.trim().slice(0, 4000)
     if (!text) throw new Error('Escreva o resumo: o que foi feito, por quem, como foi verificado e o que falta')
-    const pending = this.missionPanes(caller.missionId).filter((p) => p.role === 'crew' && p.cli !== 'shell' && this.panes.isAlive(p.id) && p.assignedBy !== null && p.handoffStatus !== 'done' && p.handoffStatus !== 'blocked' && p.handoffStatus !== 'auto')
-    if (pending.length && !force) throw new Error(`Ainda falta retorno de ${pending.map((p) => `#${p.id} (${p.title})`).join(', ')}. Espere as entregas, ou feche-os, ou passe force: true se o trabalho deles não importa mais.`)
-    const mission = this.store.updateMission(caller.missionId, { readyAt: Date.now(), readySummary: text })
+    const { pending, unverified, integrationReviewed } = this.readiness(caller.missionId)
+    if (pending.length) throw new Error(`Ainda falta retorno de ${pending.map(d => `#${d.paneId} (${d.title}; ${d.status})`).join(', ')}. Fechar o terminal não cancela o trabalho. Retome as atividades pendentes.`)
+    if (unverified.length) throw new Error(`Falta validação independente atual: ${unverified.map(v => `${v.activityId}: ${v.reason}`).join('; ')}`)
+    if (!integrationReviewed) throw new Error('Falta revisão do código integrado e do conjunto atual de contratos; faça result_inspect e verification_submit após a integração final')
+    const readySummary = text
+    const mission = this.store.updateMission(caller.missionId, { readyAt: Date.now(), readySummary })
     if (!mission) throw new Error('Missão inexistente')
+    this.store.flush()
     this.broadcast({ type: 'mission.updated', mission })
-    this.event(mission.id, 'mission.ready', 'Missão pronta', text, caller.id)
+    this.event(mission.id, 'mission.ready', 'Missão pronta', readySummary, caller.id)
     // What a mission achieved stays in the project's memory for the missions after it.
-    this.remember(mission.workspaceId, { kind: 'missao', text: `${mission.title}: ${text}`, source: { missionId: mission.id, missionTitle: mission.title, paneId: caller.id } })
+    this.remember(mission.workspaceId, { kind: 'missao', text: `${mission.title}: ${readySummary}`, source: { missionId: mission.id, missionTitle: mission.title, paneId: caller.id } })
     return mission
   }
 
@@ -1532,22 +2042,20 @@ export class OrbitCore {
       const updated = this.store.updateMission(mission.id, { readyAt: null, readySummary: null })
       if (updated) this.broadcast({ type: 'mission.updated', mission: updated })
     }
+    if (pane) this.store.assignDelivery(pane, this.acceptance.get(paneId) ?? [])
   }
 
-  /**
-   * Types a message into an agent. An orchestrating lead without hooks (Codex, Antigravity) gets
-   * the maestro's reminder with it, as Claude and Gemini get it from their prompt hook.
-   */
+  /** Role instructions are installed once at launch, never repeated in user messages. */
   private submitTo(paneId: number, text: string): boolean {
     const pane = this.store.pane(paneId)
-    const mission = pane?.role === 'lead' ? this.store.mission(pane.missionId) : undefined
-    const remind = pane && pane.cli !== 'shell' && !AGENT_INFO[pane.cli].hooks && (mission?.mode === 'agentica' || mission?.mode === 'squad')
-    return this.panes.submit(paneId, remind ? `${text}\n\n(${MAESTRO_RULE})` : text)
+    const accepted = this.panes.submitWithReceipt(paneId, text, () => { if (pane?.executionEpoch) this.measurements?.wakeup(pane.executionEpoch) })
+    if (accepted && pane?.executionEpoch) this.measurements?.bytes(pane.executionEpoch, 'submittedBytes', text)
+    return accepted
   }
 
   /** A helper someone gave work to and that has not reported back yet. */
   private owesHandoff(pane: Pane): boolean {
-    return pane.role === 'crew' && pane.cli !== 'shell' && pane.assignedBy !== null && pane.handoffStatus === null
+    return pane.role === 'crew' && pane.cli !== 'shell' && pane.assignedBy !== null && (pane.handoffStatus === null || pane.handoffStatus === 'progress')
   }
 
   /** Types a line into the terminal of whoever gave this helper its work (or the lead). */
@@ -1568,6 +2076,8 @@ export class OrbitCore {
   private turnEnded(pane: Pane, lastMessage: string | null, canBlock: boolean): string | null {
     // Out of budget, stopping is what we want: no chasing for a handoff.
     if (!this.owesHandoff(pane) || this.budgetBlocks(pane.missionId)) return null
+    // A progress checkpoint may end a turn, but the durable obligation still gates completion.
+    if (pane.handoffStatus === 'progress') return null
     if (canBlock) return HANDOFF_NUDGE
     if (pane.cli !== 'shell' && !AGENT_INFO[pane.cli].hooks && !this.nudged.has(pane.id)) {
       this.nudged.add(pane.id)
@@ -1575,9 +2085,11 @@ export class OrbitCore {
       return null
     }
     const said = oneLine(lastMessage?.trim() || this.panes.screenText(pane.id, 20)).slice(-1500) || '(nada na tela)'
+    const committed = this.store.commitActivityResult(pane, { status: 'auto', summary: said, evidence: '', details: '', deliveredTo: pane.assignedBy }, { title: `Retorno de #${pane.id} (automático)`, body: `#${pane.id} encerrou o turno sem handoff_submit. Última mensagem:\n\n${said}` }, `[Orbit] #${pane.id} (${pane.title}) encerrou o turno sem entregar. Última mensagem dele: ${said} (Confira a evidência antes de aceitar.)`)
     this.panes.setHandoff(pane.id, { status: 'auto' })
-    this.event(pane.missionId, 'handoff', `Retorno de #${pane.id} (automático)`, `#${pane.id} encerrou o turno sem handoff_submit. Última mensagem:\n\n${said}`, pane.id)
-    this.tellAssigner(pane, `[Orbit] #${pane.id} (${pane.title}) encerrou o turno sem entregar. Última mensagem dele: ${said} (Se ele perguntou algo, responda com agent_send; se diz que terminou, confira a evidência antes de aceitar.)`)
+    if (committed.event) this.broadcast({ type: 'event.added', event: committed.event })
+    if (committed.duplicate) return null
+    this.dispatchDeliveries(pane.missionId)
     return null
   }
 
@@ -1602,7 +2114,9 @@ export class OrbitCore {
    * work (or `to`, another agent of the mission) and recorded in the flow. Progress is only recorded,
    * so the lead is not woken for it. Done needs evidence of how it was verified.
    */
-  handoff(caller: Pane, input: { summary: string; details?: string; status?: HandoffStatus; evidence?: string; to?: number | null; criteria?: Array<{ item: number; met: boolean; how: string }> }): { deliveredTo: number | null; status: HandoffStatus } {
+  handoff(caller: Pane, input: { summary: string; attemptId?: string; details?: string; status?: HandoffStatus; evidence?: string; to?: number | null; criteria?: Array<{ item: number; met: boolean; how: string }> }): { deliveredTo: number | null; status: HandoffStatus; resultId: string; duplicate: boolean } {
+    this.assertCurrent(caller)
+    if (input.attemptId !== undefined && input.attemptId !== this.store.currentPaneAttempt(caller.id)?.id) throw new Error('O resultado pertence a uma tentativa anterior; confira whoami e a atribuição atual.')
     const status = input.status ?? 'done'
     if (!HANDOFF_STATUSES.includes(status)) throw new Error(`Status inválido: ${status}`)
     let text = input.summary.trim().slice(0, 2000)
@@ -1610,7 +2124,7 @@ export class OrbitCore {
     const evidence = (input.evidence ?? '').trim().slice(0, 4000)
     if (status === 'done' && !evidence) throw new Error('Diga em evidence como verificou: comandos rodados e o resultado, testes, arquivos conferidos. Se não deu para verificar, entregue com status blocked e explique o que falta.')
     // The acceptance contract: done answers every criterion, and all of them hold.
-    const accept = this.acceptance.get(caller.id) ?? []
+    const accept = this.acceptance.get(caller.id) ?? this.store.delegations(caller.missionId).find((d) => d.pane.id === caller.id)?.acceptance ?? []
     const answers = new Map((input.criteria ?? []).map((c) => [c.item, c]))
     if (status === 'done' && accept.length) {
       const missing = accept.map((_, i) => i + 1).filter((n) => !answers.has(n))
@@ -1632,47 +2146,81 @@ export class OrbitCore {
     // `to` naming whoever is waiting anyway (the lead) is a plain delivery.
     const named = input.to != null && input.to !== caller.assignedBy ? this.sameMission(caller, input.to) : undefined
     const target = named?.role === 'lead' ? undefined : named
-    if (target && !this.panes.isAlive(target.id)) throw new Error(`#${target.id} não está rodando`)
     const label = HANDOFF_LABEL[status]
     const details = (input.details ?? '').trim().slice(0, 20000)
     const body = [text, evidence && `Evidência: ${evidence}`, criteria && `Critérios de aceite:\n${criteria}`, details].filter(Boolean).join('\n\n')
-    this.event(caller.missionId, 'handoff', `Retorno de #${caller.id} (${label})${target ? ` para #${target.id}` : ''}`, body, caller.id)
-    this.panes.setHandoff(caller.id, { status })
-    if (status === 'progress' && !target) return { deliveredTo: null, status }
-
+    const title = `Retorno de #${caller.id} (${label})${target ? ` para #${target.id}` : ''}`
+    const deliveredTo = status === 'progress' && !target ? null : target?.id ?? caller.assignedBy
     const met = accept.length && answers.size ? ` · critérios: ${accept.filter((_, i) => answers.get(i + 1)?.met).length}/${accept.length}` : ''
     const line = `${oneLine(text)}${evidence ? ` · evidência: ${oneLine(evidence).slice(0, 600)}` : ''}${met}${details || criteria ? ' (detalhes em handoff_list)' : ''}`
+    const notificationText = `[Orbit] Retorno de #${caller.id} (${caller.title})${target ? ' para você' : ''}, ${label}: ${line}`
+    const policy = this.store.executionPolicy(caller.id)
+    const source = status === 'done' && caller.cli !== 'shell' ? sourceRevision(policy?.roots ?? copyRoots([caller.cwd]), [this.dataDir]) : undefined
+    const committed = this.store.commitActivityResult(caller, { status, summary: text, evidence, details: [criteria, details].filter(Boolean).join('\n\n'), deliveredTo, ...(source ? { source } : {}) }, { title, body }, notificationText)
+    const resultId = committed.result.id
+    this.dispatchDeliveries(caller.missionId)
+    if (committed.duplicate) return { deliveredTo, status, resultId, duplicate: true }
+    if (committed.event) this.broadcast({ type: 'event.added', event: committed.event })
+    this.panes.setHandoff(caller.id, { status })
+    if (status === 'progress' && !target) return { deliveredTo: null, status, resultId, duplicate: false }
+
     if (target) {
-      this.panes.submit(target.id, `[Orbit] Retorno de #${caller.id} (${caller.title}) para você, ${label}: ${line}`)
+      const mission = this.store.mission(caller.missionId)
+      if (mission) this.broadcast({ type: 'mission.updated', mission })
       // Work handed on (to a reviewer, say) is owed back by that agent to whoever leads it.
       if (target.role === 'crew' && target.cli !== 'shell') this.assign(target.id, target.assignedBy ?? caller.assignedBy ?? caller.id)
-      return { deliveredTo: target.id, status }
+      return { deliveredTo: target.id, status, resultId, duplicate: false }
     }
-    return { deliveredTo: this.tellAssigner(caller, `[Orbit] Retorno de #${caller.id} (${caller.title}), ${label}: ${line}`), status }
+    return { deliveredTo: this.missionPanes(caller.missionId).find(p => p.role === 'lead' && this.panes.isAlive(p.id))?.id ?? null, status, resultId, duplicate: false }
   }
 
   /** Claude's status line, forwarded by the agent: usage, context and account limits. */
-  statusReport(paneId: number, payload: unknown): void {
-    this.applyReport(paneId, fromClaudeStatus(payload))
+  statusReport(paneId: number, payload: unknown, executionEpoch?: string): void {
+    if (executionEpoch !== undefined) this.assertCurrent({ ...this.store.pane(paneId)!, id: paneId, executionEpoch })
+    const normalized = claudeStatus(payload)
+    if (normalized.sessionId) this.panes.setSession(paneId, normalized.sessionId)
+    const pane = this.store.pane(paneId)
+    const snapshot = pane && this.claudeConsumption(pane)
+    if (snapshot) normalized.report = fromClaudeStatus({ ...(payload as Record<string, unknown>), orbit_session_usage: { ...snapshot.usage, format: 'claude-transcript-v1', complete: snapshot.complete } })
+    this.applyReport(paneId, normalized.report, 'status', snapshot ? { models: [...new Set([...snapshot.models, ...normalized.identity.models])], efforts: normalized.identity.efforts, level: 'response', complete: false } : normalized.identity)
+  }
+
+  private claudeConsumption(pane: Pane) {
+    if (pane.cli !== 'claude' || !pane.sessionId || !SESSION_ID.test(pane.sessionId)) return null
+    try {
+      const account = pane.accountId ? this.store.account(pane.accountId) : undefined
+      const file = claudeTranscript((account && this.accountFiles.configDir(account)) ?? userConfigDir('claude'), pane.sessionId)
+      return file ? this.claudeUsage.read(file) : null
+    } catch { return null }
+  }
+
+  private applyClaudeConsumption(pane: Pane): void {
+    const snapshot = this.claudeConsumption(pane)
+    if (snapshot) this.applyReport(pane.id, fromClaudeStatus({ orbit_session_usage: { ...snapshot.usage, format: 'claude-transcript-v1', complete: snapshot.complete } }), 'status', { models: snapshot.models, efforts: [], level: 'response', complete: false })
+  }
+
+  private pollClaude(): void {
+    for (const pane of this.store.snapshot().panes.filter(p => p.cli === 'claude' && this.panes.isAlive(p.id))) this.applyClaudeConsumption(pane)
   }
 
   /** Counts what an agent used since its last report, and records the account's limits. */
-  private applyReport(paneId: number, report: UsageReport): void {
+  private applyReport(paneId: number, report: UsageReport, source: 'status' | 'rollout' = 'status', identity?: ExecutionIdentity): void {
     const pane = this.store.pane(paneId)
     if (!pane) return
     if (report.limits) this.broadcast({ type: 'limits', limits: this.store.setLimits({ ...report.limits, accountId: pane.accountId ?? report.limits.cli }) })
     if (!report.usage && report.contextPercent === null) return
-    if (report.usage && pane.cli !== 'shell') {
-      const delta = usageDelta(pane.usage, report.usage)
-      const added = this.store.addUsage(pane.missionId, pane.cli, delta)
+    let usage = report.usage
+    if (usage && pane.cli !== 'shell') {
+      const accounted = this.store.accountSessionUsage(pane, usage, source, Date.now(), { mode: this.harnessMode, origin: report.origin, observed: report.observed, reportedModels: identity?.models ?? [], reportedEffort: identity?.efforts.length === 1 ? identity.efforts[0]! : null, identityComplete: identity?.complete === true, identityLevel: identity?.level ?? 'unknown' })
+      this.measurements?.report(pane.executionEpoch!, accounted.delta, source, report.observed, report.origin)
+      usage = accounted.usage
+      const added = accounted.added
       if (added) {
-        const workspaceId = added.mission.workspaceId
-        this.store.addLedger({ day: added.day.day, workspaceId, missionId: pane.missionId, cli: pane.cli, model: pane.model, accountId: pane.accountId, tokens: delta.total, costUsd: delta.costUsd ?? 0 })
         this.broadcast({ type: 'mission.updated', mission: this.checkBudget(added.mission) })
         this.broadcast({ type: 'usage.day', day: added.day })
       }
     }
-    this.panes.setUsage(paneId, report.usage, report.contextPercent)
+    this.panes.setUsage(paneId, usage, report.contextPercent)
   }
 
   /** Codex has no hooks: read each live Codex agent's session file for its totals. */
@@ -1692,7 +2240,11 @@ export class OrbitCore {
           if (sessionId) this.panes.setSession(pane.id, sessionId)
         }
         const tail = readTail(file)
-        this.applyReport(pane.id, fromCodexRollout(tail))
+        const owned = this.store.pane(pane.id)
+        const consumption = owned?.sessionId ? this.codexUsage.read(file, owned.sessionId) : null
+        const report = consumption?.report ?? codexRollout(tail).report
+        if (!consumption && report.observed) for (const key of ['input', 'output', 'total', 'cacheRead', 'cacheWrite'] as const) report.observed[key] = false
+        this.applyReport(pane.id, report, 'rollout', consumption?.identity)
         this.codexTurn(pane, tail)
       } catch {
         // the file may be mid-write; try again on the next tick
@@ -1702,19 +2254,19 @@ export class OrbitCore {
 
   /** Each new `task_complete` in a Codex helper's session file is the end of its turn. */
   private codexTurn(pane: Pane, tail: string): void {
-    const turn = codexLastTurn(tail)
+    this.assertCurrent(pane)
+    const turn = codexRollout(tail).turn
     if (!turn?.done) return
-    const seen = this.codexTurns.get(pane.id)
-    this.codexTurns.set(pane.id, turn.id)
-    // A resumed conversation starts with its old turns: those ended before this agent opened.
-    if (seen === turn.id || (seen === undefined && turn.at && turn.at < pane.createdAt)) return
+    const epoch = pane.executionEpoch!
+    if (!freshCodexTurn(turn, pane.createdAt, this.store.adapterTurn(epoch))) return
     const current = this.store.pane(pane.id)
     if (current) this.turnEnded(current, turn.lastMessage, false)
+    this.store.recordAdapterTurn(epoch, turn)
   }
 
   private watchCodex(): void {
     if (this.codexTimer) return
-    this.codexTimer = setInterval(() => this.pollCodex(), CODEX_POLL_MS)
+    this.codexTimer = setInterval(() => { this.pollCodex(); this.pollClaude() }, CODEX_POLL_MS)
     this.codexTimer.unref()
   }
 
@@ -1782,10 +2334,11 @@ export class OrbitCore {
   }
 
   /** Status from Claude's hooks; for PreToolUse, a refusal when the tool is switched off. */
-  hookReport(paneId: number, payload: HookPayload): object | null {
+  hookReport(paneId: number, payload: HookPayload, executionEpoch?: string): object | null {
+    if (executionEpoch !== undefined) this.assertCurrent({ ...this.store.pane(paneId)!, id: paneId, executionEpoch })
     // Gemini CLI's hooks speak a dialect of Claude Code's: translated in, answered back in its terms.
-    if (this.store.pane(paneId)?.cli === 'gemini') return toGeminiHook(this.handleHook(paneId, fromGeminiHook(payload)))
-    return this.handleHook(paneId, payload)
+    if (this.store.pane(paneId)?.cli === 'gemini') return geminiAnswer(this.handleHook(paneId, geminiHook(payload).payload))
+    return this.handleHook(paneId, claudeHook(payload).payload)
   }
 
   private handleHook(paneId: number, payload: HookPayload): object | null {
@@ -1805,10 +2358,9 @@ export class OrbitCore {
     if (pane && this.readOnly.has(pane.id) && payload.hook_event_name === 'PreToolUse' && EDIT_TOOLS.includes(payload.tool_name ?? '')) {
       return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'Esta tarefa é só de leitura: não edite arquivos. Aponte o que mudar na sua entrega.' } }
     }
-    // The lead of an agentic or squad mission orchestrates: reminded at every message, kept from editing.
+    // Role is installed at launch; enforce editing restrictions without reinjecting its prompt.
     const mission = pane && pane.role === 'lead' ? this.store.mission(pane.missionId) : undefined
     if (mission && (mission.mode === 'agentica' || mission.mode === 'squad')) {
-      if (payload.hook_event_name === 'UserPromptSubmit') return { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: MAESTRO_RULE } }
       if (payload.hook_event_name === 'PreToolUse' && EDIT_TOOLS.includes(payload.tool_name ?? '')) {
         return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'Você é o maestro desta missão e não edita arquivos. Abra um ajudante com agent_spawn para essa mudança.' } }
       }
@@ -1817,19 +2369,29 @@ export class OrbitCore {
     return reason ? { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } } : null
   }
 
-  shutdown(): void {
+  async shutdown(): Promise<void> {
+    if (this.shutdownTask) return this.shutdownTask
+    this.stopping = true
+    this.store.prepareShutdown()
+    clearInterval(this.deliveryTimer)
     if (this.codexTimer) clearInterval(this.codexTimer)
     if (this.scheduleTimer) clearInterval(this.scheduleTimer)
     if (this.usageTimer) clearInterval(this.usageTimer)
     this.browser.shutdown()
     this.panes.killAll()
     this.store.flush()
+    this.shutdownTask = this.panes.waitForExit()
+    await this.shutdownTask
+    // Exit listeners can schedule a final metadata save. Flush it before another Store opens
+    // this directory, so an old debounce cannot overwrite the recovered state.
+    this.store.flush()
   }
 
   // ---- internals ----
 
   /** `resume` continues that conversation of the CLI; `opened` replaces the flow's "Agente #N aberto". */
-  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; tier?: { difficulty: Difficulty; by: string }; keep?: AgentSeat } = {}): Pane {
+  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; attemptId?: string; explicitCli?: AgentCli; tier?: { difficulty: Difficulty; by: string }; keep?: AgentSeat; requireReadOnlySandbox?: boolean; decisionSource?: DecisionReceipt['source']; harnessTask?: { difficulty: Difficulty; retry: boolean } } = {}): Pane {
+    if (this.stopping) throw new Error('Orbit está encerrando; novas execuções não são admitidas')
     const receipt = options.receipt ?? []
     const mission = this.store.mission(input.missionId)
     if (!mission || mission.status !== 'active') throw new Error('Missão inexistente ou arquivada')
@@ -1840,6 +2402,7 @@ export class OrbitCore {
     // A squad role, or a row of the task table, decides who fills the seat: CLI, model, effort.
     const squad = this.missionSquad(mission.id)
     const routing = this.store.routing()
+    const requiresSandbox = options.requireReadOnlySandbox ?? input.requireReadOnlySandbox ?? false
     let squadRole: Squad['roles'][number] | undefined
     let taskType: TaskType | undefined
     if (input.squadRoleId) {
@@ -1854,10 +2417,48 @@ export class OrbitCore {
       : taskType
         ? { ...input, role: 'crew', cli: taskType.cli, model: taskType.model, effort: taskType.effort }
         : { ...input }
+    let fallbackUsed = false
+    if (options.explicitCli && request.cli !== options.explicitCli) {
+      request.cli = options.explicitCli
+      const equivalent = taskType?.alt?.cli === request.cli ? taskType.alt : null
+      request.model = equivalent?.model ?? null
+      request.effort = equivalent?.effort ?? null
+    }
+    // Explicit choices override routing defaults, including when kind is supplied.
+    if (input.model) request.model = input.model
+    if (input.effort) request.effort = input.effort
+    if (requiresSandbox && !adapterCapabilities(request.cli).supports.readOnlySandbox) {
+      if (options.explicitCli || input.model || !mission.allowedClis.includes('codex')) throw new Error('A escolha explícita não oferece o sandbox somente leitura exigido; escolha uma CLI compatível')
+      request.cli = 'codex'; request.model = null; request.effort = input.effort ?? null
+      fallbackUsed = true
+      receipt.push('capacidade: sandbox somente leitura exige Codex no adapter atual')
+    }
+    if (request.role === 'crew' && request.cli !== 'shell' && !mission.allowedClis.includes(request.cli) && (options.explicitCli || input.model || input.accountId || options.keep)) throw new Error('A CLI escolhida explicitamente não está permitida nesta missão')
     // Reopening an agent keeps the seat it really had (balancing and difficulty already decided it).
     if (options.keep) Object.assign(request, { cli: options.keep.cli, model: options.keep.model, effort: options.keep.effort })
+    if (requiresSandbox && !adapterCapabilities(request.cli).supports.readOnlySandbox) throw new Error('A CLI retomada não oferece o sandbox somente leitura exigido')
     if (!CLIS.includes(request.cli)) throw new Error(`Agente inválido: ${request.cli}`)
+    if (request.model && (typeof request.model !== 'string' || !MODEL_ID.test(request.model))) throw new Error('Modelo inválido: use letras, números, ponto, hífen, barra ou dois-pontos')
     if (request.effort && !EFFORTS.includes(request.effort)) throw new Error(`Esforço inválido: ${request.effort}`)
+
+    const catalogRevision = this.catalog ? createHash('sha256').update(JSON.stringify(this.catalog)).digest('hex') : null
+    const harnessReadOnly = !!(input.readOnly || requiresSandbox || taskType?.readOnly || squadRole?.readOnly)
+    const eligibleAccounts = harnessAccounts(this.store.accounts(), [...this.accountStatus.values()], this.store.limits())
+    const harnessExplicit = !!(options.explicitCli || input.model || input.effort || input.accountId || input.squadRoleId || options.keep)
+    const classified = options.harnessTask && !taskType ? classifyTask(`${input.title}\n${input.task ?? ''}`, routing.taskTypes, input.title ?? '') : null
+    const harness = options.harnessTask ? selectHarnessCandidate(
+      composeHarness({
+        kind: taskType?.id ?? (classified?.sure ? classified.type.id : null),
+        ...options.harnessTask, readOnly: harnessReadOnly, requireReadOnlySandbox: requiresSandbox,
+        constraintRevision: createHash('sha256').update(JSON.stringify({ routing, squadRole, allowed: mission.allowedClis, instructions: workspace.instructions, settings: this.store.settings() })).digest('hex'),
+      }),
+      harnessCandidates(this.catalog, [...this.clis.values()], eligibleAccounts, mission.allowedClis, requiresSandbox),
+      harnessExplicit ? [] : this.store.harnessEvidence(),
+      { explicit: harnessExplicit },
+    ) : undefined
+    const measured = harness?.selected
+    if (measured) Object.assign(request, { cli: measured.cli, model: measured.model, effort: measured.effort })
+    if (harness) receipt.push(...harness.reasons)
 
     // The maestro's seat: the CLI the mission allows and the account with the most room, moving to
     // the other CLI when every account of the first one is used up.
@@ -1865,8 +2466,10 @@ export class OrbitCore {
     if (request.cli !== 'shell' && !request.accountId) {
       const allowedHere = mission.allowedClis
       // The row's equivalent on another CLI, when the mission allows it.
-      const alt = taskType?.alt && allowedHere.includes(taskType.alt.cli) ? taskType.alt : null
+      const alt = taskType?.alt && allowedHere.includes(taskType.alt.cli) && (!requiresSandbox || adapterCapabilities(taskType.alt.cli).supports.readOnlySandbox) ? taskType.alt : null
       const move = (to: AgentCliForRole, why: string) => {
+        if (requiresSandbox && !adapterCapabilities(to).supports.readOnlySandbox) throw new Error('O fallback não oferece o sandbox somente leitura exigido')
+        fallbackUsed = true
         receipt.push(`${CLI_LABEL[request.cli]} → ${CLI_LABEL[to]}: ${why}`)
         request.cli = to
         if (alt && alt.cli === to) {
@@ -1879,25 +2482,36 @@ export class OrbitCore {
         // Keep the effort only if the other CLI's default model takes it.
         if (request.effort && !effortsFor(this.catalog, to, null).includes(request.effort)) request.effort = null
       }
-      if (!allowedHere.includes(request.cli) && allowedHere[0] && request.role !== 'lead') move(alt?.cli ?? allowedHere[0], 'a missão não usa essa CLI')
+      if (!allowedHere.includes(request.cli) && allowedHere[0] && request.role !== 'lead') {
+        if (options.explicitCli || input.model) throw new Error('A CLI escolhida explicitamente não está permitida nesta missão')
+        move(alt?.cli ?? allowedHere[0], 'a missão não usa essa CLI')
+      }
       const live = this.liveByAccount()
       // Fair share: when the table's CLI is much busier than the equivalent's, the equivalent takes it.
-      if (alt && request.role !== 'lead' && request.cli !== alt.cli && taskType && request.cli === taskType.cli) {
+      if (!measured && alt && !options.explicitCli && !input.model && request.role !== 'lead' && request.cli !== alt.cli && taskType && request.cli === taskType.cli) {
         const here = cliLoad(this.rooms(request.cli, live))
         const there = cliLoad(this.rooms(alt.cli, live))
         if (there !== null && here !== null && here - there >= BALANCE_GAP) {
           move(alt.cli, `${CLI_LABEL[request.cli]} com carga ${Math.round(here)}, ${CLI_LABEL[alt.cli]} com ${Math.round(there)} (uso da conta + ${LIVE_WEIGHT} por agente rodando): foi para o equivalente da tabela`)
         }
       }
-      let choice = chooseAccount(this.rooms(request.cli as AgentCliForRole, live))
+      let choice = chooseAccount(this.rooms(request.cli as AgentCliForRole, live).filter(room => !measured || eligibleAccounts.some(a => a.id === room.account.id)))
       // Used up: the next CLI the mission allows that is installed and has room.
-      if (choice.exhausted && request.role !== 'lead') {
+      if ((choice.exhausted || choice.account?.kind === 'api') && !measured && !options.explicitCli && !input.model && request.role !== 'lead') {
         // The table's equivalent first, then any other CLI the mission allows.
-        const others = allowedHere.filter((c) => c !== request.cli).sort((a, b) => Number(b === alt?.cli) - Number(a === alt?.cli))
+        const others = allowedHere.filter((c) => c !== request.cli && (!requiresSandbox || adapterCapabilities(c).supports.readOnlySandbox)).sort((a, b) => Number(b === alt?.cli) - Number(a === alt?.cli))
+        // Exhaust subscriptions across allowed providers before using a paid API account.
         for (const other of others) {
-          const next = chooseAccount(this.rooms(other, live))
+          const next = chooseAccount(this.rooms(other, live).filter(room => room.account.kind === 'assinatura'))
           if (next.exhausted) continue
           move(other, `todas as contas do ${CLI_LABEL[request.cli]} estão no limite`)
+          choice = next
+          break
+        }
+        if (choice.exhausted) for (const other of others) {
+          const next = chooseAccount(this.rooms(other, live))
+          if (next.exhausted) continue
+          move(other, 'nenhuma assinatura disponível; conta de API habilitada para uso automático')
           choice = next
           break
         }
@@ -1910,22 +2524,25 @@ export class OrbitCore {
       receipt.push(`conta: ${choice.reason}`)
     }
     // The difficulty moves the seat within the chosen CLI: a cheaper model or a stronger one.
-    if (options.tier && request.cli !== 'shell') {
-      const seat = seatForDifficulty(request.cli, request.model ?? null, request.effort ?? null, options.tier.difficulty, (model) => effortsFor(this.catalog, request.cli, model))
+    if (chosen?.kind === 'api' && chosen.model && !input.model) request.model = chosen.model
+    if (!measured && options.tier && request.cli !== 'shell' && !(chosen?.kind === 'api' && chosen.model)) {
+      const seat = seatForDifficulty(request.cli, request.model ?? null, request.effort ?? null, options.tier.difficulty, (model) => effortsFor(this.catalog, request.cli, model), this.catalog?.[request.cli])
       if (seat.changed) {
         request.model = seat.model
-        request.effort = seat.effort
+        request.effort = request.role === 'crew' ? input.effort ?? seat.effort : seat.effort
         receipt.push(`dificuldade: ${options.tier.difficulty === 'dificil' ? 'difícil' : 'simples'} (${options.tier.by}) → ${[seat.model ?? 'modelo padrão', seat.effort && `esforço ${EFFORT_LABEL[seat.effort]}`].filter(Boolean).join(', ')}`)
       }
     }
+    const account = chosen ?? this.accountFor(request.cli, request.accountId)
+    if (input.effort && (!options.tier || request.role === 'crew')) request.effort = input.effort
+    if (account && !request.model && account.model) request.model = account.model
+    if (request.role === 'crew' && request.cli !== 'shell' && !mission.allowedClis.includes(request.cli)) throw new Error('A CLI efetiva não está permitida nesta missão')
     // Each model accepts its own levels (Codex lists them; Claude takes low…max).
     const allowed = effortsFor(this.catalog, request.cli, request.model)
     if (request.effort && request.cli !== 'shell' && !allowed.includes(request.effort)) {
       throw new Error(`Esforço "${EFFORT_LABEL[request.effort]}" não vale para ${request.model ?? `o modelo padrão do ${CLI_LABEL[request.cli]}`}; use ${allowed.map((e) => EFFORT_LABEL[e]).join(', ')}`)
     }
 
-    const account = chosen ?? this.accountFor(request.cli, request.accountId)
-    if (account && !request.model && account.model) request.model = account.model
     if (account) this.accountFiles.prepare(account)
 
     const roleSkills = squadRole ?? taskType
@@ -1951,9 +2568,19 @@ export class OrbitCore {
       branch = tree.branch
     }
     const title = request.title.trim().slice(0, 120) || squadRole?.name || taskType?.name || `${CLI_LABEL[request.cli]} #${id}`
+    const isReadOnly = input.readOnly || requiresSandbox || taskType?.readOnly || squadRole?.readOnly || (request.role === 'lead' && (mission.mode === 'agentica' || mission.mode === 'squad')) || false
     const token = randomBytes(24).toString('base64url')
     const english = this.store.settings().agentsInEnglish
+    const toolProfile = request.cli === 'claude' || request.cli === 'codex' ? this.store.settings().agentToolProfile ?? 'orbit' : 'inherit'
     const lead = this.missionPanes(mission.id).find((p) => p.role === 'lead')
+    const roleContext = this.contextPack(mission.id, [
+      { id: 'permissions', text: (isReadOnly ? 'This execution is read-only. Do not modify project files.\n\n' : '') + (toolProfile === 'orbit' ? 'External MCP profile: only Orbit coordination is loaded. Native file/terminal tools, project instructions, skills and permission rules still apply. If the task needs an external integration, report the missing capability and ask for the full tool profile on reopen. Do not install or reconfigure integrations to bypass this profile.\n\n' : '') + commandToolsNote(request.cli) + workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy), required: true },
+      { id: 'required-project-memory', text: request.role === 'lead' ? projectMemoryNote(this.projectMemory(mission.workspaceId, Infinity, 'required')) : '', required: true },
+      { id: 'project-memory', text: request.role === 'lead' ? projectMemoryNote(this.projectMemory(mission.workspaceId, Infinity, 'optional')) : '', maxBytes: harness?.strategy.optionalContextBytes ?? 2000 },
+      { id: 'execution-strategy', text: harness ? harnessNote(harness) : '', required: true },
+      { id: 'role-contract', text: request.role === 'lead' ? leadRole(mission, { id }, squad, routing, english) : crewRole(mission, { id }, { boss: options.boss ?? lead, children: options.children ?? 0, english, attemptId: options.attemptId, hasBoard: this.store.cards(mission.id).length > 0 }, squadRole, taskType), required: true },
+    ], 48_000)
+    const taskContext = this.contextPack(mission.id, [{ id: 'assignment-and-acceptance', text: request.task?.trim() ?? '', required: true }], 128_000)
     const launch = writeAgentFiles({
       paneDir: this.paneDir(id),
       cli: request.cli,
@@ -1964,22 +2591,48 @@ export class OrbitCore {
       hookCommand: hookCommand(process.execPath, HOOK_SCRIPT),
       statusCommand: hookCommand(process.execPath, STATUS_SCRIPT),
       apiKeyHelper: account ? this.accountFiles.apiKeyHelper(account) : undefined,
-      addDirs: folder ? workspace.folders.filter((f) => f !== folder && (!mission.git || f !== workspace.path)) : workspace.folders.slice(1),
-      rolePrompt: commandToolsNote(request.cli) + workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy) + (request.role === 'lead' ? projectMemoryNote(this.projectMemory(mission.workspaceId)) + leadRole(mission, { id }, squad, routing, english) : crewRole(mission, { id }, { boss: options.boss ?? lead, children: options.children ?? 0, english }, squadRole, taskType)),
-      task: request.task?.trim() ? request.task.trim().slice(0, 20000) : null,
+      addDirs: [...(folder ? workspace.folders.filter((f) => f !== folder && (!mission.git || f !== workspace.path)) : workspace.folders.slice(1)), this.attachments.directory(mission.id)],
+      rolePrompt: roleContext.text,
+      task: taskContext.text || null,
       orbitCommand: hookCommand(process.execPath, ORBIT_CLI_SCRIPT),
     })
 
     if (request.cli === 'codex') launch.disabledMcp = codexDisabledMcp(this.store.disabledCatalog())
+    launch.toolProfile = toolProfile
     // Codex has no hooks to refuse edits: an orchestrating lead and read-only kinds run in its
     // read-only sandbox, where any file change needs the person's approval.
-    if (request.cli === 'codex' && ((request.role === 'lead' && (mission.mode === 'agentica' || mission.mode === 'squad')) || taskType?.readOnly)) launch.sandbox = 'read-only'
+    // Writable helpers must explicitly request their bounded workspace policy too. Leaving it
+    // implicit can inherit read-only, which rejects --add-dir before the CLI even starts.
+    if (request.cli === 'codex') launch.sandbox = isReadOnly ? 'read-only' : 'workspace-write'
     if (options.resume) launch.resume = options.resume
 
     let pane: Pane
+    let processStarted = false
+    const executionEpoch = randomUUID()
+    const executionPolicy: ExecutionPolicy | undefined = request.cli === 'shell' ? undefined : { epoch: executionEpoch, missionId: mission.id, readOnly: isReadOnly, roots: copyRoots([cwd, ...workspace.folders.filter(f => f !== workspace.path && f !== folder)]) }
+    const suggested = request.role === 'lead' ? 'orbit-pilot' : taskType?.id === 'revisao' ? 'orbit-review' : taskType?.readOnly ? 'orbit-research' : taskType?.id === 'operacao' ? 'orbit-verify' : 'orbit-build'
     try {
+      this.store.startExecution(id, executionEpoch, executionPolicy)
+      this.skillSessions.start(id, executionEpoch, request.cli === 'shell' ? [] : [...(roleSkills?.skills ?? []), ...(!policy?.only || policy.only.includes(suggested) ? [suggested] : [])])
+      const decision = decisionReceipt({
+        source: measured ? 'benchmark' : fallbackUsed ? 'fallback' : options.decisionSource ?? (options.explicitCli || input.model || input.effort ? 'explicit' : 'rule'),
+        requested: { cli: options.explicitCli ?? null, model: input.model ?? null, effort: input.effort ?? null },
+        effective: { cli: request.cli, model: request.model, effort: request.effort ?? null, accountId: account?.id ?? null },
+        reasons: [...receipt],
+        catalogRevision,
+        harness: harness ? { ...harness, executionMode: this.harnessMode, executed: request.cli !== 'shell' && request.model && request.effort && this.clis.get(request.cli)?.version && catalogRevision ? { cli: request.cli, model: request.model, effort: request.effort, cliVersion: this.clis.get(request.cli)!.version!, catalogRevision } : null } : undefined,
+        capabilityLimits: [
+          !this.catalog && 'Catálogo de modelos não detectado; modelo padrão não é uma identidade confirmada',
+          request.cli !== 'codex' && isReadOnly && 'Somente leitura depende de hooks/instruções; sandbox nativo indisponível',
+          'Capacidades vêm do contrato do adapter, não de certificação de toda versão do provedor',
+        ].filter((s): s is string => !!s),
+      }, { routing, squad, allowedClis: mission.allowedClis, requireReadOnlySandbox: requiresSandbox })
+      if (options.attemptId) this.store.startingAttempt(options.attemptId, { cli: request.cli, model: request.model, accountId: account?.id ?? null, decision })
+      if (request.cli !== 'shell') writeFileSync(join(this.paneDir(id), 'context.json'), JSON.stringify({ version: 1, executionEpoch, role: roleContext, task: taskContext, decision }, null, 2), { mode: 0o600 })
+      const launchStarted = performance.now()
       pane = this.panes.spawn({
         id,
+        executionEpoch,
         request: { ...request, title },
         squadRole: squadRole?.name ?? null,
         taskType: taskType?.name ?? null,
@@ -2000,17 +2653,23 @@ export class OrbitCore {
           DISABLE_AUTOUPDATER: '1',
         },
       })
+      processStarted = true
+      if (pane.pid) this.store.bindExecutionProcess(id, executionEpoch, pane.pid)
+      this.measurements?.start(pane, performance.now() - launchStarted, request.cli === 'shell' ? 0 : (options.resume ? 0 : roleContext.bytes) + taskContext.bytes, request.cli === 'shell' ? 0 : (options.resume ? 0 : roleContext.sourceBytes) + taskContext.sourceBytes)
     } catch (error) {
+      if (processStarted) this.panes.forget(id)
+      else this.store.releaseExecution(id, executionEpoch)
       removeAgentFiles(this.paneDir(id))
       throw error
     }
     this.paneTokens.set(token, id)
     // Enough to open it again later; the account is the one it really ran as (its conversations live there).
-    this.store.setPaneSpec(id, { ...input, task: null, accountId: account?.id ?? null })
+    this.store.setPaneSpec(id, { ...input, task: null, accountId: account?.id ?? null, requireReadOnlySandbox: requiresSandbox })
     if (policy) this.skillPolicies.set(id, policy)
-    if (taskType?.readOnly) this.readOnly.add(id)
-    if (request.cli === 'codex') this.watchCodex()
+    if (isReadOnly) this.readOnly.add(id)
+    if (request.cli === 'codex' || request.cli === 'claude') this.watchCodex()
     this.syncPane(pane)
+    this.dispatchDeliveries(mission.id)
     const seat = request.role === 'lead' ? 'líder' : squadRole?.name.toLowerCase() ?? taskType?.name.toLowerCase() ?? 'ajudante'
     const who = [CLI_LABEL[request.cli], account && !account.builtin && account.name, request.model, request.effort && `esforço ${EFFORT_LABEL[request.effort]}`, seat].filter(Boolean).join(' · ')
     // The receipt says why: task type, CLI change, account and its room.
@@ -2023,29 +2682,48 @@ export class OrbitCore {
    * Opens an agent again with its settings, under the same number: a new conversation or, with
    * `resume`, the same one (`message` is its next turn). What it owes and its criteria carry over.
    */
-  private restartPane(paneId: number, resume: boolean, message?: string): Pane {
-    const pane = this.store.pane(paneId)
-    if (!pane) throw new Error(`#${paneId} não existe`)
-    const spec = this.store.paneSpec(paneId)
-    if (!spec || (pane.cli === 'shell' && resume)) throw new Error(resume ? 'Não há conversa para retomar neste agente' : `#${paneId} foi aberto antes desta versão do Orbit; abra um novo`)
-    if (resume && !pane.sessionId) throw new Error(`O ${CLI_LABEL[pane.cli]} ainda não informou a conversa de #${paneId}`)
-    const sessionId = pane.sessionId
-    const git = this.store.mission(pane.missionId)?.git
-    const worktree = git && pane.branch ? { path: this.worktreeOf(pane, git), branch: pane.branch } : undefined
-    const accept = this.acceptance.get(paneId)
-    this.closePane(paneId)
-    const opened = this.spawn({ ...spec, title: pane.title, ...(message ? { task: message } : {}) }, {
-      keep: pane.cli === 'shell' ? undefined : { cli: pane.cli, model: pane.model, effort: pane.effort },
-      id: paneId,
-      worktree,
-      resume: resume ? sessionId! : undefined,
-      opened: (id) => (resume ? `#${id} retomou a conversa` : `#${id} reaberto numa conversa nova`),
-    })
-    if (accept) this.acceptance.set(opened.id, accept)
-    // Same conversation: known now, not only when the CLI reports it again.
-    if (resume && sessionId) this.panes.setSession(opened.id, sessionId)
-    if (pane.assignedBy !== null && pane.handoffStatus === null) this.panes.setHandoff(opened.id, { status: null, assignedBy: pane.assignedBy })
-    return this.store.pane(opened.id) ?? opened
+  private readonly restarting = new Set<number>()
+  private stopping = false
+  private shutdownTask?: Promise<void>
+
+  private async restartPane(paneId: number, resume: boolean, message?: string): Promise<Pane> {
+    if (this.restarting.has(paneId)) throw new Error(`#${paneId} já está retomando; aguarde o encerramento anterior`)
+    this.restarting.add(paneId)
+    try {
+      const pane = this.store.pane(paneId)
+      if (!pane) throw new Error(`#${paneId} não existe`)
+      const spec = this.store.paneSpec(paneId)
+      if (!spec || (pane.cli === 'shell' && resume)) throw new Error(resume ? 'Não há conversa para retomar neste agente' : `#${paneId} foi aberto antes desta versão do Orbit; abra um novo`)
+      if (resume && !pane.sessionId) throw new Error(`O ${CLI_LABEL[pane.cli]} ainda não informou a conversa de #${paneId}`)
+      const sessionId = pane.sessionId
+      const git = this.store.mission(pane.missionId)?.git
+      const worktree = git && pane.branch ? { path: this.worktreeOf(pane, git), branch: pane.branch } : undefined
+      const accept = this.acceptance.get(paneId)
+      this.store.revokeExecution(paneId)
+      this.panes.kill(paneId)
+      await this.panes.waitForExit(paneId)
+      const stopped = this.store.pane(paneId)
+      if (!stopped || stopped.executionEpoch !== pane.executionEpoch) throw new Error('A retomada foi cancelada porque este agente foi fechado ou substituído')
+      if (this.stopping) throw new Error('Orbit está encerrando; a retomada foi preservada para a próxima abertura')
+      this.closePane(paneId)
+      const opened = this.spawn({ ...spec, title: pane.title, ...(message ? { task: message } : {}) }, {
+        keep: pane.cli === 'shell' ? undefined : { cli: pane.cli, model: pane.model, effort: pane.effort },
+        id: paneId,
+        worktree,
+        resume: resume ? sessionId! : undefined,
+        opened: (id) => (resume ? `#${id} retomou a conversa` : `#${id} reaberto numa conversa nova`),
+      })
+      if (accept) this.acceptance.set(opened.id, accept)
+      // Same conversation: known now, not only when the CLI reports it again.
+      if (resume && sessionId) {
+        this.panes.setSession(opened.id, sessionId)
+        this.panes.setUsage(opened.id, pane.usage, pane.contextPercent)
+      }
+      if (pane.assignedBy !== null && this.pendingDeliveries(pane.missionId).some(d => d.paneId === pane.id)) {
+        this.panes.setHandoff(opened.id, { status: pane.handoffStatus, assignedBy: pane.assignedBy })
+      }
+      return this.store.pane(opened.id) ?? opened
+    } finally { this.restarting.delete(paneId) }
   }
 
   private renamePane(paneId: number, raw: string): void {
@@ -2071,13 +2749,15 @@ export class OrbitCore {
       return
     }
     if (!this.store.pane(id)) return
+    const epoch = this.store.pane(id)?.executionEpoch
+    if (epoch) for (const key of this.sendingNotices) if (key.endsWith(`:${epoch}`)) this.sendingNotices.delete(key)
     this.panes.forget(id)
     this.codexRollouts.delete(id)
-    this.codexTurns.delete(id)
     this.nudged.delete(id)
     this.acceptance.delete(id)
     this.readOnly.delete(id)
     this.skillPolicies.delete(id)
+    this.skillSessions.removePane(id)
     this.store.removePane(id)
     for (const [token, paneId] of this.paneTokens) if (paneId === id) this.paneTokens.delete(token)
     removeAgentFiles(this.paneDir(id))

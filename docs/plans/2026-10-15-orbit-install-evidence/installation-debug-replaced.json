@@ -1,0 +1,17 @@
+{
+  "installedAt": "2026-10-16T00:41:59.633Z",
+  "source": "/Users/lucas/Documents/GitHub/Orbit/apps/desktop/src-tauri/target/debug/bundle/macos/Orbit.app",
+  "target": "/Applications/Orbit.app",
+  "backup": "/Applications/.Orbit-backups/2026-10-15-cd5b502f",
+  "previousAppPath": "/Applications/.Orbit-backups/2026-10-15-cd5b502f/Orbit.app",
+  "userDataPath": "/Users/lucas/.orbit",
+  "userDataBackup": "/Applications/.Orbit-backups/2026-10-15-cd5b502f/data",
+  "dataUnchanged": true,
+  "validatedBinaryBeforeSigning": "e374d85ca2b46b564e6ce1f7a9d4823322497fd7bdc6fb7ceee94bccbdef097c",
+  "installedBinaryAfterSigning": "aadf47abb65f24cdf3e2f147895abcb91ef9c0eda644b8a63a29870473a53e61",
+  "localAdHocSigning": true,
+  "signatureVerified": true,
+  "installedFileCount": 61,
+  "previousFileCount": 53,
+  "appOpened": false
+}

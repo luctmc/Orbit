@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "id": "6bfbcfde-1bde-497a-9a3b-eb8a9bf1400e",
+  "taskId": "bug-mean",
+  "taskRevision": "3dd6aec9bb8b9bcd64959928d32ef04516ffb5f54c5e87366e770319683a218c",
+  "corpusRevision": "69d519eefdc4120ecfa27ed8476d85c2c446e49ef35b52fded37c0b02c200893",
+  "sourceRevision": "6dfdf3c91327b03fc947a8db8292300dd2fd58d1cb4a2bdf2b5bb20c5dec16aa",
+  "mode": "offline",
+  "configuration": "eager",
+  "repetition": 3,
+  "runtime": {
+    "node": "v24.21.0",
+    "claude": null,
+    "codex": null
+  },
+  "models": {
+    "worker": "claude:claude-haiku-5-5:low",
+    "reviewer": "codex:gpt-6-luna:low"
+  },
+  "durationMs": 795.4014999999999,
+  "firstResponseMs": null,
+  "checks": [
+    {
+      "command": "verify immutable fixture and declared write scope",
+      "exitCode": 0,
+      "summary": "Protected fixture unchanged; writes stay in declared paths"
+    },
+    {
+      "command": "node .benchmark/check-0.mjs",
+      "exitCode": 0,
+      "summary": "Empty and mixed numeric arrays"
+    }
+  ],
+  "accepted": true,
+  "resultReviewed": true,
+  "integrationReviewed": true,
+  "waived": false,
+  "error": null,
+  "executions": [
+    {
+      "epoch": "b4e1e8a6-0772-4bc8-a53a-6d9b83a3622c",
+      "paneId": 1,
+      "missionId": "78d7ecdf-225e-47db-8a1f-23b3845fdabc",
+      "cli": "shell",
+      "model": null,
+      "role": "lead",
+      "spawnMs": 1.104124999998021,
+      "firstPtyOutputMs": 772.1297079999931,
+      "initialBytes": 0,
+      "sourceBytes": 0,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 902,
+      "submittedMessages": 2,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    },
+    {
+      "epoch": "413d612d-c7d1-470b-8890-22716044e462",
+      "paneId": 2,
+      "missionId": "78d7ecdf-225e-47db-8a1f-23b3845fdabc",
+      "cli": "claude",
+      "model": "claude-haiku-5-5",
+      "role": "crew",
+      "spawnMs": 4.777416999997513,
+      "firstPtyOutputMs": null,
+      "initialBytes": 4160,
+      "sourceBytes": 4160,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    },
+    {
+      "epoch": "5414ca4c-2704-4270-8d9a-e4281704ec55",
+      "paneId": 3,
+      "missionId": "78d7ecdf-225e-47db-8a1f-23b3845fdabc",
+      "cli": "codex",
+      "model": "gpt-6-luna",
+      "role": "crew",
+      "spawnMs": 4.9024590000044554,
+      "firstPtyOutputMs": null,
+      "initialBytes": 4276,
+      "sourceBytes": 4276,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    }
+  ],
+  "auxiliaryCalls": [],
+  "attempts": 2,
+  "retries": 0,
+  "reopenings": 0,
+  "results": 2
+}

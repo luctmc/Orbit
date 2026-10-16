@@ -1,0 +1,43 @@
+{
+  "mode": "synthetic-local-UI; no native model runs",
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "horizontalOverflow": false
+    },
+    {
+      "width": 1024,
+      "height": 900,
+      "horizontalOverflow": false
+    },
+    {
+      "width": 768,
+      "height": 1000,
+      "horizontalOverflow": false,
+      "conversationHeight": 550
+    },
+    {
+      "width": 375,
+      "height": 900,
+      "horizontalOverflow": false,
+      "conversationHeight": 495
+    }
+  ],
+  "keyboardComposerAccessibleAt375": true,
+  "mascotHideRestore": true,
+  "motionToggle": true,
+  "motionDefault": false,
+  "reducedMotion": "CSS policy inspected; OS preference not changed or emulated",
+  "theme": "existing dark theme only",
+  "screenshots": "final-*.jpg; historical ui-* files not final pixel QA",
+  "viewportRestored": true,
+  "temporaryServersStopped": true,
+  "asset": {
+    "path": "apps/desktop/src/assets/orbit-mascot-v2.png",
+    "bytes": 921483,
+    "alpha": true,
+    "width": 1254,
+    "height": 1254
+  }
+}

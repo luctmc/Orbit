@@ -1,0 +1,40 @@
+✔ Claude adapter validates known payloads and preserves permission inputs without inventing events (1.151458ms)
+✔ Codex adapter recognizes known events and rejects stale, duplicated or undated turn transitions (28.320667ms)
+✔ Gemini adapter keeps its dialect and the capability report distinguishes fixtures from provider guarantees (0.152125ms)
+✔ receipt advances only after Enter and only its recipient can acknowledge consumption (566.872459ms)
+✔ restart before Enter cancels the old receipt and delivers the same notice to the new epoch (415.386042ms)
+✔ sidecar recovery replays an unacknowledged result without executing the activity again (446.916959ms)
+✔ a new lead receives the unacknowledged notice addressed to the lead role (575.016416ms)
+✔ a failed result commit leaves neither a result nor a notification; retry commits both once (166.786167ms)
+✔ handing a result to a completed reviewer persists its new obligation in the result commit (137.842166ms)
+✔ an explicit reviewer that exited keeps its notice pending until its replacement process opens (310.147625ms)
+✔ R1 migration imports pending receipt identities once without claiming historical consumption (55.53875ms)
+✔ SIGKILL after result commit retains the pending outbox in the same snapshot (124.92075ms)
+✔ a replaced execution cannot submit its old result into the current attempt (237.62475ms)
+✔ late hooks and usage from an old execution are refused after restart (241.676541ms)
+✔ a captured caller from a completed assignment cannot finish new work in the same process (147.705917ms)
+✔ a result without a live leader commits a pending notification with its result (180.240042ms)
+✔ a late progress report cannot reopen a delivered attempt (206.719125ms)
+✔ HTTP revalidates hooks, status and MCP authenticated before a slow body when execution changes (686.32625ms)
+✔ lead and helper coordinate through MCP, handoffs and hooks (552.484625ms)
+✔ same-session resume adds only the new cumulative delta (138.830583ms)
+✔ persisted baseline survives a core reload and resume (179.077084ms)
+✔ a fresh conversation counts its new usage (282.546542ms)
+✔ the final Codex report remains the resume baseline after process exit (210.286208ms)
+✔ out-of-order cumulative reports never lower the charged watermark (208.16625ms)
+✔ the same CLI/account/session is charged once across separate panes (265.214583ms)
+✔ a different session id in the same process establishes a fresh counter (133.7605ms)
+✔ accounting commits the watermark and all totals before acknowledgement, or rolls them back (144.215625ms)
+✔ a report with unknown cost cannot erase a known cost watermark (170.965375ms)
+✔ the status payload identifies a session even when SessionStart was not received (214.839333ms)
+✔ simultaneous returns cannot interleave their paste and Enter; queued returns share one wakeup (433.582958ms)
+✔ a deferred Enter never reaches a replacement process or a process that was killed (304.956583ms)
+✔ a failed deferred Enter never acknowledges delivery or escapes as an uncaught timer error (182.148417ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3348.671791

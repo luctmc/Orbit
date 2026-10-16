@@ -4,7 +4,7 @@ import { useOrbit } from '../orbit/context.tsx'
 import { CLI_LABEL, MODE_LABEL, STATUS, tokensText } from '../orbit/labels.ts'
 import { pathText } from '../orbit/labels.ts'
 import { dayKey, relativeTime, startOfDay } from '../orbit/time.ts'
-import { OrbitMark, PlusIcon, SearchIcon, TrashIcon } from './icons.tsx'
+import { FolderIcon, MissionGlyph, OrbitMark, PlusIcon, SearchIcon, SendIcon, TrashIcon } from './icons.tsx'
 import { DeleteMissionDialog } from './deletions.tsx'
 import { SchedulesSection } from './Schedules.tsx'
 
@@ -77,19 +77,28 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
   const sortedWorkspaces = [...workspaces].filter((w) => matches(w.name) || w.folders.some((f) => matches(f))).sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
   const busy = sortedWorkspaces.filter((w) => (liveByWorkspace.get(w.id) ?? 0) > 0)
   const quiet = sortedWorkspaces.filter((w) => (liveByWorkspace.get(w.id) ?? 0) === 0)
+  const resume = summaries.find(s => s.mission.status === 'active')
 
   return (
     <div className="home">
       <div className="home__inner">
         <main className="home__main">
           <div className="home__hero">
-            <OrbitMark size={44} />
             <div className="home__greeting">
-              <h1>De volta à órbita</h1>
+              <span className="eyebrow home__overline"><OrbitMark size={16} />Seu ambiente de desenvolvimento</span>
+              <h1>Seu trabalho,<br /><span>em órbita.</span></h1>
               <p className="muted">
-                {liveMissions} {liveMissions === 1 ? 'missão em andamento' : 'missões em andamento'} · {liveAgents} {liveAgents === 1 ? 'agente vivo' : 'agentes vivos'} · {workspaces.length} {workspaces.length === 1 ? 'workspace' : 'workspaces'}
+                {workspaces.length ? 'Um lugar para orientar o líder, acompanhar os agentes e conferir cada entrega.' : 'Conecte seu projeto. Defina uma missão. Construa com sua equipe de agentes.'}
               </p>
             </div>
+            <div className="home__orbit" aria-hidden="true"><MissionGlyph size={120} /></div>
+          </div>
+          <div className="home__launchpad">
+            {resume ? <button type="button" className="home-resume" onClick={() => onOpenMission(resume.mission)}><MissionGlyph size={36} /><span><small>CONTINUAR DE ONDE PAROU</small><strong>{resume.mission.title}</strong><span>{resume.workspace?.name} · {relativeTime(resume.lastActivity)}</span></span><SendIcon size={20} /></button> : <div className="home-resume home-resume--empty"><MissionGlyph size={36} /><span><small>SUA PRÓXIMA ENTREGA</small><strong>{workspaces.length ? 'Tudo pronto para a primeira missão' : 'Comece pelo seu projeto'}</strong><span>{workspaces.length ? 'Dê um objetivo ao líder para começar.' : 'Um workspace reúne as pastas e o contexto da sua equipe.'}</span></span></div>}
+            <button type="button" className="home-create" onClick={onNewMission ?? onAddFolder}><PlusIcon size={20} /><strong>{onNewMission ? 'Nova missão' : 'Criar workspace'}</strong><span>{onNewMission ? 'Transforme uma ideia em trabalho.' : 'Escolha uma pasta do seu Mac.'}</span></button>
+          </div>
+          <div className="home__toolbar">
+            <p className="home__pulse"><span className={`dot ${liveAgents ? 'dot--live' : 'dot--idle'}`} />{liveMissions} {liveMissions === 1 ? 'missão em andamento' : 'missões em andamento'}<span>·</span>{liveAgents} {liveAgents === 1 ? 'agente ativo' : 'agentes ativos'}</p>
             <div className="home__actions">
               <label className="search">
                 <SearchIcon size={15} />
@@ -97,7 +106,6 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
                 <input ref={search} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar missão ou pasta" />
                 <kbd>⌘K</kbd>
               </label>
-              {onNewMission && <button className="btn btn--primary" onClick={onNewMission}><PlusIcon size={14} />Nova missão</button>}
             </div>
           </div>
 
@@ -124,17 +132,18 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
 
           <SchedulesSection onOpenMission={onOpenMission} />
 
-          <ActivityMap days={usageDays} />
+          <details className="home__history"><summary>Consumo e histórico de atividade</summary><ActivityMap days={usageDays} /></details>
         </main>
 
         <aside className="home__aside" aria-labelledby="home-workspaces">
           <div className="home__section-head">
-            <h2 id="home-workspaces" className="eyebrow">Workspaces</h2>
-            <button className="btn btn--ghost btn--sm" onClick={onAddFolder}><PlusIcon size={14} />Novo workspace</button>
+            <h2 id="home-workspaces" className="eyebrow">Seus projetos</h2>
+            <button className="icon-btn" aria-label="Novo workspace" title="Novo workspace" onClick={onAddFolder}><PlusIcon size={18} /></button>
           </div>
           {sortedWorkspaces.length === 0 && <p className="muted">{needle ? 'Nenhuma pasta encontrada.' : 'Nenhuma pasta aberta ainda.'}</p>}
-          {busy.length > 0 && <WorkspaceGroup label="Com agentes vivos" workspaces={busy} live={liveByWorkspace} onOpen={onOpenWorkspace} />}
+          {busy.length > 0 && <WorkspaceGroup label="Em atividade" workspaces={busy} live={liveByWorkspace} onOpen={onOpenWorkspace} />}
           {quiet.length > 0 && <WorkspaceGroup label={busy.length ? 'Recentes' : 'Por último uso'} workspaces={quiet} live={liveByWorkspace} onOpen={onOpenWorkspace} />}
+          <div className="home__guide"><FolderIcon size={20} /><strong>Seu projeto, com contexto.</strong><p>Workspaces reúnem pastas, instruções e memória. Cada missão tem seu próprio objetivo e equipe.</p><button type="button" className="btn btn--ghost" onClick={onAddFolder}>Adicionar projeto</button></div>
         </aside>
       </div>
       {deleting && <DeleteMissionDialog mission={deleting} onClose={() => setDeleting(null)} />}
@@ -156,15 +165,16 @@ function MissionCard({ summary, squadName, onOpen, onDelete }: { summary: Missio
             <span className={`badge badge--${mission.mode}`}>{MODE_LABEL[mission.mode]}{squadName ? ` · ${squadName}` : ''}</span>
             {mission.status === 'archived' && <span className="badge">Arquivada</span>}
             {mission.scheduleId && <span className="badge">Agendada</span>}
-            {mission.readyAt && <span className="badge badge--ready" title={mission.readySummary ?? undefined}>Pronta</span>}
+            {mission.readyAt && <span className="badge" title="Conclusão declarada pelo líder. Abra a missão para conferir a revisão do código atual.">Conclusão declarada</span>}
           </div>
           <p className="muted">{meta}</p>
+          {mission.objective && <p className="home-card__objective">{mission.objective}</p>}
         </div>
         <button className="btn btn--ghost btn--sm" onClick={onOpen} aria-label={`Abrir missão ${mission.title}`}>Abrir</button>
         <button className="icon-btn icon-btn--danger" onClick={onDelete} aria-label={`Apagar missão ${mission.title}`} title="Apagar para sempre"><TrashIcon size={15} /></button>
       </div>
       {crew.length > 0 && (
-        <ul className="plain-list home-card__crew">
+        <details className="home-card__team"><summary>Equipe · {crew.length} {crew.length === 1 ? 'agente' : 'agentes'} · {live} em atividade</summary><ul className="plain-list home-card__crew">
           {crew.map((p) => (
             <li key={p.id}>
               <span className={`dot dot--${STATUS[p.status].tone}`} />
@@ -172,7 +182,7 @@ function MissionCard({ summary, squadName, onOpen, onDelete }: { summary: Missio
               <span className="muted">{p.title} · {STATUS[p.status].label}</span>
             </li>
           ))}
-        </ul>
+        </ul></details>
       )}
     </article>
   )

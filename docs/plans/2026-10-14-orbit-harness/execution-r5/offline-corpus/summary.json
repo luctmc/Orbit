@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "comparison": "Current harness with eager optional context versus current budgeted optional context; identical safety and review contracts",
+  "scope": "offline-or-mixed; no model quality or token-savings claim",
+  "runs": 72,
+  "pairs": 36,
+  "issues": [],
+  "fullMatrixComplete": true,
+  "qualityPreserved": true,
+  "tokenCoverage": false,
+  "profiles": [
+    {
+      "configuration": "eager",
+      "runs": 36,
+      "accepted": 36,
+      "failedOrUnverified": 0,
+      "tokens": null,
+      "costUsd": null,
+      "knownCostUsd": null,
+      "tokensPerAccepted": null,
+      "costPerAcceptedUsd": null,
+      "durationMs": {
+        "min": 772.9679589999942,
+        "median": 922.5455414999997,
+        "p95": 1550.5659580000001,
+        "max": 2121.395624999999
+      },
+      "initialBytes": 305694,
+      "retrievalBytes": 0,
+      "submittedBytes": 36057,
+      "attempts": 72,
+      "retries": 0,
+      "reopenings": 0,
+      "ptyAcceptedWakeups": 0
+    },
+    {
+      "configuration": "budgeted",
+      "runs": 36,
+      "accepted": 36,
+      "failedOrUnverified": 0,
+      "tokens": null,
+      "costUsd": null,
+      "knownCostUsd": null,
+      "tokensPerAccepted": null,
+      "costPerAcceptedUsd": null,
+      "durationMs": {
+        "min": 768.0918339999989,
+        "median": 939.3217705000025,
+        "p95": 1743.3190000000013,
+        "max": 1768.2642080000005
+      },
+      "initialBytes": 305694,
+      "retrievalBytes": 0,
+      "submittedBytes": 36057,
+      "attempts": 72,
+      "retries": 0,
+      "reopenings": 0,
+      "ptyAcceptedWakeups": 0
+    }
+  ],
+  "initialByteReductionPercent": {
+    "min": 0,
+    "median": 0,
+    "p95": 0,
+    "max": 0
+  },
+  "observedTokenReductionPercent": null,
+  "target25Percent": null,
+  "limitations": [
+    "First PTY output is not semantic first response; firstResponseMs stays null",
+    "Provider/CLI cost estimates are not invoices; unreported cost remains null",
+    "Independent oracle execution time is included in total time",
+    "A pilot does not establish statistical significance or universal superiority",
+    "Fixed model names are requested pins; serving identity is only known when the provider reports it"
+  ]
+}

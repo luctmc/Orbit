@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "localChecks": [
+    {
+      "command": "apps/desktop/build/node/node --test --test-timeout=20000 'packages/sidecar/test/**/*.test.ts' scripts/lib/autonomy-observations.test.mjs",
+      "exitCode": 0,
+      "passed": 213,
+      "log": "tests.log"
+    },
+    {
+      "command": "apps/desktop/build/node/node --test 'apps/desktop/src/orbit/*.test.ts'",
+      "exitCode": 0,
+      "passed": 6,
+      "log": "desktop-tests.log"
+    },
+    {
+      "command": "apps/desktop/build/node/node --test packages/sidecar/test/mcp.test.ts",
+      "exitCode": 0,
+      "passed": 3,
+      "log": "mcp-final.log",
+      "note": "Includes WebSocket assertions added after full suite; same three test cases, not additional unique tests"
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "log": "typecheck.log"
+    },
+    {
+      "command": "npm run tauri -w @orbit/desktop -- build --debug",
+      "exitCode": 0,
+      "log": "build.log"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "log": "diff-check.log"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "packages/protocol/src/index.ts",
+      "sha256": "c70499e3367a31edf403e3b1d2a8e6ee7babe9bc03b2494e5ef209f146fd2d8e"
+    },
+    {
+      "path": "packages/sidecar/src/core.ts",
+      "sha256": "2d3914c5f27a1d9b5f346aaf4666b6dcd757152c1c8c94dcfd2ac89a954960a7"
+    },
+    {
+      "path": "packages/sidecar/src/store.ts",
+      "sha256": "69f527fa8b018e10b647f4fcd8325bf25cb6f9699ad555ff45fc59430d71c13e"
+    },
+    {
+      "path": "packages/sidecar/src/mcp.ts",
+      "sha256": "12d02094abc98512d0153d049931274fa4f63addcba3ed5dda1c3ac648eff50b"
+    },
+    {
+      "path": "packages/sidecar/src/prompts.ts",
+      "sha256": "3bd84c1d0ca374c7a35a83f8bbb43a3f3fa47d0fb27e6817b73c658cec570402"
+    },
+    {
+      "path": "packages/sidecar/test/finalization.test.ts",
+      "sha256": "bb61e8b5745e446309fb44fca8d9f808c462463a3c957eca347e4fb8335e7c77"
+    },
+    {
+      "path": "packages/sidecar/test/mcp.test.ts",
+      "sha256": "b98d8a184846f4f148a78606e555d68746d3c7b820bd533f7fe9a857f9058ad2"
+    },
+    {
+      "path": "scripts/verify-autonomous-harness.mjs",
+      "sha256": "c93c084ba66548025b3bff79e7afdcbdf92619702707f3c6216af41de03c5a94"
+    },
+    {
+      "path": "apps/desktop/build/sidecar/dist/index.mjs",
+      "sha256": "187eead105929f46fed54e49b5eb73f1e4b5a4be6e97b48d117dad78eff15e7a"
+    },
+    {
+      "path": "apps/desktop/src-tauri/target/debug/bundle/macos/Orbit.app/Contents/Resources/sidecar/dist/index.mjs",
+      "sha256": "187eead105929f46fed54e49b5eb73f1e4b5a4be6e97b48d117dad78eff15e7a"
+    }
+  ],
+  "nativeManifests": [
+    {
+      "name": "forward-1",
+      "sha256": "bdd3fc81ffd0ed9309d863eedeb4a82ff5bab36699b4b2236f14340bcf83ae48",
+      "sourceRevision": "0859272fabe8548922b0d2b57052256d20191654f4c2044227575b8bfb0d254e",
+      "currentSourceStillMatches": true
+    },
+    {
+      "name": "reverse-1",
+      "sha256": "ae2a3cd325ae3a2d78c15a410552ddf74f23f210a774d55a008f51c155ebb096",
+      "sourceRevision": "0859272fabe8548922b0d2b57052256d20191654f4c2044227575b8bfb0d254e",
+      "currentSourceStillMatches": true
+    }
+  ],
+  "nativeObservations": "native-observations.json",
+  "nativeCasesPassed": 2,
+  "nativeCasesTotal": 2,
+  "combinedCompletionExercisedBoth": true,
+  "budgetMarginInverseTokens": 9006,
+  "generalTokenSavingsProven": false,
+  "dailyUseCertified": false,
+  "installedAppReplaced": false
+}

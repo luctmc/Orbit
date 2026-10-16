@@ -1,0 +1,150 @@
+{
+  "phase": "error",
+  "reads": [
+    {
+      "cli": "claude",
+      "phase": "first",
+      "at": 1792113440886
+    },
+    {
+      "cli": "codex",
+      "phase": "first",
+      "at": 1792113440886
+    },
+    {
+      "cli": "codex",
+      "phase": "first",
+      "at": 1792113470879
+    },
+    {
+      "cli": "claude",
+      "phase": "second",
+      "at": 1792113500879
+    },
+    {
+      "cli": "codex",
+      "phase": "second",
+      "at": 1792113500879
+    },
+    {
+      "cli": "claude",
+      "phase": "second",
+      "at": 1792113530880
+    },
+    {
+      "cli": "codex",
+      "phase": "second",
+      "at": 1792113530880
+    },
+    {
+      "cli": "claude",
+      "phase": "second",
+      "at": 1792113560880
+    },
+    {
+      "cli": "codex",
+      "phase": "second",
+      "at": 1792113560880
+    },
+    {
+      "cli": "claude",
+      "phase": "second",
+      "at": 1792113590882
+    },
+    {
+      "cli": "codex",
+      "phase": "second",
+      "at": 1792113590882
+    },
+    {
+      "cli": "claude",
+      "phase": "second",
+      "at": 1792113620882
+    },
+    {
+      "cli": "codex",
+      "phase": "second",
+      "at": 1792113620882
+    },
+    {
+      "cli": "claude",
+      "phase": "second",
+      "at": 1792113650884
+    },
+    {
+      "cli": "codex",
+      "phase": "second",
+      "at": 1792113650884
+    },
+    {
+      "cli": "claude",
+      "phase": "error",
+      "at": 1792113680885
+    },
+    {
+      "cli": "codex",
+      "phase": "error",
+      "at": 1792113680885
+    },
+    {
+      "cli": "claude",
+      "phase": "error",
+      "at": 1792113710886
+    },
+    {
+      "cli": "codex",
+      "phase": "error",
+      "at": 1792113710886
+    },
+    {
+      "cli": "claude",
+      "phase": "error",
+      "at": 1792113770889
+    },
+    {
+      "cli": "codex",
+      "phase": "error",
+      "at": 1792113770889
+    }
+  ],
+  "limits": [
+    {
+      "accountId": "claude",
+      "cli": "claude",
+      "fiveHour": {
+        "usedPercent": 0,
+        "resetsAt": 1830312000000,
+        "windowMinutes": 300
+      },
+      "weekly": {
+        "usedPercent": 84,
+        "resetsAt": 1830312000000,
+        "windowMinutes": 10080
+      },
+      "plan": null,
+      "updatedAt": 1792113650885,
+      "checkedAt": 1792113770889,
+      "source": "provider",
+      "refreshError": "Não foi possível atualizar os limites. Uma nova tentativa será feita automaticamente."
+    },
+    {
+      "cli": "codex",
+      "fiveHour": {
+        "usedPercent": 61,
+        "resetsAt": 1792117250884,
+        "windowMinutes": 300
+      },
+      "weekly": {
+        "usedPercent": 55,
+        "resetsAt": 1792718450884,
+        "windowMinutes": 10080
+      },
+      "plan": "plus",
+      "updatedAt": 1792113650885,
+      "checkedAt": 1792113770889,
+      "source": "provider",
+      "refreshError": "Não foi possível atualizar os limites. Uma nova tentativa será feita automaticamente.",
+      "accountId": "codex"
+    }
+  ]
+}

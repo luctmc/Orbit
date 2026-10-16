@@ -1,0 +1,76 @@
+{
+  "at": 1792110343044,
+  "inputs": [
+    {
+      "id": 1,
+      "data": "\u001b[O",
+      "blocked": false,
+      "at": 1792110270651
+    },
+    {
+      "id": 1,
+      "data": "\u001b[11;3R",
+      "blocked": false,
+      "at": 1792110270775
+    },
+    {
+      "id": 1,
+      "data": "\u001b[I",
+      "blocked": false,
+      "at": 1792110289123
+    },
+    {
+      "id": 1,
+      "data": "R",
+      "blocked": false,
+      "at": 1792110289383
+    },
+    {
+      "id": 1,
+      "data": "e",
+      "blocked": false,
+      "at": 1792110289444
+    }
+  ],
+  "commands": [
+    {
+      "cli": "codex",
+      "initialTask": false,
+      "rolePrompt": false,
+      "resume": false,
+      "file": "/bin/zsh",
+      "args": [
+        "-l",
+        "-c",
+        "PATH='/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-native-tab-5cIbuE/data/panes/1/bin':\"$PATH\" '/Users/lucas/Documents/GitHub/Orbit/apps/desktop/build/node/node' '/Users/lucas/Documents/GitHub/Orbit/packages/sidecar/hooks/codex-profile.mjs' -- -s read-only -m gpt-6-luna -c 'model_reasoning_effort=\"low\"' -c 'mcp_servers.orbit.url=\"http://127.0.0.1:4329/mcp\"' -c 'mcp_servers.orbit.bearer_token_env_var=\"ORBIT_PANE_TOKEN\"' -c 'mcp_servers.orbit.default_tools_approval_mode=\"approve\"'"
+      ]
+    },
+    {
+      "cli": "claude",
+      "initialTask": false,
+      "rolePrompt": false,
+      "resume": false,
+      "file": "/bin/zsh",
+      "args": [
+        "-l",
+        "-c",
+        "PATH='/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-native-tab-5cIbuE/data/panes/2/bin':\"$PATH\" claude --model claude-haiku-5-5 --effort low --mcp-config '/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-native-tab-5cIbuE/data/panes/2/mcp.json' --strict-mcp-config --settings '/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-native-tab-5cIbuE/data/panes/2/settings.json'"
+      ]
+    }
+  ],
+  "panes": [
+    {
+      "id": 1,
+      "status": "idle",
+      "usage": null,
+      "sessionId": null
+    },
+    {
+      "id": 2,
+      "status": "starting",
+      "usage": null,
+      "sessionId": null
+    }
+  ],
+  "notifications": []
+}

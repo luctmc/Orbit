@@ -1,0 +1,13 @@
+✔ lead and helper coordinate through MCP, handoffs and hooks (413.03025ms)
+✔ an agent reads a packaged skill through authenticated MCP without executing its content (67.597792ms)
+✔ mission progress retains delivery and review identity and observes stale final source without changing historical acceptance (344.585708ms)
+✔ progress replies correlate failures and success to the requesting UI without broadcasting or mutating the ledger (87.410709ms)
+✔ authenticated WebSocket progress replies only to its requester and correlates missing-mission errors (41.167542ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 822.994875

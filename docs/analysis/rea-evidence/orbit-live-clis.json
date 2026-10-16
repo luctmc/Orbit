@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-14",
+  "command": "node scripts/verify-live-clis.mjs --live",
+  "exitCode": 0,
+  "passed": true,
+  "versions": {
+    "claude": "2.1.296",
+    "codex": "0.162.1"
+  },
+  "agents": [
+    {
+      "id": 2,
+      "cli": "claude",
+      "status": "running",
+      "sessionId": "cbc87f25-e39f-4f0f-ae74-04623a7dd077",
+      "handoff": "done",
+      "attention": null
+    },
+    {
+      "id": 3,
+      "cli": "codex",
+      "status": "running",
+      "sessionId": "01a13ca7-1461-7040-aa49-37c7f1f98e7e",
+      "handoff": "done",
+      "attention": null
+    }
+  ],
+  "events": [
+    {
+      "title": "Retorno de #3 (concluído)",
+      "body": "ORBIT_LIVE_SMOKE_CODEX\n\nEvidência: Read canary.txt using `cat canary.txt`; exact canary text: ORBIT_SYNTHETIC_CANARY_8421"
+    },
+    {
+      "title": "Retorno de #2 (concluído)",
+      "body": "ORBIT_LIVE_SMOKE_CLAUDE\n\nEvidência: Read canary.txt (Read tool, no edits). Exact canary text on line 1: ORBIT_SYNTHETIC_CANARY_8421"
+    }
+  ],
+  "limits": "Synthetic file read and MCP handoff only; not a full coding or resume scenario."
+}

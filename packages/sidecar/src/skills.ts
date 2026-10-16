@@ -1,11 +1,43 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import { readFile, readdir, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, join } from 'node:path'
-import { catalogId, type AgentCliForRole, type CatalogItem, type CatalogKind } from '@orbit/protocol'
+import { basename, isAbsolute, join, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { AGENT_CLIS, catalogId, type AgentCliForRole, type CatalogItem, type CatalogKind } from '@orbit/protocol'
 import type { Run } from './clis.ts'
 import type { HookPayload } from './hooks.ts'
 
 const DESCRIPTION_MAX = 300
+export const SKILL_MAX_BYTES = 64 * 1024
+const BUNDLED_SKILLS = fileURLToPath(new URL('../resources/skills', import.meta.url))
+const hash = (text: string) => createHash('sha256').update(text).digest('hex')
+const inside = (root: string, path: string) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel) }
+const asyncText = async (path: string, max = 2 * 1024 * 1024) => {
+  try {
+    if ((await stat(path)).size > max) return null
+    const text = await readFile(path, 'utf8')
+    return Buffer.byteLength(text) <= max ? text : null
+  } catch { return null }
+}
+const asyncList = async (path: string) => { try { return (await readdir(path)).slice(0, 2048) } catch { return [] } }
+
+/** Bounded discovery/read, refusing symlinks that escape the registered skill root. */
+function skillText(root: string, path: string) {
+  const realRoot = realpathSync(root), realPath = realpathSync(path)
+  if (!inside(realRoot, realPath) || !statSync(realPath).isFile() || statSync(realPath).size > SKILL_MAX_BYTES) throw new Error('Skill fora da raiz ou grande demais')
+  const text = readFileSync(realPath, 'utf8')
+  if (Buffer.byteLength(text) > SKILL_MAX_BYTES) throw new Error('Skill grande demais')
+  return { text, realRoot, realPath }
+}
+
+export function readSkill(item: CatalogItem, sha256: string): string {
+  const r = item.resource
+  if (!r || item.kind !== 'skill' || r.sha256 !== sha256) throw new Error('Skill ou hash não encontrado; atualize o catálogo')
+  const { text, realPath, realRoot } = skillText(r.root, r.path)
+  if (realPath !== r.path || realRoot !== r.root || hash(text) !== sha256) throw new Error('A skill mudou desde a descoberta; atualize o catálogo antes de carregar')
+  return text
+}
 
 /** `name:` and `description:` from a Markdown file's front matter (quoted, plain or folded). */
 export function frontMatter(text: string): Record<string, string> {
@@ -56,29 +88,34 @@ class Collector {
   readonly items: CatalogItem[] = []
   private readonly seen = new Set<string>()
 
-  add(cli: AgentCliForRole, kind: CatalogKind, name: string, description: string, source: string, offInCli = false): void {
+  add(cli: AgentCliForRole, kind: CatalogKind, name: string, description: string, source: string, offInCli = false, resource?: CatalogItem['resource']): void {
     const id = catalogId(cli, kind, name)
     if (!name || this.seen.has(id)) return
     this.seen.add(id)
-    this.items.push({ id, cli, kind, name, description: description.replace(/\s+/g, ' ').trim().slice(0, DESCRIPTION_MAX), source, offInCli })
+    this.items.push({ id, cli, kind, name, description: description.replace(/\s+/g, ' ').trim().slice(0, DESCRIPTION_MAX), source, offInCli, ...(resource ? { resource } : {}) })
   }
 
   /** `<dir>/<skill>/SKILL.md`, named by its front matter (or folder). */
-  skills(cli: AgentCliForRole, dir: string, source: string, prefix = ''): void {
-    for (const entry of listDir(dir)) {
+  async skills(cli: AgentCliForRole, dir: string, source: string, prefix = '', projectRoot: string | null = null): Promise<void> {
+    for (const entry of await asyncList(dir)) {
       if (entry.startsWith('.')) continue
-      const text = readText(join(dir, entry, 'SKILL.md'))
-      if (text === null) continue
-      const meta = frontMatter(text)
-      this.add(cli, 'skill', `${prefix}${meta.name || entry}`, meta.description ?? '', source)
+      try {
+        const realRoot = await realpath(dir), realPath = await realpath(join(dir, entry, 'SKILL.md'))
+        if (!inside(realRoot, realPath) || !(await stat(realPath)).isFile()) continue
+        const text = await asyncText(realPath, SKILL_MAX_BYTES)
+        if (text === null) continue
+        const meta = frontMatter(text)
+        const origin = projectRoot ? 'project' : prefix ? 'plugin' : source === 'sistema' ? 'system' : 'personal'
+        this.add(cli, 'skill', `${prefix}${meta.name || entry}`, meta.description ?? '', source, false, { path: realPath, root: realRoot, sha256: hash(text), bytes: Buffer.byteLength(text), version: meta.version ?? null, origin, projectRoot: projectRoot ? await realpath(projectRoot) : null, role: null, compatibility: [cli] })
+      } catch { /* unreadable, oversized or escaping links are not eligible resources */ }
     }
   }
 
   /** `<dir>/<agent>.md` subagents (Claude Code). */
-  agents(dir: string, source: string, prefix = ''): void {
-    for (const entry of listDir(dir)) {
+  async agents(dir: string, source: string, prefix = ''): Promise<void> {
+    for (const entry of await asyncList(dir)) {
       if (!entry.endsWith('.md')) continue
-      const meta = frontMatter(readText(join(dir, entry)) ?? '')
+      const meta = frontMatter(await asyncText(join(dir, entry)) ?? '')
       this.add('claude', 'agent', `${prefix}${meta.name || entry.slice(0, -3)}`, meta.description ?? '', source)
     }
   }
@@ -113,12 +150,13 @@ export interface ScanInput {
   /** Workspace folders: their project skills, agents and MCP servers. */
   folders: string[]
   run: Run
+  bundledDir?: string
 }
 
 /** Claude Code keeps MCP servers and per-project settings in `.claude.json` next to (or inside) its folder. */
-function claudeState(claudeDir: string): Record<string, any> {
+async function claudeState(claudeDir: string): Promise<Record<string, any>> {
   const inside = join(claudeDir, '.claude.json')
-  const text = readText(existsSync(inside) ? inside : join(homedir(), '.claude.json'))
+  const text = await asyncText(inside) ?? await asyncText(join(homedir(), '.claude.json'))
   try {
     return text ? JSON.parse(text) : {}
   } catch {
@@ -127,36 +165,40 @@ function claudeState(claudeDir: string): Record<string, any> {
 }
 
 /** What each CLI has installed that an agent can call. Reads files only; never changes them. */
-export async function scanCatalog({ claudeDir, codexDir, folders, run }: ScanInput): Promise<CatalogItem[]> {
+export async function scanCatalog({ claudeDir, codexDir, folders, run, bundledDir = BUNDLED_SKILLS }: ScanInput): Promise<CatalogItem[]> {
   const found = new Collector()
+  // Reserved Orbit names are resolved from the shipped manifest, before third-party packages.
+  for (const item of bundledCatalog(bundledDir)) found.add(item.cli, item.kind, item.name, item.description, item.source, false, item.resource)
 
   // Claude Code: personal, plugin and project skills and agents; MCP servers.
-  found.skills('claude', join(claudeDir, 'skills'), 'pessoal')
-  found.agents(join(claudeDir, 'agents'), 'pessoal')
-  const installed = readText(join(claudeDir, 'plugins', 'installed_plugins.json'))
+  await found.skills('claude', join(claudeDir, 'skills'), 'pessoal')
+  await found.agents(join(claudeDir, 'agents'), 'pessoal')
+  const installed = await asyncText(join(claudeDir, 'plugins', 'installed_plugins.json'))
   if (installed) {
     try {
       const plugins = (JSON.parse(installed) as { plugins?: Record<string, unknown> }).plugins ?? {}
       for (const [key, value] of Object.entries(plugins)) {
         const plugin = key.split('@')[0]!
         for (const install of (Array.isArray(value) ? value : [value]) as Array<{ installPath?: string }>) {
-          if (!install?.installPath || !isDir(install.installPath)) continue
-          found.skills('claude', join(install.installPath, 'skills'), `plugin ${plugin}`, `${plugin}:`)
-          found.agents(join(install.installPath, 'agents'), `plugin ${plugin}`, `${plugin}:`)
+          if (!install?.installPath) continue
+          await found.skills('claude', join(install.installPath, 'skills'), `plugin ${plugin}`, `${plugin}:`)
+          await found.agents(join(install.installPath, 'agents'), `plugin ${plugin}`, `${plugin}:`)
         }
       }
     } catch {
       // unreadable plugin list: plugins stay out
     }
   }
-  const state = claudeState(claudeDir)
+  const state = await claudeState(claudeDir)
   found.mcpServers(state.mcpServers, 'pessoal')
   for (const folder of folders) {
     const project = `projeto ${basename(folder)}`
-    found.skills('claude', join(folder, '.claude', 'skills'), project)
-    found.agents(join(folder, '.claude', 'agents'), project)
+    await found.skills('claude', join(folder, '.claude', 'skills'), project, '', folder)
+    await found.skills('codex', join(folder, '.agents', 'skills'), project, '', folder)
+    await found.skills('codex', join(folder, '.codex', 'skills'), project, '', folder)
+    await found.agents(join(folder, '.claude', 'agents'), project)
     found.mcpServers(state.projects?.[folder]?.mcpServers, project)
-    const mcpJson = readText(join(folder, '.mcp.json'))
+    const mcpJson = await asyncText(join(folder, '.mcp.json'))
     if (mcpJson) {
       try {
         found.mcpServers(JSON.parse(mcpJson).mcpServers, project)
@@ -167,8 +209,8 @@ export async function scanCatalog({ claudeDir, codexDir, folders, run }: ScanInp
   }
 
   // Codex: skills, and MCP servers as Codex itself lists them (with plugins and on/off state).
-  found.skills('codex', join(codexDir, 'skills'), 'pessoal')
-  found.skills('codex', join(codexDir, 'skills', '.system'), 'sistema')
+  await found.skills('codex', join(codexDir, 'skills'), 'pessoal')
+  await found.skills('codex', join(codexDir, 'skills', '.system'), 'sistema')
   const listed = await run('codex mcp list --json', 30_000)
   let servers: Array<{ name?: string; enabled?: boolean; transport?: Record<string, unknown> }> | null = null
   try {
@@ -180,10 +222,31 @@ export async function scanCatalog({ claudeDir, codexDir, folders, run }: ScanInp
     for (const s of servers) if (s.name) found.add('codex', 'mcp', s.name, transport(s.transport), 'config', s.enabled === false)
   } else {
     // Without the CLI, the server names in config.toml are still there.
-    for (const match of (readText(join(codexDir, 'config.toml')) ?? '').matchAll(/^\[mcp_servers\.("?)([^\]."]+)\1\]\s*$/gm)) found.add('codex', 'mcp', match[2]!, '', 'config')
+    for (const match of (await asyncText(join(codexDir, 'config.toml')) ?? '').matchAll(/^\[mcp_servers\.("?)([^\]."]+)\1\]\s*$/gm)) found.add('codex', 'mcp', match[2]!, '', 'config')
   }
 
   return found.items.sort((a, b) => a.cli.localeCompare(b.cli) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
+}
+
+export function bundledCatalog(dir = BUNDLED_SKILLS): CatalogItem[] {
+  const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { version: number; skills: Array<{ name: string; version: string; role: string; compatibility: AgentCliForRole[]; sha256: string; bytes: number }> }
+  if (manifest.version !== 1 || !Array.isArray(manifest.skills)) throw new Error('Manifesto de skills incompatível')
+  return manifest.skills.flatMap(s => {
+    if (!/^orbit-[a-z0-9-]{1,50}$/.test(s.name) || !s.compatibility?.every(cli => AGENT_CLIS.includes(cli))) throw new Error('Manifesto de skills inválido')
+    const { text, realRoot, realPath } = skillText(dir, join(dir, s.name, 'SKILL.md'))
+    const meta = frontMatter(text)
+    if (meta.name !== s.name || !meta.description || hash(text) !== s.sha256 || Buffer.byteLength(text) !== s.bytes) throw new Error(`Integridade inválida na skill ${s.name}`)
+    return s.compatibility.map(cli => ({ id: catalogId(cli, 'skill', s.name), cli, kind: 'skill' as const, name: s.name, description: meta.description!, source: 'Orbit', offInCli: false,
+      resource: { path: realPath, root: realRoot, sha256: s.sha256, bytes: s.bytes, version: s.version, origin: 'bundled' as const, projectRoot: null, role: s.role, compatibility: s.compatibility } }))
+  })
+}
+
+/** Filter project resources to this mission, even when the UI catalog covers several workspaces. */
+export function missionSkills(items: CatalogItem[], cli: AgentCliForRole, folders: string[], disabled: ReadonlySet<string>, policy?: SkillPolicy): CatalogItem[] {
+  const roots = folders.map(folder => { try { return realpathSync(folder) } catch { return folder } })
+  return items.filter(item => item.cli === cli && item.kind === 'skill' && item.resource && !item.offInCli && !disabled.has(item.id)
+    && (!item.resource.projectRoot || roots.includes(item.resource.projectRoot))
+    && (!policy?.only || policy.only.some(name => item.name === name || item.name.endsWith(`:${name}`))))
 }
 
 /** What a pane may use beyond what is switched off for everyone. */

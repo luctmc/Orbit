@@ -1,0 +1,13 @@
+✔ default role budgets preserve independent review, recovery and user language (0.518333ms)
+✔ builtin squads are valid and have unique role ids (0.81375ms)
+✔ squad validation rejects what would break a mission (0.271208ms)
+✔ saving keeps the id of an existing custom squad; duplicating a builtin gets a new one (0.143875ms)
+✔ a squad mission briefs the lead with the script and opens helpers by role (156.613208ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 354.352417

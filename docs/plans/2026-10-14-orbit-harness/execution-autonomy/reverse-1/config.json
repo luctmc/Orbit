@@ -1,0 +1,15 @@
+{
+  "direction": "reverse",
+  "output": "/Users/lucas/Documents/GitHub/Orbit/docs/plans/2026-10-14-orbit-harness/execution-autonomy/reverse-1",
+  "scratch": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-tf5h2Z",
+  "root": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-tf5h2Z/workspace",
+  "data": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-tf5h2Z/data",
+  "taskId": "bug-pagination",
+  "worker": "codex",
+  "reviewer": "claude",
+  "leader": "claude",
+  "interruptDelivery": true,
+  "maxOpenings": 7,
+  "missionId": "b72f0b50-584f-43f9-85d6-613dc536043e",
+  "leadId": 1
+}

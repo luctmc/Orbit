@@ -1,0 +1,46 @@
+{
+  "kind": "owned retained PIDs only; no process-wide scan",
+  "observed": [
+    {
+      "pid": 93755,
+      "alive": false,
+      "error": null
+    },
+    {
+      "pid": 93759,
+      "alive": false,
+      "error": null
+    },
+    {
+      "pid": 96932,
+      "alive": false,
+      "error": null
+    },
+    {
+      "pid": 97131,
+      "alive": false,
+      "error": null
+    },
+    {
+      "pid": 97594,
+      "alive": false,
+      "error": null
+    },
+    {
+      "pid": 98789,
+      "alive": false,
+      "error": null
+    },
+    {
+      "pid": 98381,
+      "alive": false,
+      "error": null
+    },
+    {
+      "pid": 98548,
+      "alive": false,
+      "error": null
+    }
+  ],
+  "allStopped": true
+}

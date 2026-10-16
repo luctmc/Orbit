@@ -35,7 +35,8 @@ test('an agentic lead routes helpers through the table; the table is saved and r
   try {
     await ui.opened
     const { snapshot } = await ui.next('snapshot')
-    assert.deepEqual(snapshot.routing, DEFAULT_ROUTING)
+    assert.deepEqual({ ...snapshot.routing, revision: undefined }, { ...DEFAULT_ROUTING, revision: undefined })
+    assert.match(snapshot.routing.revision!, /^[a-f0-9]{64}$/)
 
     // The user tweaks the table: tests go to Codex with high effort and a skill.
     const edited: Routing = structuredClone(DEFAULT_ROUTING)
@@ -75,7 +76,7 @@ test('an agentic lead routes helpers through the table; the table is saved and r
 
     ui.send({ type: 'routing.reset' })
     const { routing: reset } = await ui.next('routing.updated', (m) => m.routing.taskTypes.find((t) => t.id === 'testes')!.model === null)
-    assert.deepEqual(reset, DEFAULT_ROUTING)
+    assert.deepEqual({ ...reset, revision: undefined }, { ...DEFAULT_ROUTING, revision: undefined })
   } finally {
     await mcp?.close()
     ui.ws.close()

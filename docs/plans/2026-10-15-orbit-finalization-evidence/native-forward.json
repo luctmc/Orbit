@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "runSha256": "2fd13891fe951436d4b870032edc9b3cc93c0ec4236d77973e99087f2948d355",
+  "unit": "utf8-bytes and provider-reported tokens (separate units)",
+  "modelCalls": 0,
+  "tokenSavings": null,
+  "sessions": [
+    {
+      "paneId": 2,
+      "role": "crew",
+      "found": true,
+      "sessionId": "5dfcafc4-bb64-4b94-97c7-b67b93c31491",
+      "transcriptSha256": "96d09747c5d7ad87ce9eb333b0a863590dc8d410714ab8b588bccbe78a82b303",
+      "responses": 6,
+      "responseUsage": [
+        {
+          "input": 45151,
+          "output": 362
+        },
+        {
+          "input": 47748,
+          "output": 439
+        },
+        {
+          "input": 50626,
+          "output": 459
+        },
+        {
+          "input": 51322,
+          "output": 648
+        },
+        {
+          "input": 52557,
+          "output": 1094
+        },
+        {
+          "input": 53928,
+          "output": 583
+        }
+      ],
+      "tools": {
+        "ToolSearch": 1,
+        "Bash": 3,
+        "mcp__orbit__whoami": 1,
+        "mcp__orbit__board_list": 1,
+        "mcp__orbit__board_update": 2,
+        "Read": 1,
+        "Edit": 1,
+        "mcp__orbit__handoff_submit": 1
+      },
+      "externalServersDiscovered": [],
+      "externalServersCalled": [],
+      "attachments": [
+        {
+          "type": "deferred_tools_delta",
+          "prefixes": {
+            "native": 18
+          },
+          "definitionBytes": 2,
+          "surfacedCount": 0
+        },
+        {
+          "type": "agent_listing_delta",
+          "count": 34,
+          "contentBytes": 12545
+        },
+        {
+          "type": "skill_listing",
+          "count": 50,
+          "contentBytes": 23396
+        },
+        {
+          "type": "prompt_snapshot",
+          "toolCount": 15,
+          "toolSchemaBytes": 117810,
+          "systemPromptBytes": 13865
+        },
+        {
+          "type": "deferred_tools_delta",
+          "prefixes": {
+            "orbit": 30
+          },
+          "definitionBytes": 2,
+          "surfacedCount": 0
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "Claude transcript attachments are provider-version-specific; absent fields remain absent",
+    "Attachment snapshots/deltas overlap: never sum their bytes as unique context",
+    "Provider usage is deduplicated by response id; this is not a counterfactual token-savings estimate",
+    "Codex context and external account sessions are not inferred from unrelated files"
+  ]
+}

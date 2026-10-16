@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, statSync } from 'node:fs'
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildCommand, paneEnv, shellQuote } from '../src/command.ts'
@@ -10,12 +11,27 @@ test('shell panes start a login shell', () => {
   assert.deepEqual(buildCommand({ cli: 'shell', model: null }, '/bin/zsh'), { file: '/bin/zsh', args: ['-l'] })
 })
 
-test('agent panes run the CLI with the model, then fall back to a shell', () => {
+test('read-only Codex sessions do not request additional writable roots', () => {
+  const line = buildCommand({ cli: 'codex', model: null, sandbox: 'read-only', addDirs: ['/tmp/context', '/tmp/attachments'] }, '/bin/sh').args[2]!
+  assert.match(line, /-s read-only/)
+  assert.doesNotMatch(line, /--add-dir/)
+})
+
+test('a failed CLI preserves its exit status instead of masquerading as a live shell', () => {
+  const binDir = mkdtempSync(join(tmpdir(), 'orbit-cli-failure-'))
+  writeFileSync(join(binDir, 'claude'), '#!/bin/sh\nprintf "ORBIT_SYNTHETIC_START_FAILURE\\n"\nexit 23\n', { mode: 0o700 })
+  const command = buildCommand({ cli: 'claude', model: null, binDir }, '/bin/sh')
+  const result = spawnSync(command.file, command.args, { encoding: 'utf8', input: '', timeout: 2000 })
+  assert.equal(result.status, 23)
+  assert.match(result.stdout, /ORBIT_SYNTHETIC_START_FAILURE/)
+})
+
+test('agent panes run the CLI with the model and preserve its lifecycle', () => {
   assert.deepEqual(buildCommand({ cli: 'claude', model: 'claude-opus-5-5' }, '/bin/zsh'), {
     file: '/bin/zsh',
-    args: ['-l', '-c', `claude --model claude-opus-5-5; exec '/bin/zsh' -l`],
+    args: ['-l', '-c', `claude --model claude-opus-5-5`],
   })
-  assert.deepEqual(buildCommand({ cli: 'codex', model: null }, '/bin/bash').args, ['-l', '-c', `codex; exec '/bin/bash' -l`])
+  assert.deepEqual(buildCommand({ cli: 'codex', model: null }, '/bin/bash').args, ['-l', '-c', `codex`])
 })
 
 test('model ids that could inject shell syntax are rejected', () => {

@@ -1,0 +1,82 @@
+{
+  "analysisSha256": "c0d864cc5d49a2d4f2bbb16361f9ec6f6073798860629f2193e6e9893f441390",
+  "rawSourceRevision": "c4d7a9ffcf334a1e72e28a2f6b5e4c98d280ff84d90e5d4c759a1172f9f20eb7",
+  "report": {
+    "version": 1,
+    "comparison": "Current harness with eager optional context versus current budgeted optional context; identical safety and review contracts",
+    "scope": "live-control-without-observed-context-treatment",
+    "runs": 4,
+    "pairs": 2,
+    "issues": [],
+    "fullMatrixComplete": false,
+    "qualityPreserved": false,
+    "tokenCoverage": true,
+    "treatmentObserved": false,
+    "profiles": [
+      {
+        "configuration": "eager",
+        "runs": 2,
+        "accepted": 1,
+        "failedOrUnverified": 1,
+        "tokens": 1004338,
+        "costUsd": null,
+        "knownCostUsd": 0.018249,
+        "tokensPerAccepted": 1004338,
+        "costPerAcceptedUsd": null,
+        "durationMs": {
+          "min": 39386.88825,
+          "median": 47751.62562499999,
+          "p95": 56116.36299999998,
+          "max": 56116.36299999998
+        },
+        "initialBytes": 16870,
+        "retrievalBytes": 2635,
+        "submittedBytes": 3654,
+        "attempts": 4,
+        "retries": 0,
+        "reopenings": 0,
+        "ptyAcceptedWakeups": 3
+      },
+      {
+        "configuration": "budgeted",
+        "runs": 2,
+        "accepted": 2,
+        "failedOrUnverified": 0,
+        "tokens": 1072329,
+        "costUsd": null,
+        "knownCostUsd": 0.019007999999999997,
+        "tokensPerAccepted": 536164.5,
+        "costPerAcceptedUsd": null,
+        "durationMs": {
+          "min": 41255.427458,
+          "median": 53763.85016649999,
+          "p95": 66272.27287499998,
+          "max": 66272.27287499998
+        },
+        "initialBytes": 16870,
+        "retrievalBytes": 3520,
+        "submittedBytes": 3403,
+        "attempts": 4,
+        "retries": 0,
+        "reopenings": 0,
+        "ptyAcceptedWakeups": 4
+      }
+    ],
+    "initialByteReductionPercent": {
+      "min": 0,
+      "median": 0,
+      "p95": 0,
+      "max": 0
+    },
+    "observedTokenReductionPercent": null,
+    "target25Percent": null,
+    "limitations": [
+      "First PTY output is not semantic first response; firstResponseMs stays null",
+      "Provider/CLI cost estimates are not invoices; unreported cost remains null",
+      "Independent oracle execution time is included in total time",
+      "A pilot does not establish statistical significance or universal superiority",
+      "Fixed model names are requested pins; serving identity is only known when the provider reports it",
+      "No token-reduction attribution when the context treatment was not exercised"
+    ]
+  }
+}

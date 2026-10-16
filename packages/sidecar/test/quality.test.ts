@@ -35,6 +35,7 @@ test('helpers answer acceptance criteria, open sub-helpers within a cap, and the
   const run: Run = async (command) => {
     if (command.endsWith('codex login status')) return { code: 0, stdout: 'Logged in using ChatGPT\n', stderr: '' }
     if (command.endsWith('claude auth status')) return { code: 0, stdout: JSON.stringify({ loggedIn: true, authMethod: 'claude.ai' }), stderr: '' }
+    if (command.includes('read-codex-limits.mjs')) return { code: 0, stdout: JSON.stringify({ rateLimits: { primary: { usedPercent: 97, windowDurationMins: 300, resetsAt: Math.floor(Date.now() / 1000) + 3600 }, secondary: null } }), stderr: '' }
     return { code: 127, stdout: '', stderr: 'offline' }
   }
   const fake = (_launch: AgentLaunch, shell: string) => ({ file: shell, args: ['-c', `exec ${shell}`] })
@@ -42,7 +43,7 @@ test('helpers answer acceptance criteria, open sub-helpers within a cap, and the
   const codexHome = mkdtempSync(join(tmpdir(), 'codex-home-'))
   process.env.CODEX_HOME = codexHome
   process.env.CLAUDE_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'claude-home-'))
-  // The person used Codex outside Orbit: its last session file tells the account's room.
+  // Session lookup remains available, but current quota comes from the provider query above.
   const now = new Date()
   const day = join(codexHome, 'sessions', String(now.getFullYear()), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0'))
   mkdirSync(day, { recursive: true })
@@ -103,10 +104,10 @@ test('helpers answer acceptance criteria, open sub-helpers within a cap, and the
     assert.match((await hook(auditToken, { hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: '/x' } })).hookSpecificOutput.permissionDecisionReason, /só de leitura/)
     assert.equal(await hook(auditToken, { hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/x' } }), null)
     const opened = server.core.missionEvents(mission.id).find((e) => e.kind === 'pane.spawned' && e.paneId === auditId)!
-    assert.match(opened.body, /▸ tipo: Investigação \(escolhido pelo líder\)\n▸ conta: /)
+    assert.match(opened.body, /▸ tipo: Investigação \(escolhido pelo líder\)[\s\S]*▸ conta: /)
 
     // Work in another repository of the workspace: the helper starts there.
-    const inApi = await asLead.call('agent_spawn', { title: 'API', task: 'Ajuste o endpoint', kind: 'bug', folder: api })
+    const inApi = await asLead.call('agent_spawn', { title: 'API', task: 'Leia o endpoint', kind: 'bug', folder: api, readOnly: true })
     assert.match(inApi, new RegExp(`▸ pasta: ${api}`))
     assert.equal(pane(Number(/#(\d+) API/.exec(inApi)![1])).cwd, api)
 
@@ -115,26 +116,29 @@ test('helpers answer acceptance criteria, open sub-helpers within a cap, and the
     assert.match(reply, /▸ critérios de aceite: 2/)
     const fixId = Number(/#(\d+) Corrigir/.exec(reply)![1])
     const asFix = await mcpAs(await tokenOf(fixId))
+    // The fake shell does not emit the native CLI's SessionStart hook on its own.
+    server.core.hookReport(fixId, { hook_event_name: 'SessionStart' })
     assert.match(await asFix.call('handoff_submit', { summary: 'Feito', evidence: 'npm test' }), /faltam 1, 2/)
     assert.match(await asFix.call('handoff_submit', { summary: 'Feito', evidence: 'npm test', criteria: [{ item: 1, met: true, how: 'npm test: 9 ok' }, { item: 2, met: false, how: 'ainda não' }] }), /critério 2 não foi cumprido/)
 
     // The helper splits its work: up to two sub-helpers, whose results come back to it.
     assert.ok((await asFix.tools()).includes('agent_spawn'))
-    const child = await asFix.call('agent_spawn', { title: 'README', task: 'Atualize o README com a correção', kind: 'documentacao' })
+    const child = await asFix.call('agent_spawn', { title: 'README', task: 'Revise a proposta para o README', kind: 'documentacao', readOnly: true })
     const childId = Number(/#(\d+) README/.exec(child)![1])
     assert.match(child, /▸ tipo: Documentação \(escolhido pelo ajudante #\d+\)/)
     assert.equal(pane(childId).assignedBy, fixId)
-    await asFix.call('agent_spawn', { title: 'Teste extra', task: 'Escreva um teste de borda' })
+    await asFix.call('agent_spawn', { title: 'Teste extra', task: 'Revise um teste de borda', readOnly: true })
     assert.match(await asFix.call('agent_spawn', { title: 'Mais um', task: 'x' }), /já tem 2 sub-ajudantes/)
     const asChild = await mcpAs(await tokenOf(childId))
     assert.ok(!(await asChild.tools()).includes('agent_spawn'), 'sub-helpers do not open their own')
+    await new Promise(r => setTimeout(r, 1300)) // native input must be idle after its initial paint
     await asChild.call('handoff_submit', { summary: 'README atualizado', evidence: 'git diff README.md' })
     await sees(fixId, `Retorno de #${childId} (README)`)
     assert.match(await asFix.call('agent_close', { agent: auditId }), /só fecha os seus/)
     assert.match(await asFix.call('agent_close', { agent: childId }), /fechado/)
 
     const done = sees(lead.id, `Retorno de #${fixId} (Corrigir)`)
-    assert.match(await asFix.call('handoff_submit', { summary: 'Feito', evidence: 'npm test', criteria: [{ item: 1, met: true, how: 'npm test: 9 ok' }, { item: 2, met: true, how: 'README.md linha 12' }] }), /entregue/)
+    assert.match(await asFix.call('handoff_submit', { summary: 'Feito', evidence: 'npm test', criteria: [{ item: 1, met: true, how: 'npm test: 9 ok' }, { item: 2, met: true, how: 'README.md linha 12' }] }), /Resultado persistido/)
     await done
     await sees(lead.id, 'rios: 2/2')
     assert.match(server.core.missionEvents(mission.id, 'handoff').at(-1)!.body, /Critérios de aceite:\n✓ 1\. os testes passam: npm test: 9 ok\n✓ 2\./)

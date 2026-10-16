@@ -1,0 +1,129 @@
+✖ the report shows a reported zero cost without claiming full coverage (24.340875ms)
+✖ the report marks unknown USD explicitly instead of implying free execution (0.198375ms)
+✖ the report labels a positive known amount as a subtotal (1.663875ms)
+✖ Codex output already includes reasoning (1024) (1.30375ms)
+✔ Codex output already includes reasoning (0) (0.125042ms)
+✔ Codex output already includes reasoning (absent) (0.075833ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 2
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 120.862917
+
+✖ failing tests:
+
+test at packages/sidecar/test/reportCost.test.ts:12:1
+✖ the report shows a reported zero cost without claiming full coverage (24.340875ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /US\$ 0,00/. Input:
+  
+  '# Custos\n' +
+    '\n' +
+    '**Modo:** Agêntica · **Início:** 31/12/1969, 21:00 · **Duração:** 1 min · **Situação:** em andamento\n' +
+    '\n' +
+    '## Em números\n' +
+    '\n' +
+    '- 0 agentes\n' +
+    '- 105 tokens\n' +
+    '- 0 retornos de ajudantes\n' +
+    '\n' +
+    '---\n' +
+    'Relatório gerado pelo Orbit em 31/12/1969, 21:00.\n'
+  
+      at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/reportCost.test.ts:14:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '# Custos\n\n**Modo:** Agêntica · **Início:** 31/12/1969, 21:00 · **Duração:** 1 min · **Situação:** em andamento\n\n## Em números\n\n- 0 agentes\n- 105 tokens\n- 0 retornos de ajudantes\n\n---\nRelatório gerado pelo Orbit em 31/12/1969, 21:00.\n',
+    expected: /US\$ 0,00/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at packages/sidecar/test/reportCost.test.ts:18:1
+✖ the report marks unknown USD explicitly instead of implying free execution (0.198375ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /custo em USD não informado/. Input:
+  
+  '# Custos\n' +
+    '\n' +
+    '**Modo:** Agêntica · **Início:** 31/12/1969, 21:00 · **Duração:** 1 min · **Situação:** em andamento\n' +
+    '\n' +
+    '## Em números\n' +
+    '\n' +
+    '- 0 agentes\n' +
+    '- 105 tokens\n' +
+    '- 0 retornos de ajudantes\n' +
+    '\n' +
+    '---\n' +
+    'Relatório gerado pelo Orbit em 31/12/1969, 21:00.\n'
+  
+      at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/reportCost.test.ts:20:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '# Custos\n\n**Modo:** Agêntica · **Início:** 31/12/1969, 21:00 · **Duração:** 1 min · **Situação:** em andamento\n\n## Em números\n\n- 0 agentes\n- 105 tokens\n- 0 retornos de ajudantes\n\n---\nRelatório gerado pelo Orbit em 31/12/1969, 21:00.\n',
+    expected: /custo em USD não informado/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at packages/sidecar/test/reportCost.test.ts:23:1
+✖ the report labels a positive known amount as a subtotal (1.663875ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /subtotal informado pelo Claude/. Input:
+  
+  '# Custos\n' +
+    '\n' +
+    '**Modo:** Agêntica · **Início:** 31/12/1969, 21:00 · **Duração:** 1 min · **Situação:** em andamento\n' +
+    '\n' +
+    '## Em números\n' +
+    '\n' +
+    '- 0 agentes\n' +
+    '- 105 tokens (US$ 0,42 em preço de API, só do Claude)\n' +
+    '- 0 retornos de ajudantes\n' +
+    '\n' +
+    '---\n' +
+    'Relatório gerado pelo Orbit em 31/12/1969, 21:00.\n'
+  
+      at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/reportCost.test.ts:26:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '# Custos\n\n**Modo:** Agêntica · **Início:** 31/12/1969, 21:00 · **Duração:** 1 min · **Situação:** em andamento\n\n## Em números\n\n- 0 agentes\n- 105 tokens (US$ 0,42 em preço de API, só do Claude)\n- 0 retornos de ajudantes\n\n---\nRelatório gerado pelo Orbit em 31/12/1969, 21:00.\n',
+    expected: /subtotal informado pelo Claude/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at packages/sidecar/test/usageCounters.test.ts:13:47
+✖ Codex output already includes reasoning (1024) (1.30375ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  2210 !== 1186
+  
+      at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/usageCounters.test.ts:15:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 2210,
+    expected: 1186,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

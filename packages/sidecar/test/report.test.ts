@@ -35,7 +35,7 @@ test('the report puts the whole mission in Markdown', () => {
   })
   assert.match(md, /^# Frete\n\n\*\*Modo:\*\* Agêntica · \*\*Workspace:\*\* loja · .* · \*\*Duração:\*\* 30 min · \*\*Situação:\*\* em andamento/)
   assert.match(md, /## Objetivo\n\nCalcular o frete por peso\./)
-  assert.match(md, /- 3 agentes \(1 Claude, 1 Codex abertos agora, 1 já fechados\)\n- 152 mil tokens \(US\$ 0,42 em preço de API, só do Claude\)\n- 1 de 2 cartões feitos\n- 1 retorno de ajudante/)
+  assert.match(md, /- 3 agentes \(1 Claude, 1 Codex abertos agora, 1 já fechados\)\n- 152 mil tokens \(US\$ 0,42 subtotal informado pelo Claude; outros custos podem estar ausentes\)\n- 1 de 2 cartões feitos\n- 1 retorno de ajudante/)
   assert.match(md, /- \*\*#3\*\* Revisor — Claude · sonnet · ajudante \(fechado\)/)
   assert.match(md, /- \*\*#2 Frete\*\* \(Funcionalidade\) — Codex, Codex trabalho, gpt-6, esforço medium · 52 mil tokens · entregou/)
   assert.match(md, /### Feito\n\n- \[x\] T1 Calcular por peso \(#2\)/)

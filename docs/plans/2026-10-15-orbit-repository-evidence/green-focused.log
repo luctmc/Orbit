@@ -1,0 +1,18 @@
+✔ the report shows a reported zero cost without claiming full coverage (13.67225ms)
+✔ the report marks unknown USD explicitly instead of implying free execution (0.191334ms)
+✔ the report labels a positive known amount as a subtotal (0.290917ms)
+✔ Codex output already includes reasoning (1024) (0.942625ms)
+✔ Codex output already includes reasoning (0) (0.099125ms)
+✔ Codex output already includes reasoning (absent) (0.064916ms)
+✔ normalized reasoning output is charged once across replay and a new cumulative report (0.195917ms)
+✔ repository snapshot resolves workspace packages locally and excludes personal/build data (72.91975ms)
+✔ oracle rejects modified tests and unexpected files before executing any check (1.726708ms)
+✔ second task protects the first patch and runs the copied sources (215.20925ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 334.875959

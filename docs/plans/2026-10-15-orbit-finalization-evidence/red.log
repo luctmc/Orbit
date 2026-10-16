@@ -1,0 +1,72 @@
+✖ final review and mission completion commit together and replay keeps the same receipt and event (200.786084ms)
+✖ combined completion refuses helper, result scope, non-accepted verdict and incomplete evidence without mutations (156.653416ms)
+✔ source changes, new work and stale caller cannot finalize an old inspection (251.61775ms)
+✖ disk failure rolls back final verdict, ready state and ready event in one transaction (187.088292ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 1
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 948.192084
+
+✖ failing tests:
+
+test at packages/sidecar/test/finalization.test.ts:17:1
+✖ final review and mission completion commit together and replay keeps the same receipt and event (200.786084ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(record.completion)
+  
+      at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/finalization.test.ts:22:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at packages/sidecar/test/finalization.test.ts:39:1
+✖ combined completion refuses helper, result scope, non-accepted verdict and incomplete evidence without mutations (156.653416ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /líder/. Input:
+  
+  'Error: Inspeção não pertence a esta execução/atribuição'
+  
+      at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/finalization.test.ts:44:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: Inspeção não pertence a esta execução/atribuição
+        at OrbitCore.verifyResult (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/src/core.ts:1904:219)
+        at file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/finalization.test.ts:44:53
+        at getActual (node:assert:611:5)
+        at strict.throws (node:assert:759:24)
+        at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/finalization.test.ts:44:12)
+        at async Test.run (node:internal/test_runner/test:1409:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:974:7),
+    expected: /líder/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at packages/sidecar/test/finalization.test.ts:71:1
+✖ disk failure rolls back final verdict, ready state and ready event in one transaction (187.088292ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(saved.completion)
+  
+      at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/finalization.test.ts:84:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

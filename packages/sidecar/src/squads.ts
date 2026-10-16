@@ -5,7 +5,7 @@ import { skillList } from './routing.ts'
 const OPUS = 'claude-opus-5-5'
 const SONNET = 'claude-sonnet-5-5'
 
-const role = (id: string, name: string, model: string, brief: string): SquadRole => ({ id, name, cli: 'claude', model, brief, skills: [], onlySkills: false })
+const role = (id: string, name: string, model: string, brief: string): SquadRole => ({ id, name, cli: 'claude', model, brief, skills: [], onlySkills: false, readOnly: id !== 'construtor' })
 const steps = (...lines: string[]) => lines.map((line, i) => `${i + 1}. ${line}`).join('\n')
 
 /** Squads shipped with Orbit. Read-only; the UI offers "duplicate" to customize them. */
@@ -109,6 +109,7 @@ export function normalizeSquad(input: SquadInput, existingIds: ReadonlySet<strin
       brief: text(r.brief, `as instruções de ${roleName}`, SQUAD_LIMITS.brief),
       skills: skillList(r.skills, `Squad (${roleName})`),
       onlySkills: r.onlySkills === true,
+      readOnly: r.readOnly === true,
     }
   })
 

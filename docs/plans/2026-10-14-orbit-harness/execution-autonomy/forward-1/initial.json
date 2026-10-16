@@ -1,0 +1,269 @@
+{
+  "missionId": "c5c5333a-1405-43a8-8df3-8f96427543d9",
+  "leadId": 1,
+  "readyAt": null,
+  "missionUsage": {
+    "input": 205326,
+    "output": 910,
+    "cacheRead": 176384,
+    "cacheWrite": 0,
+    "total": 206236,
+    "costUsd": null
+  },
+  "history": {
+    "activities": [
+      {
+        "id": "653c1dce-aa08-4c86-96c0-ad548f15fde8",
+        "missionId": "c5c5333a-1405-43a8-8df3-8f96427543d9",
+        "key": "e41dc8de685ec13f3b1a3a2cac220b615668affb8f330eb8aa314d9fe975a78e",
+        "title": "Fix mean(values)",
+        "revision": 1,
+        "contractHash": "5de91e13d6ec38bd80ad98e6ee0c28bcd15607d3ff55cc5f8443669b0336e253",
+        "acceptance": [
+          "Preserve protected fixtures and modify only declared paths",
+          "Empty and mixed numeric arrays"
+        ],
+        "verificationRequired": true,
+        "dependencies": [],
+        "state": "stopped",
+        "activeAttemptId": "19694ea3-dff4-4c0d-97cf-01d4f7adb519",
+        "deliveryId": "b3a80245-df52-433c-b86a-833f767dc2d9",
+        "createdAt": 1792072878549,
+        "updatedAt": 1792072878549
+      }
+    ],
+    "attempts": [
+      {
+        "id": "19694ea3-dff4-4c0d-97cf-01d4f7adb519",
+        "activityId": "653c1dce-aa08-4c86-96c0-ad548f15fde8",
+        "activityRevision": 1,
+        "contractHash": "5de91e13d6ec38bd80ad98e6ee0c28bcd15607d3ff55cc5f8443669b0336e253",
+        "acceptance": [
+          "Preserve protected fixtures and modify only declared paths",
+          "Empty and mixed numeric arrays"
+        ],
+        "paneId": 2,
+        "state": "stopped",
+        "cli": "claude",
+        "model": "claude-haiku-5-5",
+        "accountId": "claude",
+        "sessionId": null,
+        "retryReason": null,
+        "error": null,
+        "pane": {
+          "id": 2,
+          "executionEpoch": "17306003-3193-49cb-b239-5eb1de3e4a48",
+          "missionId": "c5c5333a-1405-43a8-8df3-8f96427543d9",
+          "role": "crew",
+          "squadRole": null,
+          "taskType": "Bug",
+          "cli": "claude",
+          "model": "claude-haiku-5-5",
+          "effort": "low",
+          "accountId": "claude",
+          "sessionId": null,
+          "branch": null,
+          "title": "Fix mean(values)",
+          "cwd": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-KND88T/workspace",
+          "status": "exited",
+          "attention": null,
+          "choices": null,
+          "deliveredAt": null,
+          "handoffStatus": null,
+          "assignedBy": 1,
+          "usage": null,
+          "contextPercent": null,
+          "pid": null,
+          "exitCode": 129,
+          "createdAt": 1792072878612,
+          "activityAttemptId": "19694ea3-dff4-4c0d-97cf-01d4f7adb519"
+        },
+        "createdAt": 1792072878549,
+        "updatedAt": 1792072936249,
+        "decision": {
+          "source": "explicit",
+          "requested": {
+            "cli": "claude",
+            "model": "claude-haiku-5-5",
+            "effort": "low"
+          },
+          "effective": {
+            "cli": "claude",
+            "model": "claude-haiku-5-5",
+            "effort": "low",
+            "accountId": "claude"
+          },
+          "reasons": [
+            "tipo: Bug (escolhido pelo líder)",
+            "critérios de aceite: 2",
+            "complexidade: simples (líder)",
+            "conta: conta deste Mac (sem leitura de limite, 0 agentes nela)"
+          ],
+          "catalogRevision": "fa13110789206d79c374c9f7996bbaaf30f12db5c946a53d13db1bec2c87db54",
+          "capabilityLimits": [
+            "Capacidades vêm do contrato do adapter, não de certificação de toda versão do provedor"
+          ],
+          "version": 1,
+          "policyRevision": "e8a47dc4fc6a393d1d8f33fa4fd06b75f0a742a8d1d1c8fea04d3e9c35bca3d7",
+          "at": 1792072878602
+        },
+        "executionEpoch": "17306003-3193-49cb-b239-5eb1de3e4a48"
+      }
+    ],
+    "results": []
+  },
+  "verifications": [],
+  "notifications": [],
+  "panes": [
+    {
+      "id": 1,
+      "executionEpoch": "42095a95-ff86-475b-9b58-450dec7de651",
+      "missionId": "c5c5333a-1405-43a8-8df3-8f96427543d9",
+      "role": "lead",
+      "squadRole": null,
+      "taskType": null,
+      "cli": "codex",
+      "model": "gpt-6-luna",
+      "effort": "low",
+      "accountId": "codex",
+      "sessionId": "01a13fdd-b67a-75e0-9332-e2ff72f271a3",
+      "branch": null,
+      "title": "Native autonomous leader",
+      "cwd": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-KND88T/workspace",
+      "status": "exited",
+      "attention": null,
+      "choices": null,
+      "deliveredAt": null,
+      "handoffStatus": null,
+      "assignedBy": null,
+      "usage": {
+        "input": 205326,
+        "output": 910,
+        "cacheRead": 176384,
+        "cacheWrite": 0,
+        "total": 206236,
+        "costUsd": null
+      },
+      "contextPercent": 13,
+      "pid": null,
+      "exitCode": 0,
+      "createdAt": 1792072855526
+    },
+    {
+      "id": 2,
+      "executionEpoch": "17306003-3193-49cb-b239-5eb1de3e4a48",
+      "missionId": "c5c5333a-1405-43a8-8df3-8f96427543d9",
+      "role": "crew",
+      "squadRole": null,
+      "taskType": "Bug",
+      "cli": "claude",
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "accountId": "claude",
+      "sessionId": null,
+      "branch": null,
+      "title": "Fix mean(values)",
+      "cwd": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-KND88T/workspace",
+      "status": "exited",
+      "attention": null,
+      "choices": null,
+      "deliveredAt": null,
+      "handoffStatus": null,
+      "assignedBy": 1,
+      "usage": null,
+      "contextPercent": null,
+      "pid": null,
+      "exitCode": 129,
+      "createdAt": 1792072878612,
+      "activityAttemptId": "19694ea3-dff4-4c0d-97cf-01d4f7adb519"
+    }
+  ],
+  "executions": [
+    {
+      "usageSources": [
+        "codex-session-total-v1"
+      ],
+      "epoch": "42095a95-ff86-475b-9b58-450dec7de651",
+      "paneId": 1,
+      "missionId": "c5c5333a-1405-43a8-8df3-8f96427543d9",
+      "cli": "codex",
+      "model": "gpt-6-luna",
+      "role": "lead",
+      "spawnMs": 17.394000000000005,
+      "firstPtyOutputMs": 185.79924999999997,
+      "initialBytes": 11764,
+      "sourceBytes": 11764,
+      "contextReadBytes": 0,
+      "skillReadBytes": 2082,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 16,
+      "usage": {
+        "input": 205326,
+        "output": 910,
+        "cacheRead": 176384,
+        "cacheWrite": 0,
+        "total": 206236,
+        "costUsd": null
+      }
+    },
+    {
+      "usageSources": [],
+      "epoch": "17306003-3193-49cb-b239-5eb1de3e4a48",
+      "paneId": 2,
+      "missionId": "c5c5333a-1405-43a8-8df3-8f96427543d9",
+      "cli": "claude",
+      "model": "claude-haiku-5-5",
+      "role": "crew",
+      "spawnMs": 10.818833000001177,
+      "firstPtyOutputMs": 1364.0143329999992,
+      "initialBytes": 4736,
+      "sourceBytes": 4736,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    }
+  ],
+  "auxiliaryCalls": [],
+  "durationMs": 80943,
+  "checks": [
+    {
+      "command": "verify immutable fixture and declared write scope",
+      "exitCode": 0,
+      "summary": "Protected fixture unchanged; writes stay in declared paths"
+    },
+    {
+      "command": "node .benchmark/check-0.mjs",
+      "exitCode": 1,
+      "summary": "Empty and mixed numeric arrays: node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\nNaN !== 0\n\n    at file:///private/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-KND88T/workspace/.benchmark/check-0.mjs:9:49 {\n  generatedMessage: true,\n  code: 'ERR_ASSERTION',\n  actual: NaN,\n  expected: 0,\n  operator: 'strictEqual',\n  diff: 'simple'\n}\n\nNode.js v24.21.0\n"
+    }
+  ],
+  "integration": null,
+  "evaluation": {
+    "passed": false,
+    "issues": [
+      "No ready mission with a current final integration review",
+      "Independent protected oracle did not pass",
+      "Expected exactly implementation and review, without duplicated attempts",
+      "No worker result independently accepted by a helper on the opposite CLI",
+      "Reviewer did not deliver an independently accepted result",
+      "Expected two final deliveries, without repeated implementation"
+    ],
+    "workerResultId": null,
+    "reviewerResultId": null
+  },
+  "error": "Stopped or six-minute phase timeout; no automatic retry",
+  "passed": false
+}

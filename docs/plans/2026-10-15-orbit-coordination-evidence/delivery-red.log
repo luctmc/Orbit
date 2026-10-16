@@ -1,0 +1,26 @@
+✖ an explicit ACK context supplies the delivery contract without accepting code or repeating lookups (267.795958ms)
+✖ ACK context is bounded, identifies superseded results and preserves recipient/epoch authorization (224.868458ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 662.528291
+
+✖ failing tests:
+
+test at packages/sidecar/test/deliveryContext.test.ts:14:1
+✖ an explicit ACK context supplies the delivery contract without accepting code or repeating lookups (267.795958ms)
+  TypeError: Cannot read properties of undefined (reading 'result')
+      at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/deliveryContext.test.ts:26:30)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at packages/sidecar/test/deliveryContext.test.ts:42:1
+✖ ACK context is bounded, identifies superseded results and preserves recipient/epoch authorization (224.868458ms)
+  TypeError: Cannot read properties of undefined (reading 'result')
+      at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/deliveryContext.test.ts:51:30)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)

@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Pane, PaneHandoff } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, costText, EFFORT_LABEL, pathText, STATUS, tokensText } from '../orbit/labels.ts'
-import { CloseIcon, MoreIcon } from './icons.tsx'
-import { Terminal } from './Terminal.tsx'
+import { CloseIcon, MoreIcon, OrbitMark } from './icons.tsx'
+import { Conversation } from './Conversation.tsx'
+import { Terminal } from './LazyTerminal.tsx'
 import { DeleteAgentDialog } from './deletions.tsx'
+import type { InputSuggestion } from '../orbit/inputSuggestions.ts'
+import { terminalPredictionReady } from '../orbit/terminalPrediction.ts'
 
 /** What a helper's last handoff said. */
 const HANDOFF_CHIP: Record<PaneHandoff, { label: string; tone: string; title: string }> = {
@@ -33,7 +36,14 @@ function PaneMenu({ pane, onRename, onDelete, onClose }: { pane: Pane; onRename:
   const alive = pane.status !== 'exited'
   const canResume = pane.cli !== 'shell' && pane.sessionId !== null
   return (
-    <div ref={box} className="menu" role="menu" aria-label={`Ações de #${pane.id}`}>
+    <div ref={box} className="menu" role="menu" aria-label={`Ações de #${pane.id}`} onKeyDown={event => {
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+      event.preventDefault()
+      const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]
+      const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (at + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length
+      buttons[next]?.focus()
+    }}>
       <button type="button" role="menuitem" onClick={act(onRename)}>Renomear</button>
       {canResume && <button type="button" role="menuitem" onClick={act(() => client.send({ type: 'pane.restart', paneId: pane.id, resume: true }))}>{alive ? 'Reiniciar na mesma conversa' : 'Retomar conversa'}</button>}
       {pane.cli !== 'shell' && <button type="button" role="menuitem" onClick={act(() => client.send({ type: 'pane.restart', paneId: pane.id, resume: false }))}>{alive ? 'Reiniciar em conversa nova' : 'Reabrir em conversa nova'}</button>}
@@ -65,36 +75,40 @@ function PaneTitle({ pane, editing, onEditing, onSelect }: { pane: Pane; editing
   )
 }
 
-export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: boolean; onSelect: () => void }) {
+export function PaneView({ pane, selected, onSelect, suggestions = [], suggestionsOn = false }: { pane: Pane; selected: boolean; onSelect: () => void; suggestions?: InputSuggestion[]; suggestionsOn?: boolean }) {
   const client = useOrbitClient()
   const account = useOrbit().accounts.find((a) => a.id === pane.accountId)
   const status = STATUS[pane.status]
   const alive = pane.status !== 'exited'
+  const [chat, setChat] = useState(pane.role === 'lead' && pane.cli !== 'shell')
   const [menu, setMenu] = useState(false)
+  const menuButton = useRef<HTMLButtonElement>(null)
+  const closeMenu = useCallback(() => { setMenu(false); menuButton.current?.focus() }, [])
   const [renaming, setRenaming] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   return (
-    <section className={`pane${selected ? ' pane--selected' : ''}${pane.status === 'waiting' ? ' pane--waiting' : ''}`} aria-label={`Agente ${pane.id}: ${pane.title}`}>
+    <section className={`pane${selected ? ' pane--selected' : ''}${pane.status === 'waiting' ? ' pane--waiting' : ''}`} aria-label={`Agente ${pane.id}: ${pane.title}. ${CLI_LABEL[pane.cli]}${pane.model ? `, ${pane.model}` : ''}${pane.effort ? `, esforço ${EFFORT_LABEL[pane.effort]}` : ''}`}>
       <header className="pane__head">
-        <span className={`dot dot--${status.tone}`} title={status.label} />
+        {chat ? <span className="conversation__avatar"><OrbitMark size={22} /></span> : <span className={`dot dot--${status.tone}`} title={status.label} />}
         <span className={`role role--${pane.role}`}>{pane.role === 'lead' ? 'Líder' : pane.squadRole ?? pane.taskType ?? 'Ajudante'}</span>
         <span className="pane__id">#{pane.id}</span>
         <PaneTitle pane={pane} editing={renaming} onEditing={setRenaming} onSelect={onSelect} />
         {pane.handoffStatus && <span className={`chip ${HANDOFF_CHIP[pane.handoffStatus].tone}`} title={HANDOFF_CHIP[pane.handoffStatus].title}>{HANDOFF_CHIP[pane.handoffStatus].label}</span>}
         <span className="chip">{[CLI_LABEL[pane.cli], account && !account.builtin && account.name, pane.model, pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}</span>
+        {pane.cli !== 'shell' && <button type="button" className="btn btn--ghost btn--sm pane__view-toggle" onClick={() => setChat((open) => !open)}>{chat ? 'Terminal' : 'Conversa'}</button>}
         <div className="menu-anchor">
-          <button type="button" className="icon-btn" aria-label={`Ações de #${pane.id}`} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>
+          <button ref={menuButton} type="button" className="icon-btn" aria-label={`Ações de #${pane.id}`} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>
             <MoreIcon size={15} />
           </button>
-          {menu && <PaneMenu pane={pane} onRename={() => setRenaming(true)} onDelete={() => setDeleting(true)} onClose={() => setMenu(false)} />}
+          {menu && <PaneMenu pane={pane} onRename={() => setRenaming(true)} onDelete={() => setDeleting(true)} onClose={closeMenu} />}
         </div>
         <button type="button" className="icon-btn" aria-label={alive ? `Encerrar agente ${pane.id}` : `Fechar agente ${pane.id}`} onClick={() => client.send({ type: 'pane.close', paneId: pane.id })}>
           <CloseIcon size={14} />
         </button>
       </header>
       <div className="pane__body">
-        <Terminal paneId={pane.id} interactive={alive} onFocus={onSelect} />
+        {chat ? <Conversation key={pane.id} pane={pane} onTerminal={() => setChat(false)} /> : <Terminal paneId={pane.id} interactive={alive} onFocus={onSelect} suggestions={suggestions} predictionEnabled={suggestionsOn} predictionReady={terminalPredictionReady(pane.status)} executionEpoch={pane.executionEpoch} />}
       </div>
       {!alive && pane.cli !== 'shell' && (
         <div className="ended" role="status">
@@ -112,13 +126,13 @@ export function PaneView({ pane, selected, onSelect }: { pane: Pane; selected: b
           <button type="button" className="btn btn--sm btn--attention" onClick={onSelect}>{pane.choices ? 'Outra resposta' : 'Responder no terminal'}</button>
         </div>
       )}
-      <footer className="pane__foot">
+      {(!chat || pane.usage || pane.contextPercent !== null) && <footer className="pane__foot">
         <span className={`tone--${status.tone}`}>{status.label}</span>
         <span aria-hidden="true">·</span>
         <span className="pane__cwd" title={pane.cwd}>{pathText(pane.cwd)}</span>
         {pane.exitCode !== null && <><span aria-hidden="true">·</span><span>código {pane.exitCode}</span></>}
         <PaneUsage pane={pane} />
-      </footer>
+      </footer>}
       {deleting && <DeleteAgentDialog pane={pane} onClose={() => setDeleting(false)} />}
     </section>
   )

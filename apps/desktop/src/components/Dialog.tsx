@@ -1,8 +1,8 @@
-import { useEffect, useRef, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type FormEvent, type ReactNode } from 'react'
 import { CloseIcon } from './icons.tsx'
 
 /** Native modal <dialog>: focus trap, Esc and backdrop come from the platform. */
-export function Dialog({ title, eyebrow, onClose, onSubmit, submitLabel, children, danger = false, submitDisabled = false }: {
+export function Dialog({ title, eyebrow, onClose, onSubmit, submitLabel, children, danger = false, submitDisabled = false, busy = false }: {
   title: string
   eyebrow?: string
   onClose: () => void
@@ -12,8 +12,10 @@ export function Dialog({ title, eyebrow, onClose, onSubmit, submitLabel, childre
   /** The action cannot be undone: the button says so in color. */
   danger?: boolean
   submitDisabled?: boolean
+  busy?: boolean
 }) {
   const ref = useRef<HTMLDialogElement>(null)
+  const titleId = useId()
 
   useEffect(() => {
     const dialog = ref.current
@@ -27,18 +29,18 @@ export function Dialog({ title, eyebrow, onClose, onSubmit, submitLabel, childre
   }
 
   return (
-    <dialog ref={ref} className="dialog" aria-labelledby="dialog-title" onCancel={(e) => { e.preventDefault(); onClose() }}>
+    <dialog ref={ref} className="dialog" aria-labelledby={titleId} aria-busy={busy} onCancel={(e) => { e.preventDefault(); if (!busy) onClose() }}>
       <form onSubmit={submit}>
         <header className="dialog__head">
           <div>
             {eyebrow && <div className="eyebrow">{eyebrow}</div>}
-            <h2 id="dialog-title">{title}</h2>
+            <h2 id={titleId}>{title}</h2>
           </div>
-          <button type="button" className="icon-btn" aria-label="Fechar" onClick={onClose}><CloseIcon /></button>
+          <button type="button" className="icon-btn" disabled={busy} aria-label="Fechar" onClick={onClose}><CloseIcon /></button>
         </header>
         <div className="dialog__body">{children}</div>
         <footer className="dialog__foot">
-          <button type="button" className="btn btn--ghost" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn btn--ghost" disabled={busy} onClick={onClose}>Cancelar</button>
           <button type="submit" className={danger ? 'btn btn--danger-solid' : 'btn btn--primary'} disabled={submitDisabled}>{submitLabel}</button>
         </footer>
       </form>

@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod'
 import { AGENT_CLIS, BROWSER_KEYS, type AgentCliForRole, type Difficulty, BROWSER_VIEWPORT, CARD_COLUMNS, CARD_LIMITS, EFFORTS, MODEL_ID, type CardColumn, type Effort, type HandoffStatus, type Pane } from '@orbit/protocol'
 import type { OrbitCore } from './core.ts'
+import type { VerificationInput } from '@orbit/protocol'
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
 type ToolResult = { content: Content[]; isError?: boolean }
@@ -16,7 +17,7 @@ const text = (value: unknown): ToolResult => ({
 })
 
 /** Runs a tool body, turning domain errors into MCP tool errors the agent can read. */
-const guarded = <A>(body: (args: A) => unknown) => async (args: A): Promise<ToolResult> => {
+const guardTool = <A>(body: (args: A) => unknown) => async (args: A): Promise<ToolResult> => {
   try {
     const value = await body(args)
     return isResult(value) ? value : text(value)
@@ -25,6 +26,11 @@ const guarded = <A>(body: (args: A) => unknown) => async (args: A): Promise<Tool
   }
 }
 
+const scopedGuard = (core: OrbitCore, caller: Pane) => <A>(body: (args: A) => unknown) => guardTool((args: A) => {
+  core.assertCurrent(caller)
+  return body(args)
+})
+
 const agentView = (p: Pane) => ({
   id: p.id,
   role: p.role === 'lead' ? 'líder' : 'ajudante',
@@ -32,16 +38,24 @@ const agentView = (p: Pane) => ({
   taskType: p.taskType,
   title: p.title,
   agent: p.cli,
+  toolProfile: p.toolProfile ?? 'inherit',
   model: p.model,
   status: p.status,
   attention: p.attention,
   delivered: p.deliveredAt !== null,
   handoff: p.handoffStatus,
+  executionEpoch: p.executionEpoch ?? null,
+  attemptId: p.activityAttemptId ?? null,
 })
 
 const ACCEPT = z.array(z.string().min(1).max(300)).max(8).optional().describe('Acceptance criteria: what must hold for the delivery to count. The helper can only deliver done by answering each one')
+const ADMISSION_FIELDS = {
+  dependsOn: z.array(z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/)).max(16).optional().describe('Existing activity ids with accepted results required before launch. For a review of an unaccepted result, put its resultId in task instead: depending on its own acceptance creates a cycle. Refused requests are not queued. New prerequisite results/revisions invalidate downstream acceptance.'),
+  requireReadOnlySandbox: z.boolean().optional().describe('Require a native read-only sandbox. Incompatible explicit choices fail; automatic routing may select a compatible CLI.'),
+  readOnly: z.boolean().optional().describe('Constrain this assignment to read-only. Cannot remove restrictions imposed by its kind or role.'),
+}
 
-type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: AgentCliForRole; model?: string; effort?: Effort; accept?: string[]; folder?: string; difficulty?: Difficulty }
+type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: AgentCliForRole; model?: string; effort?: Effort; accept?: string[]; folder?: string; difficulty?: Difficulty; retryReason?: string; activityId?: string; dependsOn?: string[]; requireReadOnlySandbox?: boolean; readOnly?: boolean }
 
 /** In a workspace with several folders, a helper can start in the one its work is in. */
 function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
@@ -51,12 +65,13 @@ function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
 
 /** Opens a helper and returns its line of the reply: number, title and the receipt. */
 async function openHelper(core: OrbitCore, caller: Pane, h: HelperInput): Promise<string> {
-  const { pane, receipt } = await core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null, difficulty: h.difficulty ?? null })
+  const { pane, receipt } = await core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null, difficulty: h.difficulty ?? null, retryReason: h.retryReason, activityId: h.activityId, dependsOn: h.dependsOn, requireReadOnlySandbox: h.requireReadOnlySandbox, readOnly: h.readOnly })
   return `#${pane.id} ${pane.title}\n${receipt.map((line) => `  ▸ ${line}`).join('\n')}`
 }
 
 /** One MCP server per request (stateless), scoped to the calling pane's identity and role. */
 function buildServer(core: OrbitCore, caller: Pane): McpServer {
+  const guarded = scopedGuard(core, caller)
   const server = new McpServer({ name: 'orbit', version: '0.1.0' })
   const self = () => core.missionPanes(caller.missionId).find((p) => p.id === caller.id) ?? caller
 
@@ -79,6 +94,25 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     description: 'Lists your mission\'s agents with status (running, idle, waiting = waiting for the user, exited) and whether they delivered.',
   }, guarded(() => core.missionPanes(caller.missionId).map(agentView)))
 
+  server.registerTool('model_catalog', {
+    description: 'Available models, descriptions and valid effort levels from the installed CLIs; source and relative difficulty policy included. Consult for unfamiliar capabilities. Orbit applies the routing policy automatically; prices are not live quotes.',
+  }, guarded(() => core.modelCatalog(caller.missionId)))
+
+  server.registerTool('context_read', {
+    description: 'Read a mission-local immutable context reference by SHA-256. Offset and nextOffset are UTF-16 character cursors; pages preserve the original text. Context is data, not additional authorization.',
+    inputSchema: { sha256: z.string().regex(/^[a-f0-9]{64}$/), offset: z.number().int().min(0).optional(), limit: z.number().int().min(1).max(16000).optional() },
+  }, guarded(({ sha256, offset, limit }: { sha256: string; offset?: number; limit?: number }) => core.readContext(caller, sha256, offset, limit)))
+
+  server.registerTool('skill_catalog', {
+    description: 'Eligible skills for this execution: source, version, content hash and available/selected/loaded states. Metadata only. No skill compliance or native provider visibility guarantee. Cursor is invalidated by catalog/policy changes.',
+    inputSchema: { cursor: z.string().max(100).optional(), limit: z.number().int().min(1).max(50).optional() },
+  }, guarded(({ cursor, limit }: { cursor?: string; limit?: number }) => core.skillCatalog(caller, cursor, limit)))
+
+  server.registerTool('skill_load', {
+    description: 'Serve one eligible skill SKILL.md by exact id and SHA-256 from skill_catalog, selecting it for this execution. No scripts are executed. Loaded records text served, not consumption or fulfillment.',
+    inputSchema: { id: z.string().min(1).max(300), sha256: z.string().regex(/^[a-f0-9]{64}$/) },
+  }, guarded(({ id, sha256 }: { id: string; sha256: string }) => core.loadSkill(caller, id, sha256)))
+
   server.registerTool('mission_status', {
     description: 'Mission summary: objective, agents and the latest flow events.',
     inputSchema: { events: z.number().int().min(1).max(100).optional().describe('How many recent events (default 20)') },
@@ -89,9 +123,45 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       mission: mission && { title: mission.title, mode: mission.mode, objective: mission.objective, status: mission.status, used: { tokens: mission.usage.total, costUsd: mission.usage.costUsd }, budget: mission.budget && { tokens: mission.budget.tokens, costUsd: mission.budget.costUsd, warned: mission.budget.warned, exceeded: mission.budget.exceeded } },
       squad: squad && { name: squad.name, playbook: squad.playbook, roles: squad.roles.map((r) => ({ id: r.id, name: r.name, agent: r.cli, model: r.model })) },
       agents: core.missionPanes(caller.missionId).map(agentView),
+      pendingDeliveries: core.pendingDeliveries(caller.missionId),
       events: core.missionEvents(caller.missionId).slice(-(events ?? 20)).map((e) => ({ at: new Date(e.at).toISOString(), title: e.title, body: e.body })),
     }
   }))
+
+  server.registerTool('activity_status', {
+    description: 'Durable activities and attempts, including stopped reservations with no terminal. done submissions await validation. Use handoff_list for result content.',
+    inputSchema: { activityId: z.string().max(100).optional() },
+  }, guarded(({ activityId }: { activityId?: string }) => {
+    const history = core.store.activityHistory(caller.missionId)
+    const activities = activityId ? history.activities.filter(a => a.id === activityId) : history.activities.slice(-30)
+    if (activityId && !activities.length) throw new Error('Atividade não encontrada nesta missão')
+    const ids = new Set(activities.map(a => a.id))
+    return { total: history.activities.length, activities, attempts: history.attempts.filter(a => ids.has(a.activityId)).map(({ pane: _, ...a }) => a), results: history.results.filter(r => ids.has(r.activityId)).map(r => ({ id: r.id, activityId: r.activityId, attemptId: r.attemptId, status: r.status, state: r.state })) }
+  }))
+
+  server.registerTool('delivery_status', {
+    description: 'Result notification receipts in this mission: persisted, pty_accepted (Enter written) or agent_acknowledged (explicit receipt). None means code validation.',
+    inputSchema: { limit: z.number().int().min(1).max(100).optional() },
+  }, guarded(({ limit }: { limit?: number }) => core.store.notifications(caller.missionId).slice(-(limit ?? 20)).map(({ text: _, ...notice }) => notice)))
+
+  server.registerTool('result_inspect', {
+    description: 'Inspect a current done result and bind a review to your execution/assignment. Result scope requires unchanged producer source. Integration scope reviews the final mission tree/contracts after individual acceptance, even when later work advanced that tree. Inspect the returned roots/criteria and run checks through your CLI permissions before reporting a verdict.',
+    inputSchema: { resultId: z.string().min(1).max(100), scope: z.enum(['result', 'integration']).optional().describe('Default result: current producer source and activity criteria. integration: final mission source/contracts after all results are accepted; historical result acceptance is kept separate.') },
+  }, guarded(({ resultId, scope }: { resultId: string; scope?: 'result' | 'integration' }) => core.inspectResult(caller, resultId, scope)))
+
+  server.registerTool('verification_submit', {
+    description: 'Record an independent review for your inspection. Orbit rechecks source, identity, checks and every criterion; you cannot accept your own result. A new inspection is needed to change a verdict. Lead only: readySummary on an accepted integration review commits final acceptance and mission completion together, without force. A completion receipt means no separate mission_ready call is needed. Checks are reviewer reports, not commands executed by this tool.',
+    inputSchema: { inspectionId: z.string().min(1).max(100), verdict: z.enum(['accepted', 'changes_required', 'unverified']), summary: z.string().min(1).max(2000), checks: z.array(z.object({ command: z.string().min(1).max(2000), exitCode: z.number().int(), summary: z.string().min(1).max(2000) })).max(20), criteria: z.array(z.object({ item: z.number().int().min(1).max(8), met: z.boolean(), how: z.string().min(1).max(500) })).max(8), readySummary: z.string().min(1).max(4000).optional().describe('Lead only, accepted integration scope: final user-facing summary in Portuguese; atomically declares ready after all normal gates. Omit for ordinary reviews.') },
+  }, guarded(({ readySummary, ...input }: VerificationInput & { readySummary?: string }) => core.verifyResult(caller, input, readySummary)))
+
+  server.registerTool('verification_status', {
+    description: 'Historical acceptance validity of current R4 results/dependency bindings and durable review records. Individual acceptance does not certify the current integrated tree: a separate integration review is required by mission_ready. Legacy work is not retroactively certified.',
+  }, guarded(() => ({ current: core.verificationStatus(caller.missionId), records: core.store.verifications(caller.missionId) })))
+
+  server.registerTool('delivery_ack', {
+    description: 'Confirm that you read a result notification addressed to this execution. includeResult returns bounded result evidence, original criteria and current activity identity, avoiding repeated handoff/status reads. Truncated fields have a detail lookup. Receipt does not accept code or check source freshness.',
+    inputSchema: { deliveryId: z.string().min(1).max(100), includeResult: z.boolean().optional().describe('Return the recorded result and contract with this ACK; default false for compatibility.') },
+  }, guarded(({ deliveryId, includeResult }: { deliveryId: string; includeResult?: boolean }) => core.acknowledgeDelivery(caller, deliveryId, includeResult)))
 
   if (caller.role === 'lead') {
     const squad = core.missionSquad(caller.missionId)
@@ -113,7 +183,10 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       model: z.string().regex(MODEL_ID).optional().describe('Only if the user asked for a specific model'),
       effort: z.enum(EFFORTS as [Effort, ...Effort[]]).optional().describe('Only if the user asked. Claude: low…max; Codex: depends on the model (low to ultra)'),
       accept: ACCEPT,
-      difficulty: z.enum(['simples', 'normal', 'dificil']).optional().describe('simples (small and obvious) goes to the CLI\'s cheaper model; dificil (long reasoning, many files, unknown cause) to the stronger one or more effort; default: normal, as in the table'),
+      difficulty: z.enum(['simples', 'normal', 'dificil']).optional().describe('simples (small and obvious) goes to the CLI\'s cheaper model; dificil (long reasoning, many files, unknown cause) to the stronger one or more effort; default: inferred locally from scope and risk'),
+      activityId: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/).optional().describe('Stable activity id, e.g. T12 from the board. Reuse it across paraphrases and retries to prevent duplicate work.'),
+      retryReason: z.string().min(1).max(600).optional().describe('Only to rerun existing work: explain changed inputs or failed evidence. Identical delegations reuse the existing agent/result.'),
+      ...ADMISSION_FIELDS,
       ...folderField(core, caller),
     }
     const open = (h: HelperInput) => openHelper(core, caller, h)
@@ -125,17 +198,16 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
 
     server.registerTool('agent_spawn_many', {
       description: 'Opens several helpers at once (up to 8), for independent activities that can run in parallel. Works like agent_spawn for each one.',
-      inputSchema: { helpers: z.array(z.object(helperFields)).min(1).max(8) },
+      // Identical fields/validators to agent_spawn; do not repeat its long descriptions in every
+      // batched schema. Native tool schemas are transmitted again on subsequent model turns.
+      inputSchema: { helpers: z.array(z.object(Object.fromEntries(Object.entries(helperFields).map(([key, field]) => [key, field.describe('')])) as typeof helperFields)).min(1).max(8) },
     }, guarded(async ({ helpers }: { helpers: HelperInput[] }) => {
-      // One after the other, so each sees the agents the previous ones put on the accounts.
-      const lines: string[] = []
-      for (const [i, h] of helpers.entries()) {
-        try {
-          lines.push(await open(h))
-        } catch (error) {
-          lines.push(`${i + 1}. não abriu (${h.title ?? h.task.slice(0, 40)}): ${error instanceof Error ? error.message : String(error)}`)
-        }
-      }
+      // Classifications run concurrently. Launch/account selection is synchronous in core,
+      // so each launch still sees all earlier account reservations; results retain input order.
+      const lines = await Promise.all(helpers.map(async (h, i) => {
+        try { return await open(h) }
+        catch (error) { return `${i + 1}. não abriu (${h.title ?? h.task.slice(0, 40)}): ${error instanceof Error ? error.message : String(error)}` }
+      }))
       return `Abertos:\n${lines.join('\n')}\n\nAgora encerre o turno: os retornos chegam sozinhos.`
     }))
 
@@ -162,19 +234,20 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     server.registerTool('agent_resume', {
       description: 'Resumes a helper that stopped (process ended, stuck, Orbit reopened) in the same conversation, with the message to carry on. It keeps its number and branch.',
       inputSchema: { agent: z.number().int().describe('The helper\'s number'), message: z.string().max(8000).optional().describe('What to do now (default: carry on with the task and deliver)') },
-    }, guarded(({ agent, message }: { agent: number; message?: string }) => {
-      core.resumeHelper(caller, agent, message ?? null)
+    }, guarded(async ({ agent, message }: { agent: number; message?: string }) => {
+      await core.resumeHelper(caller, agent, message ?? null)
       return `#${agent} retomado na mesma conversa. O retorno chega sozinho.`
     }))
 
     server.registerTool('mission_ready', {
-      description: 'Declares the mission ready, with the objective met and verified. Orbit marks the mission and tells the user. Refused while a helper still owes a result, unless force is true. Write the summary in Brazilian Portuguese: the user reads it.',
+      description: 'Declares the mission ready with the objective met and independently verified. Required work remains pending after process exit or terminal closure; blocked and automatic reports need resolution. Agents cannot waive required work or reviews. Write the summary in Brazilian Portuguese.',
       inputSchema: {
         summary: z.string().min(1).max(4000).describe('What was done, by whom, how it was verified and what is left (in Brazilian Portuguese)'),
-        force: z.boolean().optional().describe('Declare it even with helpers owing results'),
+        force: z.boolean().optional().describe('Legacy compatibility only. true is rejected; agents cannot waive required work.'),
+        reason: z.string().min(1).max(1000).optional().describe('Legacy field; does not authorize a waiver.'),
       },
-    }, guarded(({ summary, force }: { summary: string; force?: boolean }) => {
-      core.missionReady(caller, summary, force === true)
+    }, guarded(({ summary, force, reason }: { summary: string; force?: boolean; reason?: string }) => {
+      core.missionReady(caller, summary, force === true, reason)
       return 'Missão marcada como pronta; o usuário foi avisado. Diga a ele, em poucas linhas, o resultado.'
     }))
 
@@ -230,8 +303,17 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     }))
 
     server.registerTool('handoff_list', {
-      description: 'Full text of the results helpers delivered in this mission.',
-    }, guarded(() => core.missionEvents(caller.missionId, 'handoff').map((e) => ({ from: e.paneId, at: new Date(e.at).toISOString(), text: e.body }))))
+      description: 'Durable results from this mission. Default: latest 20 full results (legacy compatible). Use view=summary for compact discovery, resultId and view=detail for evidence, or after for subsequent results.',
+      inputSchema: { resultId: z.string().max(100).optional(), after: z.string().max(100).optional(), limit: z.number().int().min(1).max(100).optional(), view: z.enum(['summary', 'detail']).optional() },
+    }, guarded(({ resultId, after, limit, view }: { resultId?: string; after?: string; limit?: number; view?: 'summary' | 'detail' }) => {
+      if (resultId && after) throw new Error('Use resultId ou after, não ambos')
+      const history = core.store.activityHistory(caller.missionId)
+      if (resultId && !history.results.some(r => r.id === resultId)) throw new Error('Resultado não encontrado nesta missão')
+      const index = after ? history.results.findIndex(r => r.id === after) : -1
+      if (after && index === -1) throw new Error('Cursor de resultado não encontrado nesta missão')
+      const results = resultId ? history.results.filter(r => r.id === resultId) : after ? history.results.slice(index + 1, index + 1 + (limit ?? 20)) : history.results.slice(-(limit ?? 20))
+      return results.map(r => ({ resultId: r.id, activityId: r.activityId, attemptId: r.attemptId, state: r.state, status: r.status, from: history.attempts.find(a => a.id === r.attemptId)?.paneId ?? null, at: new Date(r.createdAt).toISOString(), ...(view === 'summary' ? { summary: r.summary, evidenceAvailable: !!r.evidence, detailsAvailable: !!r.details } : { text: [r.summary, r.evidence && `Evidência: ${r.evidence}`, r.details].filter(Boolean).join('\n\n') }) }))
+    }))
   }
 
   server.registerTool('agent_send', {
@@ -260,6 +342,9 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
         task: z.string().min(1).max(20000).describe('The part of the task, self-contained: context, files, what to deliver, how to verify it'),
         kind: z.enum(kinds.map((t) => t.id) as [string, ...string[]]).optional().describe(`Kind of work (${kinds.map((t) => t.id).join(', ')}); without it Orbit classifies`),
         accept: ACCEPT,
+        activityId: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/).optional().describe('Stable activity id, e.g. T12 from the board. Reuse it across paraphrases and retries to prevent duplicate work.'),
+        retryReason: z.string().min(1).max(600).optional().describe('Concrete reason for repeating an existing activity'),
+        ...ADMISSION_FIELDS,
         ...folderField(core, caller),
       },
     }, guarded(async (h: HelperInput) => `Aberto:\n${await openHelper(core, caller, h)}\n\nContinue a sua parte; o retorno dele chega sozinho.`))
@@ -278,16 +363,19 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       description: 'Delivers your task\'s result to whoever asked (usually the lead). done = finished, with evidence; blocked = stuck, with the question or the blocker; progress = a heads-up midway, only recorded (you carry on). The summary is typed into the receiver\'s terminal; the details stay in the mission flow.',
       inputSchema: {
         summary: z.string().min(1).max(2000).describe('Short summary: what changed, where, what is left'),
+        attemptId: z.string().max(100).optional().describe('Attempt id from whoami.agent.attemptId; provide it to reject replays for obsolete work'),
         status: z.enum(['done', 'blocked', 'progress']).optional().describe('Default: done'),
         evidence: z.string().max(4000).optional().describe('How you verified it: commands run and their output, tests, files checked. Required with done'),
         details: z.string().max(20000).optional().describe('Optional details (file list, test output…)'),
         to: z.number().int().optional().describe('Deliver to another agent of the mission (e.g. the reviewer) instead of the lead, when your task says so'),
         criteria: z.array(z.object({ item: z.number().int().min(1), met: z.boolean(), how: z.string().max(300) })).max(8).optional().describe('Answer to each acceptance criterion of the task: number, whether it holds and how you checked'),
       },
-    }, guarded(({ summary, status, evidence, details, to, criteria }: { summary: string; status?: HandoffStatus; evidence?: string; details?: string; to?: number; criteria?: Array<{ item: number; met: boolean; how: string }> }) => {
-      const result = core.handoff(caller, { summary, status, evidence, details, to, criteria })
-      if (result.status === 'progress' && result.deliveredTo === null) return 'Progresso registrado no fluxo da missão. Continue e entregue com done ou blocked ao terminar.'
-      return result.deliveredTo === null ? 'Retorno registrado no fluxo da missão (ninguém rodando para receber agora).' : `Retorno entregue a #${result.deliveredTo}.`
+    }, guarded(({ summary, attemptId, status, evidence, details, to, criteria }: { summary: string; attemptId?: string; status?: HandoffStatus; evidence?: string; details?: string; to?: number; criteria?: Array<{ item: number; met: boolean; how: string }> }) => {
+      const result = core.handoff(caller, { summary, attemptId, status, evidence, details, to, criteria })
+      const receipt = `Resultado persistido: ${result.resultId}.`
+      if (result.duplicate) return `${receipt} Reenvio reconhecido; aviso existente preservado para recuperação. Consulte handoff_list para ler o resultado.`
+      if (result.status === 'progress' && result.deliveredTo === null) return `${receipt} Progresso registrado no fluxo da missão. Continue e entregue com done ou blocked ao terminar.`
+      return result.deliveredTo === null ? `${receipt} Aviso persistido; aguardando destinatário disponível.` : `${receipt} Aviso enfileirado para #${result.deliveredTo}; consulte delivery_status para o nível de recebimento.`
     }))
   }
 
@@ -296,6 +384,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
 
 /** The mission's board, shared with the person (who sees and moves the same cards). */
 function registerBoardTools(server: McpServer, core: OrbitCore, caller: Pane): void {
+  const guarded = scopedGuard(core, caller)
   const column = z.enum(CARD_COLUMNS as [CardColumn, ...CardColumn[]])
   server.registerTool('board_list', {
     description: 'The mission board\'s cards (afazer, fazendo, feito), in order, with who owns each. The user sees and moves the same board.',
@@ -326,6 +415,7 @@ function registerBoardTools(server: McpServer, core: OrbitCore, caller: Pane): v
 
 /** The mission's browser: one page shared by its agents and shown to the person. */
 function registerBrowserTools(server: McpServer, core: OrbitCore, caller: Pane): void {
+  const guarded = scopedGuard(core, caller)
   const { width, height } = BROWSER_VIEWPORT
   server.registerTool('browser_open', {
     description: `Opens an address in the mission browser (headless Chromium, ${width}×${height}); the user sees the same page in Orbit. Use it to check the running app, e.g. http://localhost:5173. Waits for the page to load.`,

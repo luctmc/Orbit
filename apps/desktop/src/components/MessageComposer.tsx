@@ -1,0 +1,160 @@
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { ATTACHMENT_LIMITS, type Attachment, type Pane } from '@orbit/protocol'
+import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
+import { dictationAvailable, joinText, useDictation } from '../orbit/dictation.ts'
+import { CloseIcon, MicIcon, OrbitMark, PlusIcon, SendIcon } from './icons.tsx'
+import { acceptsSuggestionKey, inlineSuggestion, type InputSuggestion } from '../orbit/inputSuggestions.ts'
+
+type DraftAttachment = Attachment & { preview: string | null }
+const encodedFile = (file: File): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onerror = () => reject(new Error(`Não foi possível ler ${file.name}`))
+  reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '')
+  reader.readAsDataURL(file)
+})
+
+/** One focused message, with context visible before sending it to the selected agent. */
+export function MessageComposer({ pane, inputRef, active = true, suggestions = [], suggestionsOn = true, onToggleSuggestions }: { pane: Pane; inputRef: RefObject<HTMLTextAreaElement | null>; active?: boolean; suggestions?: InputSuggestion[]; suggestionsOn?: boolean; onToggleSuggestions?: () => void }) {
+  const client = useOrbitClient()
+  const { connection } = useOrbit()
+  const [text, setText] = useState('')
+  const [files, setFiles] = useState<DraftAttachment[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const [composing, setComposing] = useState(false)
+  const [selection, setSelection] = useState({ start: 0, end: 0 })
+  const [dismissed, setDismissed] = useState<string | null>(null)
+  const picker = useRef<HTMLInputElement>(null)
+  const previews = useRef(new Set<string>())
+  const dictated = useRef('')
+  const acceptingSpeech = useRef(true)
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; for (const url of previews.current) URL.revokeObjectURL(url) } }, [])
+  useLayoutEffect(() => {
+    if (!active) return
+    const input = inputRef.current
+    if (input) { input.style.height = 'auto'; input.style.height = `${Math.min(180, input.scrollHeight)}px` }
+  }, [text, inputRef, active])
+  const dictation = useDictation((phrase, final) => {
+    if (!acceptingSpeech.current) return
+    if (final) dictated.current = joinText(dictated.current, phrase)
+    setText(final ? dictated.current : joinText(dictated.current, phrase))
+  })
+  const busy = uploading || sending
+  useEffect(() => { if (!active) { dictation.stop(); setFocused(false) } }, [active, dictation.stop])
+  const disabled = busy || connection !== 'open'
+  const candidate = suggestionsOn && focused && !disabled && !composing && !dictation.listening && !dragging && selection.start === text.length && selection.end === text.length ? inlineSuggestion(text, suggestions) : null
+  const prediction = dismissed === text ? null : candidate
+  const syncSelection = (input: HTMLTextAreaElement) => setSelection({ start: input.selectionStart, end: input.selectionEnd })
+  const acceptPrediction = () => {
+    if (!prediction || disabled) return
+    setText(prediction.value); dictated.current = prediction.value
+    setSelection({ start: prediction.value.length, end: prediction.value.length })
+    setDismissed(null)
+    inputRef.current?.focus()
+    // Only update the draft. send() remains the sole submission path.
+  }
+
+  const addFiles = async (incoming: File[]) => {
+    if (disabled || pane.cli === 'shell' || !incoming.length) return
+    setError(null)
+    if (files.length + incoming.length > ATTACHMENT_LIMITS.files) return setError('Envie até 8 anexos por mensagem.')
+    if (incoming.some((f) => f.size > ATTACHMENT_LIMITS.bytes)) return setError('Cada anexo pode ter até 4 MB.')
+    if ([...files, ...incoming].reduce((n, f) => n + f.size, 0) > ATTACHMENT_LIMITS.totalBytes) return setError('Os anexos podem somar até 8 MB por mensagem.')
+    setUploading(true)
+    try {
+      for (const file of incoming) {
+        const requestId = crypto.randomUUID()
+        const data = await encodedFile(file)
+        if (!mounted.current) break
+        const answer = await client.ask({ type: 'attachment.add', paneId: pane.id, requestId, name: file.name, mime: file.type, data }, 'attachment.added', (m) => m.requestId === requestId)
+        if (!mounted.current) break
+        const preview = /^(image\/(png|jpeg|webp|gif))$/.test(file.type) ? URL.createObjectURL(file) : null
+        if (preview) previews.current.add(preview)
+        setFiles((items) => [...items, { ...answer.attachment, preview }])
+      }
+    } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { if (mounted.current) setUploading(false) }
+  }
+  const send = async () => {
+    if (disabled || (!text.trim() && !files.length)) return
+    acceptingSpeech.current = false
+    dictation.stop(true)
+    setSending(true)
+    setError(null)
+    const requestId = crypto.randomUUID()
+    try {
+      await client.ask({ type: 'pane.submit', paneId: pane.id, text, attachments: files.map((f) => f.id), requestId }, 'pane.submitted', (m) => m.requestId === requestId)
+      if (!mounted.current) return
+      setText(''); dictated.current = ''; setSelection({ start: 0, end: 0 }); setDismissed(null)
+      setSent(true)
+      for (const url of previews.current) URL.revokeObjectURL(url)
+      previews.current.clear(); setFiles([])
+      inputRef.current?.focus()
+    } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { if (mounted.current) { setSending(false); acceptingSpeech.current = true } }
+  }
+  if (!active) return null
+  return (
+    <form className={`composer${dragging ? ' composer--dragging' : ''}`} onSubmit={(e) => { e.preventDefault(); void send() }}
+      onDragOver={(e) => { if (pane.cli !== 'shell' && e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragging(true) } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false) }}
+      onDrop={(e) => { e.preventDefault(); setDragging(false); void addFiles(Array.from(e.dataTransfer.files)) }}>
+      <div className="composer__head">
+        <label htmlFor={`message-${pane.id}`}><OrbitMark size={16} /><strong>{pane.role === 'lead' ? 'Mensagem para o líder' : `Mensagem para ${pane.title}`}</strong><span className="composer__recipient">#{pane.id}</span></label>
+        <span>{connection !== 'open' ? 'Reconectando…' : uploading ? 'Preparando anexos…' : dictation.listening ? `Ouvindo${dictation.mode === 'apple' ? ' · Apple' : dictation.mode === 'local' ? ' · no Mac' : ''}…` : 'Enter envia · Shift+Enter quebra linha'}</span>
+      </div>
+      {!!files.length && <ul className="composer__files" aria-label="Anexos da mensagem">
+        {files.map((file) => <li key={file.id}>
+          {file.preview && <img src={file.preview} alt={`Prévia de ${file.name}`} />}
+          <span title={file.name}>{file.name}<small>{Math.max(1, Math.round(file.size / 1024))} KB</small></span>
+          <button className="icon-btn" type="button" disabled={busy} aria-label={`Remover ${file.name}`} onClick={() => {
+            if (file.preview) { URL.revokeObjectURL(file.preview); previews.current.delete(file.preview) }
+            setFiles((items) => items.filter((f) => f.id !== file.id))
+          }}><CloseIcon size={14} /></button>
+        </li>)}
+      </ul>}
+      <div className="composer__input">
+      {prediction && <div className="composer__ghost" aria-hidden="true"><span>{text}</span>{prediction.suffix}</div>}
+      <textarea id={`message-${pane.id}`} ref={inputRef} value={text} rows={1} maxLength={20_000} disabled={sending}
+        aria-autocomplete={suggestionsOn && pane.role === 'lead' ? 'inline' : 'none'} aria-describedby={prediction ? `prediction-${pane.id}` : undefined}
+        placeholder={prediction ? '' : dragging ? 'Solte os arquivos aqui' : pane.role === 'lead' ? 'Qual é o próximo passo? Descreva seu objetivo ou dê uma orientação…' : 'Escreva uma orientação para este agente…'}
+        onFocus={(e) => { setFocused(true); syncSelection(e.currentTarget) }}
+        onBlur={(e) => { if (!e.currentTarget.closest('form')?.contains(e.relatedTarget as Node)) setFocused(false) }}
+        onSelect={(e) => syncSelection(e.currentTarget)}
+        onCompositionStart={() => setComposing(true)} onCompositionEnd={(e) => { setComposing(false); syncSelection(e.currentTarget) }}
+        onChange={(e) => { setText(e.target.value); dictated.current = e.target.value; syncSelection(e.currentTarget); setDismissed(null); setSent(false) }}
+        onPaste={(e) => { const incoming = Array.from(e.clipboardData.files); if (incoming.length) { e.preventDefault(); void addFiles(incoming) } }}
+        onKeyDown={(e) => {
+          if (prediction && acceptsSuggestionKey({ key: e.key, shiftKey: e.shiftKey, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, isComposing: e.nativeEvent.isComposing }) && e.currentTarget.selectionStart === text.length && e.currentTarget.selectionEnd === text.length) { e.preventDefault(); acceptPrediction(); return }
+          if (e.key === 'Escape' && prediction) { e.preventDefault(); setDismissed(text); return }
+          if (e.key === 'Escape' && dictation.listening) { e.preventDefault(); dictation.stop() }
+          if (e.key === 'Enter' && !e.shiftKey && !composing && !e.nativeEvent.isComposing) { e.preventDefault(); void send() }
+        }} />
+      </div>
+      {prediction && <div className="composer__suggestion" id={`prediction-${pane.id}`} role="status">
+        <span><strong>Sugestão do Orbit</strong><span className="sr-only">: {prediction.value}.</span><small>{prediction.reason} Tab insere · Esc dispensa.</small></span>
+        <button type="button" className="btn btn--ghost btn--sm" disabled={disabled} onClick={acceptPrediction}>Inserir <kbd>Tab</kbd></button>
+        <button type="button" className="icon-btn" aria-label="Dispensar sugestão" onClick={() => { setDismissed(text); inputRef.current?.focus() }}><CloseIcon size={14} /></button>
+      </div>}
+      <div className="composer__actions">
+        <input className="sr-only" ref={picker} type="file" multiple tabIndex={-1} aria-label="Escolher anexos" onChange={(e) => { void addFiles(Array.from(e.target.files ?? [])); e.target.value = '' }} />
+        <button className="icon-btn" type="button" disabled={disabled || pane.cli === 'shell'} aria-label="Anexar imagens ou arquivos" title="Anexar imagens ou arquivos (4 MB por arquivo)" onClick={() => picker.current?.click()}><PlusIcon /></button>
+        <button className={`icon-btn mic${dictation.listening ? ' mic--on' : ''}`} type="button" disabled={disabled} aria-pressed={dictation.listening}
+          aria-label={dictation.listening ? 'Parar ditado' : 'Ditar mensagem'} title={dictation.mode === 'apple' ? 'Ditado pelo macOS: áudio pode ser processado pela Apple' : 'Ditar mensagem'} onClick={() => {
+            if (dictation.listening) return dictation.stop()
+            if (!dictationAvailable) return setError('O reconhecimento de voz não está disponível neste ambiente. No macOS, use o atalho de Ditado do sistema no campo de mensagem.')
+            acceptingSpeech.current = true; dictated.current = text; dictation.start(); inputRef.current?.focus()
+          }}><MicIcon /></button>
+        <span className="composer__hint" role="status">{files.length ? `${files.length}/8 anexos` : sent && !text ? 'Mensagem encaminhada ao agente' : 'Arquivos, imagens ou uma ideia · ⌘J'}</span>
+        {pane.role === 'lead' && ['claude', 'codex'].includes(pane.cli) && onToggleSuggestions && <button type="button" className="btn btn--ghost btn--sm composer__toggle" aria-pressed={suggestionsOn} title={suggestionsOn ? 'Desativar sugestões no campo e no terminal' : 'Ativar sugestões no campo e no terminal'} onClick={onToggleSuggestions}>Sugestões {suggestionsOn ? 'ligadas' : 'desligadas'}</button>}
+        <button className="btn btn--primary" type="submit" disabled={disabled || (!text.trim() && !files.length)}><SendIcon size={16} />{sending ? 'Enviando…' : 'Enviar'}</button>
+      </div>
+      {(error || dictation.error) && <div className="composer__error" role="alert">{error ?? dictation.error}</div>}
+    </form>
+  )
+}

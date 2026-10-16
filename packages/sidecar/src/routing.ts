@@ -1,11 +1,15 @@
 import { AGENT_CLIS, EFFORTS, MODEL_ID, ROUTING_LIMITS, SLUG, type AgentCliForRole, type AgentSeat, type Effort, type Routing, type TaskType } from '@orbit/protocol'
 import { slugify } from './squads.ts'
+import { createHash } from 'node:crypto'
+
+export const routingRevision = (routing: Routing): string => createHash('sha256').update(JSON.stringify([routing.lead, routing.taskTypes])).digest('hex')
 
 /**
  * How each built-in kind of work is done. It goes in the helper's first message, so it reaches
  * Codex as well as Claude (skills only reach whoever has them installed).
  */
 export const FACTORY_METHODS: Record<string, { method: string; readOnly: boolean }> = {
+  operacao: { readOnly: false, method: 'Run the requested command in the project. Report the command, exit code and relevant output. If it fails, report the failure before attempting changes outside the requested scope.' },
   bug: { readOnly: false, method: '1. Reproduce it before changing anything (a failing test or command) and keep the output.\n2. Find the root cause, not just the symptom.\n3. Make the smallest change that fixes it.\n4. Leave a test that failed before and passes now; run the whole suite.\n5. Deliver with the before and after as evidence.' },
   funcionalidade: { readOnly: false, method: '1. Read the surrounding code and follow its style.\n2. Build the minimum that does what was asked, no extras.\n3. Cover the new behavior with tests and run the suite and the build.\n4. Deliver saying where it changed and how to use it.' },
   refatoracao: { readOnly: false, method: '1. Run the tests first and keep the result.\n2. Change the structure without changing behavior, in small steps.\n3. Run the same tests after: the result must be the same.\n4. Do not mix in fixes or features; note what you find and mention it when delivering.' },
@@ -17,6 +21,7 @@ export const FACTORY_METHODS: Record<string, { method: string; readOnly: boolean
 
 /** Each built-in kind's equivalent on the other CLI, for the maestro to balance the load. */
 export const FACTORY_ALTS: Record<string, AgentSeat> = {
+  operacao: { cli: 'codex', model: null, effort: 'low' },
   bug: { cli: 'codex', model: null, effort: 'medium' },
   funcionalidade: { cli: 'codex', model: null, effort: 'medium' },
   refatoracao: { cli: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' },
@@ -44,6 +49,7 @@ const row = (id: string, name: string, description: string, model: string | null
 export const DEFAULT_ROUTING: Routing = {
   lead: { cli: 'claude', model: 'claude-opus-5-5', effort: 'high' },
   taskTypes: [
+    row('operacao', 'Execução e build', 'Executar o projeto, instalar dependências ou verificar build e testes existentes.', 'claude-haiku-5-5', 'low'),
     row('bug', 'Correção de bug', 'Algo quebrou: erro, regressão, comportamento errado.', 'claude-sonnet-5-5', 'medium'),
     row('funcionalidade', 'Funcionalidade', 'Comportamento novo: tela, fluxo, endpoint, opção.', 'claude-sonnet-5-5', 'medium'),
     row('refatoracao', 'Refatoração', 'Mudar a estrutura sem mudar o comportamento.', null, 'medium', 'codex'),

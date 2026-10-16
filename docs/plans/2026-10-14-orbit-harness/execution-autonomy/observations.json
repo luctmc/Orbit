@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "at": 1792073972667,
+  "pins": {
+    "claude": "claude-haiku-5-5",
+    "codex": "gpt-6-luna",
+    "effort": "low"
+  },
+  "missions": [
+    {
+      "id": "forward-1",
+      "missionId": "c5c5333a-1405-43a8-8df3-8f96427543d9",
+      "tokens": 206236,
+      "knownClaudeUsd": null,
+      "completeCostUsd": null
+    },
+    {
+      "id": "forward-2",
+      "missionId": "fff62b29-2934-41ce-8aeb-2f77050eb17c",
+      "tokens": 1560340,
+      "knownClaudeUsd": 0.013544,
+      "completeCostUsd": null
+    },
+    {
+      "id": "reverse-1",
+      "missionId": "b72f0b50-584f-43f9-85d6-613dc536043e",
+      "tokens": 607275,
+      "knownClaudeUsd": 0.014789,
+      "completeCostUsd": null
+    },
+    {
+      "id": "reverse-2 + reverse-recovery-1",
+      "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+      "tokens": 1671514,
+      "knownClaudeUsd": 0.03058,
+      "completeCostUsd": null
+    }
+  ],
+  "observedTokensIncludingFailures": 4045365,
+  "knownClaudeSubtotalUsd": 0.058913,
+  "completeCostUsd": null,
+  "costCoverage": "partial: Codex USD unreported; missing reports remain unknown",
+  "forwardFunctionalPassed": true,
+  "forwardWithinBudget": false,
+  "forwardOverrunTokens": 60340,
+  "reverseRecoveryTransport": {
+    "resultIdPreserved": true,
+    "notificationIdPreserved": true,
+    "agentAcknowledged": true,
+    "exactlyTwoAttempts": true,
+    "exactlyTwoFinalResults": true,
+    "sameProviderSessionsNewEpochs": true,
+    "accountingReplayPassed": true
+  },
+  "reverseWorkerCrossCliAccepted": true,
+  "reverseFinalAcceptancePassed": false,
+  "reverseOverrunTokens": 171514,
+  "boundedBidirectionalGatePassed": false,
+  "tokenEconomyProven": false,
+  "notes": [
+    "reverse-2 and reverse-recovery-1 share a mission and cumulative accounting; never add their totals together",
+    "No synthetic supervisor result, verification or ready call was used in live mode",
+    "Known USD values are native CLI estimates, not a complete bill",
+    "Transport recovery after a diagnosed code fix is not an unmodified first-attempt recovery pass"
+  ]
+}

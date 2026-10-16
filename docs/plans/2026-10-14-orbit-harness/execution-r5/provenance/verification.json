@@ -1,0 +1,9 @@
+{
+  "originalSourceRevision": "c4d7a9ffcf334a1e72e28a2f6b5e4c98d280ff84d90e5d4c759a1172f9f20eb7",
+  "reconstructedWith": "evaluation-at-pilot.ts substituted only for packages/sidecar/src/benchmarks/evaluation.ts",
+  "matchesOriginalManifest": true,
+  "currentEvaluationSha256": "c0d864cc5d49a2d4f2bbb16361f9ec6f6073798860629f2193e6e9893f441390",
+  "originalFailedRunSha256": "90bd1813e9ba90449473f0c990316ea43cc89f7a847432709b4a8fc36ff694dc",
+  "matchesRecoveryReference": true,
+  "recoveryScriptMatchesRecordedSha256": true
+}

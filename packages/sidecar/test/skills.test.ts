@@ -130,7 +130,7 @@ test('switching items off reaches running Claude agents through their hook, and 
     ui.send({ type: 'pane.spawn', request: { missionId: lead.missionId, role: 'crew', cli: 'claude', model: null, title: 'bug', taskTypeId: routing.taskTypes[0]!.id } })
     const { pane: crew } = await ui.next('pane.updated', (m) => m.pane.title === 'bug')
     assert.match(readFileSync(join(dataDir, 'panes', String(crew.id), 'role.md'), 'utf8'), /use only these skills: revisar/)
-    ui.send({ type: 'pane.spawn', request: { missionId: lead.missionId, role: 'crew', cli: 'codex', model: null, title: 'codex' } })
+    ui.send({ type: 'pane.spawn', request: { missionId: lead.missionId, role: 'crew', cli: 'codex', model: null, title: 'codex', readOnly: true } })
     await ui.next('pane.updated', (m) => m.pane.title === 'codex')
     assert.deepEqual(launches.find((l) => l.cli === 'codex')?.disabledMcp, ['node_repl'])
 

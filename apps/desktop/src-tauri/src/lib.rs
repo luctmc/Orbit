@@ -1,5 +1,6 @@
 mod sidecar;
 mod update;
+mod dictation;
 
 use sidecar::{Connection, Sidecar};
 use tauri::{Manager, RunEvent};
@@ -20,17 +21,19 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(update::Pending::default())
+        .manage(dictation::Dictation::default())
         .setup(|app| {
             let sidecar = Sidecar::start(app.handle())?;
             app.manage(sidecar);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![orbit_connection, update::orbit_update_check, update::orbit_update_install])
+        .invoke_handler(tauri::generate_handler![orbit_connection, update::orbit_update_check, update::orbit_update_install, dictation::orbit_dictation_start, dictation::orbit_dictation_stop])
         .build(tauri::generate_context!())
         .expect("falha ao montar o Orbit");
 
     app.run(|handle, event| {
         if let RunEvent::Exit = event {
+            if let Some(voice) = handle.try_state::<dictation::Dictation>() { voice.stop(true); }
             if let Some(sidecar) = handle.try_state::<Sidecar>() {
                 sidecar.stop();
             }

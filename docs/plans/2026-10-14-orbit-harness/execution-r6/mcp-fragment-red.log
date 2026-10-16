@@ -1,0 +1,21 @@
+MCP terminal boundary diagnostic {"chunks":["echo \"TOKEN:$ORBIT_PANE_TOKEN:\"\r\n","\u001b[?1034hMacBook-Air-de-Lucas:orbit-ws-OYcOnv lucas$ ","echo \"TOKEN:$ORBIT_PA","NE_TOKEN",":\"\r\nTOKEN:<redacted>:\r\nMacBook-Air-de-Lucas:orbit-ws-OYcOnv lucas$ ","[Orb","it] ","Reto","rno ","de #","2 (T","este","s), ","conc","luíd","o: t","este","s pa","ssan"," \rdo"," · e","vidê","ncia",": np","m te","st (","deta","lhes"," em ","hand","off_","list",")\r\n","sh: ","[Orb","it]:"," com","mand"," not"," fou","nd\r\n","MacB","ook-","Air-","de-L","ucas",":orb","it-w","s-OY","cOnv"," luc","as$ ","[","Orbi","t] R","ecib","o 89","0006","dc-a","2bf-","4352","-","848f","-78f","0f17","70b5","2; r","es \r","ulta","do 3","645a","8","c5-e","84b-","415d","-9f7","1-8a","8528","c6c5","e4. ","Após"," ler",", co","nfir","me c","om ","deli","very","_ack","(del","iver","y","Id: ","\"890","00","6 \rd","c-a2","bf-4","352-","848f","-78f","0f17","70b5","2\").","\r\nsh",": sy","ntax"," err","or n","ear ","unex","pect","ed t","oken"," `('","\r\nMa","cBoo","k-Ai","r-de","-Luc","as:o","rbit","-ws-","OYcO","nv l","ucas","$ "],"combinedContainsReturn":true}
+✖ lead and helper coordinate through MCP, handoffs and hooks (5247.678708ms)
+✔ an agent reads a packaged skill through authenticated MCP without executing its content (86.8325ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5656.371542
+
+✖ failing tests:
+
+test at packages/sidecar/test/mcp.test.ts:22:1
+✖ lead and helper coordinate through MCP, handoffs and hooks (5247.678708ms)
+  Error: timeout waiting for pane.data
+      at Object.next (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/helpers.ts:37:40)
+      at async TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/mcp.test.ts:85:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

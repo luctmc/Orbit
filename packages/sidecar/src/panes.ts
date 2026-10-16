@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import { randomUUID } from 'node:crypto'
 import pty, { type IPty } from 'node-pty'
 import headless from '@xterm/headless'
 import serialize from '@xterm/addon-serialize'
@@ -9,6 +10,8 @@ import { buildCommand, paneEnv, type AgentLaunch, type PaneCommand } from './com
 const IDLE_AFTER_MS = 1500
 /** Delay between a bracketed paste and the Enter that submits it, so TUIs see them apart. */
 const SUBMIT_DELAY_MS = 120
+/** A native startup hook can precede its input listener and restored terminal paint. */
+const DELIVERY_QUIET_MS = 1200
 /** Scrollback kept by the screen mirror and handed to views. */
 const SCROLLBACK_LINES = 3000
 
@@ -26,6 +29,10 @@ interface LivePane {
   idleTimer: NodeJS.Timeout | null
   /** Status comes from the agent's hooks, not from output activity. */
   hookDriven: boolean
+  queue: Array<{ text: string; accepted?: () => void }>
+  submitTimer: NodeJS.Timeout | null
+  closing: boolean
+  lastOutputAt: number | null
 }
 
 export interface PaneSnapshot {
@@ -39,10 +46,13 @@ export interface PaneManagerEvents {
   resized: [paneId: number, cols: number, rows: number]
   status: [pane: Pane, previous: PaneStatus]
   exit: [pane: Pane]
+  terminated: [paneId: number, epoch: string]
+  receiptError: [error: unknown]
 }
 
 export interface SpawnInput {
   id: number
+  executionEpoch?: string
   request: SpawnPaneRequest
   squadRole: string | null
   taskType: string | null
@@ -59,6 +69,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   private readonly live = new Map<number, LivePane>()
   private readonly screens = new Map<number, Screen>()
   private readonly panes = new Map<number, Pane>()
+  private readonly exits = new Map<number, Set<Promise<void>>>()
   /** Agents with a question for the person: they stay "waiting" until the person answers. */
   private readonly asking = new Set<number>()
   private readonly shell: string
@@ -70,16 +81,18 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     this.command = command
   }
 
-  spawn({ id, request, squadRole, taskType, cwd, launch, env, hookDriven, accountId, branch }: SpawnInput, cols = 100, rows = 30): Pane {
+  spawn({ id, executionEpoch, request, squadRole, taskType, cwd, launch, env, hookDriven, accountId, branch }: SpawnInput, cols = 100, rows = 30): Pane {
     const { file, args } = this.command(launch, this.shell)
     const proc = pty.spawn(file, args, { name: 'xterm-256color', cols, rows, cwd, env: paneEnv(process.env, env) })
     const pane: Pane = {
       id,
+      executionEpoch: executionEpoch ?? randomUUID(),
       missionId: request.missionId,
       role: request.role,
       squadRole,
       taskType,
       cli: request.cli,
+      toolProfile: launch.toolProfile ?? 'inherit',
       model: request.model,
       effort: launch.effort ?? null,
       accountId,
@@ -103,7 +116,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     const serializer = new serialize.SerializeAddon()
     term.loadAddon(serializer)
     const screen: Screen = { term, serializer }
-    const live: LivePane = { pty: proc, idleTimer: null, hookDriven }
+    const live: LivePane = { pty: proc, idleTimer: null, hookDriven, queue: [], submitTimer: null, closing: false, lastOutputAt: null }
     this.live.set(id, live)
     this.screens.set(id, screen)
     this.panes.set(id, pane)
@@ -111,14 +124,30 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     // A pane reopened under the same number gets a new process: the old one's last output and
     // exit must not touch it.
     const current = () => this.live.get(id) === live
+    // The engine owns terminal device replies, even while the UI shows only the conversation.
+    // Without this, TUIs waiting for DSR/DA can stall before creating their native session.
+    term.onData(data => { if (current() && !live.closing) proc.write(data) })
+    let stopped!: () => void
+    const exited = new Promise<void>(resolve => { stopped = resolve })
+    const pending = this.exits.get(id) ?? new Set<Promise<void>>()
+    pending.add(exited)
+    this.exits.set(id, pending)
     proc.onData((data) => {
       if (!current()) return
+      live.lastOutputAt = Date.now()
       screen.term.write(data)
       this.emit('data', id, data)
       if (!live.hookDriven) this.markActive(id, live)
     })
     proc.onExit(({ exitCode }) => {
       if (live.idleTimer) clearTimeout(live.idleTimer)
+      if (live.submitTimer) clearTimeout(live.submitTimer)
+      // Even a forgotten/replaced pane must confirm its own epoch's termination.
+      try { this.emit('terminated', id, pane.executionEpoch!) }
+      catch (error) { this.emit('receiptError', error) }
+      pending.delete(exited)
+      if (!pending.size) this.exits.delete(id)
+      stopped()
       if (!current()) return
       this.live.delete(id)
       this.asking.delete(id)
@@ -134,7 +163,8 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   }
 
   write(id: number, data: string): void {
-    this.live.get(id)?.pty.write(data)
+    const live = this.live.get(id)
+    if (live && !live.closing) live.pty.write(data)
   }
 
   /**
@@ -143,13 +173,51 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
    * separately, a moment later, so it is read as "submit" and not as part of the text.
    */
   submit(id: number, text: string): boolean {
+    return this.submitWithReceipt(id, text)
+  }
+
+  submitWithReceipt(id: number, text: string, accepted?: () => void): boolean {
     const live = this.live.get(id)
-    if (!live) return false
+    if (!live || live.closing) return false
     const clean = text.replaceAll('\x1b', '')
+    const item = { text: clean, accepted }
+    if (live.submitTimer) { live.queue.push(item); return true }
+    return this.pasteAndSubmit(id, live, [item])
+  }
+
+  private pasteAndSubmit(id: number, live: LivePane, items: LivePane['queue']): boolean {
+    const text = items.map(item => item.text).join('\n\n')
     const paste = this.screens.get(id)?.term.modes.bracketedPasteMode
-    live.pty.write(paste ? `\x1b[200~${clean}\x1b[201~` : clean)
-    setTimeout(() => this.live.get(id)?.pty.write('\r'), SUBMIT_DELAY_MS)
+    try { live.pty.write(paste ? `\x1b[200~${text}\x1b[201~` : text) }
+    catch (error) { this.failSubmit(id, live, error); return false }
+    live.submitTimer = setTimeout(() => {
+      if (this.live.get(id) !== live || live.closing) return
+      try { live.pty.write('\r') }
+      catch (error) { this.failSubmit(id, live, error); return }
+      for (const item of items) {
+        try { item.accepted?.() } catch (error) { this.emit('receiptError', error) }
+      }
+      // Leave the submit keystroke separate from the next paste. Returns arriving together are
+      // one subsequent message, preserving every result without several redundant wakeups.
+      live.submitTimer = setTimeout(() => {
+        if (this.live.get(id) !== live || live.closing) return
+        live.submitTimer = null
+        if (live.queue.length) this.pasteAndSubmit(id, live, live.queue.splice(0))
+      }, SUBMIT_DELAY_MS)
+    }, SUBMIT_DELAY_MS)
     return true
+  }
+
+  private failSubmit(id: number, live: LivePane, error: unknown): void {
+    // Do not append another paste to a buffer whose write/submit outcome is uncertain.
+    if (this.live.get(id) === live) {
+      live.closing = true
+      if (live.submitTimer) clearTimeout(live.submitTimer)
+      live.submitTimer = null
+      live.queue = []
+      try { live.pty.kill() } catch { /* already stopped */ }
+    }
+    this.emit('receiptError', error)
   }
 
   /** PTY and mirror move together, so the mirror always matches what the program draws for. */
@@ -166,7 +234,12 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   }
 
   kill(id: number): void {
-    this.live.get(id)?.pty.kill()
+    const live = this.live.get(id)
+    if (!live) return
+    live.closing = true
+    if (live.submitTimer) clearTimeout(live.submitTimer)
+    live.queue = []
+    live.pty.kill()
   }
 
   /** Drops everything kept for a closed pane. */
@@ -204,7 +277,30 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   }
 
   isAlive(id: number): boolean {
-    return this.live.has(id)
+    const live = this.live.get(id)
+    return Boolean(live && !live.closing)
+  }
+
+  /** PTY liveness is not native input readiness. Keep durable notices out of startup and
+   * permission dialogs; quiet output is a transport heuristic, never a receipt from the agent. */
+  canReceiveDelivery(id: number, at = Date.now()): boolean {
+    const live = this.live.get(id), pane = this.panes.get(id)
+    if (!live || live.closing || !pane || pane.status === 'waiting' || pane.status === 'exited') return false
+    if (pane.cli === 'shell') return true
+    return pane.status !== 'starting' && live.lastOutputAt !== null && at - live.lastOutputAt >= DELIVERY_QUIET_MS
+  }
+
+  /** Bounded wait for OS exit callbacks, including processes whose panes were forgotten. */
+  async waitForExit(id?: number, timeoutMs = 5000): Promise<void> {
+    const pending = id === undefined ? [...this.exits.values()].flatMap(set => [...set]) : [...(this.exits.get(id) ?? [])]
+    if (!pending.length) return
+    let timer: NodeJS.Timeout | undefined
+    try {
+      await Promise.race([
+        Promise.all(pending),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('O processo ainda não confirmou o encerramento; a proteção de escrita continua ativa. Tente novamente após ele encerrar.')), timeoutMs) }),
+      ])
+    } finally { if (timer) clearTimeout(timer) }
   }
 
   /** The agent asked the person something (ask_user): waiting, with the question and choices. */
@@ -284,7 +380,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   }
 
   killAll(): void {
-    for (const live of this.live.values()) live.pty.kill()
+    for (const id of this.live.keys()) this.kill(id)
   }
 
   private markActive(id: number, live: LivePane): void {

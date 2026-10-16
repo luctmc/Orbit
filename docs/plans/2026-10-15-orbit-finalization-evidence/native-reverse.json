@@ -1,0 +1,219 @@
+{
+  "version": 1,
+  "runSha256": "84e93a1ffd18fea1bd18cd85dbd21419e51a1e74642be6dca870415b5670203e",
+  "unit": "utf8-bytes and provider-reported tokens (separate units)",
+  "modelCalls": 0,
+  "tokenSavings": null,
+  "sessions": [
+    {
+      "paneId": 1,
+      "role": "lead",
+      "found": true,
+      "sessionId": "5b77db7a-7116-447d-a90d-23cce63364e2",
+      "transcriptSha256": "25ae6b20ac980286e052afc7b8ce5864f4e299e5c89fa330f6dd1c79bc69f8e5",
+      "responses": 15,
+      "responseUsage": [
+        {
+          "input": 47906,
+          "output": 220
+        },
+        {
+          "input": 50754,
+          "output": 604
+        },
+        {
+          "input": 53369,
+          "output": 834
+        },
+        {
+          "input": 54461,
+          "output": 102
+        },
+        {
+          "input": 55004,
+          "output": 182
+        },
+        {
+          "input": 56518,
+          "output": 970
+        },
+        {
+          "input": 57744,
+          "output": 234
+        },
+        {
+          "input": 58575,
+          "output": 304
+        },
+        {
+          "input": 61292,
+          "output": 231
+        },
+        {
+          "input": 62863,
+          "output": 374
+        },
+        {
+          "input": 63422,
+          "output": 709
+        },
+        {
+          "input": 65506,
+          "output": 333
+        },
+        {
+          "input": 68508,
+          "output": 1097
+        },
+        {
+          "input": 71426,
+          "output": 292
+        },
+        {
+          "input": 72077,
+          "output": 635
+        }
+      ],
+      "tools": {
+        "ToolSearch": 2,
+        "mcp__orbit__mission_briefing": 1,
+        "mcp__orbit__board_add": 2,
+        "mcp__orbit__mission_note": 1,
+        "mcp__orbit__agent_spawn": 2,
+        "mcp__orbit__delivery_ack": 2,
+        "mcp__orbit__result_inspect": 2,
+        "Bash": 1,
+        "mcp__orbit__verification_submit": 2,
+        "mcp__orbit__board_update": 2
+      },
+      "externalServersDiscovered": [],
+      "externalServersCalled": [],
+      "attachments": [
+        {
+          "type": "deferred_tools_delta",
+          "prefixes": {
+            "native": 18
+          },
+          "definitionBytes": 2,
+          "surfacedCount": 0
+        },
+        {
+          "type": "agent_listing_delta",
+          "count": 34,
+          "contentBytes": 12545
+        },
+        {
+          "type": "skill_listing",
+          "count": 50,
+          "contentBytes": 23396
+        },
+        {
+          "type": "prompt_snapshot",
+          "toolCount": 15,
+          "toolSchemaBytes": 117810,
+          "systemPromptBytes": 20066
+        },
+        {
+          "type": "deferred_tools_delta",
+          "prefixes": {
+            "orbit": 40
+          },
+          "definitionBytes": 2,
+          "surfacedCount": 0
+        }
+      ]
+    },
+    {
+      "paneId": 3,
+      "role": "crew",
+      "found": true,
+      "sessionId": "18692d9a-07a1-403a-9b45-77e77a7349b3",
+      "transcriptSha256": "b37993e5b4ad02c02ce84adebd431db198b2f406490385a4ccbea08dd31fbc48",
+      "responses": 8,
+      "responseUsage": [
+        {
+          "input": 45479,
+          "output": 201
+        },
+        {
+          "input": 48237,
+          "output": 280
+        },
+        {
+          "input": 51634,
+          "output": 421
+        },
+        {
+          "input": 52350,
+          "output": 498
+        },
+        {
+          "input": 52963,
+          "output": 953
+        },
+        {
+          "input": 53990,
+          "output": 1269
+        },
+        {
+          "input": 57046,
+          "output": 642
+        },
+        {
+          "input": 57788,
+          "output": 386
+        }
+      ],
+      "tools": {
+        "ToolSearch": 1,
+        "mcp__orbit__whoami": 1,
+        "mcp__orbit__result_inspect": 1,
+        "Bash": 3,
+        "mcp__orbit__verification_submit": 2,
+        "mcp__orbit__handoff_submit": 1
+      },
+      "externalServersDiscovered": [],
+      "externalServersCalled": [],
+      "attachments": [
+        {
+          "type": "deferred_tools_delta",
+          "prefixes": {
+            "native": 18
+          },
+          "definitionBytes": 2,
+          "surfacedCount": 0
+        },
+        {
+          "type": "agent_listing_delta",
+          "count": 34,
+          "contentBytes": 12545
+        },
+        {
+          "type": "skill_listing",
+          "count": 50,
+          "contentBytes": 23396
+        },
+        {
+          "type": "prompt_snapshot",
+          "toolCount": 15,
+          "toolSchemaBytes": 117810,
+          "systemPromptBytes": 14102
+        },
+        {
+          "type": "deferred_tools_delta",
+          "prefixes": {
+            "orbit": 30
+          },
+          "definitionBytes": 2,
+          "surfacedCount": 0
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "Claude transcript attachments are provider-version-specific; absent fields remain absent",
+    "Attachment snapshots/deltas overlap: never sum their bytes as unique context",
+    "Provider usage is deduplicated by response id; this is not a counterfactual token-savings estimate",
+    "Codex context and external account sessions are not inferred from unrelated files"
+  ]
+}

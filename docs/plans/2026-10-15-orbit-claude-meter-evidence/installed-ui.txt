@@ -1,0 +1,12 @@
+				6 container Limites de Claude. 5 h: 0% usado, renova em 3 h 31 min semana: 84% usado, renova em 3 d Última leitura há 16 s. Atualização automática a cada 30 s., Help: Limites de Claude
+					7 text Claude · usado 5 h 0% semana 84%
+				8 container Limites de Codex (plus). 5 h: 2% restante, renova em 2 h 55 min semana: 39% restante, renova em 6 d Última leitura há 17 s. Atualização automática a cada 30 s., Help: Limites de Codex (plus)
+					9 text Codex · restante 5 h 2% semana 39%
+				11 text 2 agentes vivos Motor ativo
+				22 text 2 missões em andamento · 2 agentes vivos · 2 workspaces Buscar missão, agente ou pasta
+								40 text Orbit · Codex · 1,9 mi tokens · há 2 min
+									44 text Líder #8 Codex #8 · ocioso
+								50 text Dashboard · Codex · 365 mil tokens · há 3 min
+									54 text Líder #7 Codex #7 · ocioso
+					63 text 2,5 mi tokens · Codex 2,5 mi
+				69 text Com agentes vivos

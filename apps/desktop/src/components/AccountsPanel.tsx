@@ -4,7 +4,9 @@ import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { accountLabel, CLI_LABEL } from '../orbit/labels.ts'
 import { untilTime } from '../orbit/time.ts'
 import { PlusIcon } from './icons.tsx'
-import { Terminal } from './Terminal.tsx'
+import { Terminal } from './LazyTerminal.tsx'
+import { limitWindowView, limitReadLabel } from '../orbit/limitPresentation.ts'
+import { useLimitClock } from '../orbit/useLimitClock.ts'
 
 /** CLIs that take extra accounts; Antigravity runs only as this Mac's own login. */
 const CLIS: AgentCliForRole[] = ['claude', 'codex', 'gemini']
@@ -53,18 +55,17 @@ function statusText(account: Account, status: AccountStatus | undefined): { text
   return { text: who ? `logada · ${who}` : `logada${status.method ? ` (${status.method})` : ''}`, tone: 'ok' }
 }
 
-function LimitsLine({ limits }: { limits: AccountLimits | undefined }) {
-  if (!limits) return <span className="muted">limites aparecem depois do primeiro uso</span>
-  const now = Date.now()
+function LimitsLine({ limits, now }: { limits: AccountLimits | undefined; now: number }) {
+  if (!limits) return <span className="muted">limites ainda não consultados</span>
   const parts = ([['5 h', limits.fiveHour], ['semana', limits.weekly]] as const).flatMap(([label, w]) => {
     if (!w) return []
-    const fresh = w.resetsAt > now
-    return [`${label} ${fresh ? Math.round(w.usedPercent) : 0}%${fresh ? ` (renova ${untilTime(w.resetsAt, now)})` : ''}`]
+    const view = limitWindowView(w, limits, now)
+    return [view.percent === null ? `${label}: aguardando atualização` : `${view.label}: ${view.percent}% ${view.metric} (renova ${untilTime(w.resetsAt, now)})`]
   })
-  return <span className="muted">{parts.join(' · ') || 'sem limites informados'}</span>
+  return <span className="muted" title={limitReadLabel(limits, now)}>{parts.join(' · ') || 'sem leitura atual'} · {limitReadLabel(limits, now)}</span>
 }
 
-function AccountCard({ account, status, limits, liveAgents, onEdit }: { account: Account; status: AccountStatus | undefined; limits: AccountLimits | undefined; liveAgents: number; onEdit: () => void }) {
+function AccountCard({ account, status, limits, liveAgents, onEdit, now }: { account: Account; status: AccountStatus | undefined; limits: AccountLimits | undefined; liveAgents: number; onEdit: () => void; now: number }) {
   const client = useOrbitClient()
   const state = statusText(account, status)
   const loginPane = status?.loginPaneId ?? null
@@ -90,7 +91,7 @@ function AccountCard({ account, status, limits, liveAgents, onEdit }: { account:
       </div>
       <div className="account__facts">
         <span className={`account__state account__state--${state.tone}`}>{state.text}</span>
-        <LimitsLine limits={limits} />
+        <LimitsLine limits={limits} now={now} />
       </div>
       <label className="check">
         <input type="checkbox" checked={account.auto} onChange={(e) => client.send({ type: 'account.save', account: { id: account.id, cli: account.cli, kind: account.kind, name: account.name, baseUrl: account.baseUrl, model: account.model, auto: e.target.checked } })} />
@@ -187,7 +188,7 @@ function AccountForm({ initial, onDone }: { initial: Draft; onDone: () => void }
           <p className="note">Fica só no seu Mac, num arquivo que só você lê. Os agentes recebem a chave pela CLI; ela não volta para a tela.</p>
         </div>
       )}
-      {draft.kind === 'assinatura' && !editing && <p className="note">Depois de salvar, use Entrar: abre um terminal com o login da {CLI_LABEL[draft.cli]} só para esta conta.</p>}
+      {draft.kind === 'assinatura' && !editing && <p className="note">Depois de adicionar, clique em Entrar no cartão da nova conta para concluir o login no navegador. As outras contas continuam conectadas.</p>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="account-form__actions">
         <button type="button" className="btn btn--ghost btn--sm" onClick={onDone}>Cancelar</button>
@@ -203,6 +204,8 @@ export function AccountsPanel() {
   const { accounts, accountStatuses, limits, panes } = useOrbit()
   const [form, setForm] = useState<Draft | null>(null)
   const asked = useRef(false)
+  const canAdd = accounts.length < ACCOUNT_LIMITS.accounts
+  const now = useLimitClock()
 
   useEffect(() => {
     if (asked.current) return
@@ -214,15 +217,19 @@ export function AccountsPanel() {
     <div className="dialog__body clis">
       <div className="clis__bar">
         <p className="muted">
-          Cada conta extra roda numa pasta própria do Claude Code, do Codex ou do Gemini CLI, com as suas configurações, instruções e skills compartilhadas. O Antigravity usa só o login deste Mac. Sem conta escolhida, o Orbit abre o agente na assinatura com mais folga e só passa para uma chave de API quando todas estiverem no limite.
+          Mantenha várias contas conectadas e escolha qual cada agente usa. Para conectar outra assinatura, use Adicionar conta na seção do provedor. A escolha automática prioriza as assinaturas com mais limite disponível; chaves de API só participam se você permitir.
         </p>
         <span className="spacer" />
-        {!form && accounts.length < ACCOUNT_LIMITS.accounts && <button className="btn btn--ghost btn--sm" onClick={() => setForm(blankDraft())}><PlusIcon size={14} />Nova conta</button>}
+        <button type="button" className="btn btn--ghost btn--sm" onClick={() => client.send({ type: 'limits.refresh' })}>Atualizar limites</button>
+        {!form && canAdd && <button className="btn btn--ghost btn--sm" onClick={() => setForm(blankDraft())}><PlusIcon size={14} />Nova conta</button>}
       </div>
       {form && !form.id && <AccountForm initial={form} onDone={() => setForm(null)} />}
       {AGENT_CLIS.map((cli) => (
         <section key={cli} className="accounts__group" aria-labelledby={`accounts-${cli}`}>
-          <h3 id={`accounts-${cli}`} className="eyebrow">{CLI_LABEL[cli]}</h3>
+          <div className="accounts__group-head">
+            <h3 id={`accounts-${cli}`} className="eyebrow">{CLI_LABEL[cli]}</h3>
+            {CLIS.includes(cli) && canAdd && <button type="button" className="btn btn--ghost btn--sm" disabled={form !== null} onClick={() => setForm(blankDraft(cli))}><PlusIcon size={14} />Adicionar conta {CLI_LABEL[cli]}</button>}
+          </div>
           {accounts.filter((a) => a.cli === cli).map((account) =>
             form?.id === account.id ? (
               <AccountForm key={account.id} initial={form} onDone={() => setForm(null)} />
@@ -230,6 +237,7 @@ export function AccountsPanel() {
               <AccountCard
                 key={account.id}
                 account={account}
+                now={now}
                 status={accountStatuses.find((s) => s.accountId === account.id)}
                 limits={limits.find((l) => l.accountId === account.id)}
                 liveAgents={panes.filter((p) => p.accountId === account.id && p.status !== 'exited').length}

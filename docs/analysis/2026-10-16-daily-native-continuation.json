@@ -1,0 +1,134 @@
+{
+  "mode": "bounded-resumption",
+  "results": [
+    {
+      "caseId": "op-build",
+      "delivered": true,
+      "message": null,
+      "checks": [
+        {
+          "command": "verify immutable fixture and declared write scope",
+          "exitCode": 0,
+          "summary": "Protected fixture unchanged; writes stay in declared paths"
+        },
+        {
+          "command": "node .benchmark/check-0.mjs",
+          "exitCode": 0,
+          "summary": "Build artifact contains actual source routes and build flag"
+        }
+      ],
+      "cumulativeUsage": {
+        "input": 206411,
+        "output": 879,
+        "cacheRead": 176896,
+        "cacheWrite": 0,
+        "total": 207290,
+        "costUsd": null
+      },
+      "attempts": [
+        {
+          "id": "957d0e68-3cbc-4c0f-bcf1-69d3c3629ee8",
+          "observation": {
+            "attemptId": "957d0e68-3cbc-4c0f-bcf1-69d3c3629ee8",
+            "executionEpoch": "5ace23e4-8140-46ce-ad47-f59a6bfcf031",
+            "mode": "live",
+            "charged": {
+              "input": 206411,
+              "output": 879,
+              "cacheRead": 176896,
+              "cacheWrite": 0,
+              "total": 207290,
+              "costUsd": null
+            },
+            "tokens": null,
+            "costUsd": null,
+            "reportedModels": [
+              "gpt-6-luna"
+            ],
+            "reportedEffort": "low",
+            "identityComplete": false,
+            "updatedAt": 1792159472023,
+            "consumption": {
+              "input": null,
+              "output": null,
+              "cacheRead": null,
+              "cacheWrite": null,
+              "total": null
+            },
+            "reportedEfforts": [
+              "low"
+            ],
+            "identityLevel": "unknown",
+            "invalidated": true
+          }
+        }
+      ],
+      "benchmarkEligible": false
+    },
+    {
+      "caseId": "bug-mean",
+      "delivered": true,
+      "message": null,
+      "checks": [
+        {
+          "command": "verify immutable fixture and declared write scope",
+          "exitCode": 0,
+          "summary": "Protected fixture unchanged; writes stay in declared paths"
+        },
+        {
+          "command": "node .benchmark/check-0.mjs",
+          "exitCode": 0,
+          "summary": "Empty and mixed numeric arrays"
+        }
+      ],
+      "cumulativeUsage": {
+        "input": 194519,
+        "output": 1172,
+        "cacheRead": 149632,
+        "cacheWrite": 0,
+        "total": 195691,
+        "costUsd": null
+      },
+      "attempts": [
+        {
+          "id": "8ff0ced5-988c-41e9-a7e4-e2d8605f7c4f",
+          "observation": {
+            "attemptId": "8ff0ced5-988c-41e9-a7e4-e2d8605f7c4f",
+            "executionEpoch": "69f792f6-3147-47d6-9c2d-7639d93c0caf",
+            "mode": "live",
+            "charged": {
+              "input": 194519,
+              "output": 1172,
+              "cacheRead": 149632,
+              "cacheWrite": 0,
+              "total": 195691,
+              "costUsd": null
+            },
+            "tokens": null,
+            "costUsd": null,
+            "reportedModels": [
+              "gpt-6-luna"
+            ],
+            "reportedEffort": "low",
+            "identityComplete": false,
+            "updatedAt": 1792159493755,
+            "consumption": {
+              "input": null,
+              "output": null,
+              "cacheRead": null,
+              "cacheWrite": null,
+              "total": null
+            },
+            "reportedEfforts": [
+              "low"
+            ],
+            "identityLevel": "unknown",
+            "invalidated": true
+          }
+        }
+      ],
+      "benchmarkEligible": false
+    }
+  ],
+  "promoted": 0
+}

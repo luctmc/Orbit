@@ -1,0 +1,29 @@
+{
+  "initialExit": {
+    "code": null,
+    "signal": "SIGKILL"
+  },
+  "recoveryExit": {
+    "code": 0,
+    "signal": null
+  },
+  "recoveryError": null,
+  "passed": false,
+  "error": "Final observed usage exhausted the bounded mission budget",
+  "evaluation": {
+    "passed": true,
+    "issues": [],
+    "workerResultId": "439bc2c6-cb0c-46f7-860b-ddebf66e494c",
+    "reviewerResultId": "4cd93700-a73d-4f08-baa7-defe00eb2e5f"
+  },
+  "missionUsage": {
+    "input": 1528901,
+    "output": 11474,
+    "cacheRead": 1421651,
+    "cacheWrite": 80271,
+    "total": 1540375,
+    "costUsd": 0.028873
+  },
+  "openings": 5,
+  "output": "/Users/lucas/Documents/GitHub/Orbit/docs/plans/2026-10-15-orbit-coordination-evidence/reverse-1"
+}

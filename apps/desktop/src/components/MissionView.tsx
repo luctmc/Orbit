@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Mission, Pane } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
-import { dictationAvailable, joinText, useDictation } from '../orbit/dictation.ts'
 import { costText, MODE_LABEL, tokensText } from '../orbit/labels.ts'
 import { BoardPanel } from './BoardPanel.tsx'
 import { BrowserPanel } from './BrowserPanel.tsx'
@@ -12,8 +11,16 @@ import { ReportDialog } from './ReportDialog.tsx'
 import { BudgetChip, BudgetDialog } from './Budget.tsx'
 import { LeadChangeDialog } from './dialogs.tsx'
 import { DeleteMissionDialog } from './deletions.tsx'
-import { ArchiveIcon, TrashIcon, BoardIcon, BookmarkIcon, BranchIcon, ReportIcon, FolderIcon, GlobeIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
+import { ArchiveIcon, TrashIcon, BoardIcon, BookmarkIcon, BranchIcon, ReportIcon, FolderIcon, GlobeIcon, PlusIcon } from './icons.tsx'
+import { MessageComposer } from './MessageComposer.tsx'
 import { PaneView } from './PaneView.tsx'
+import { OrbitCompanion } from './OrbitCompanion.tsx'
+import { MissionProgress } from './MissionProgress.tsx'
+import { useMissionProgress } from '../orbit/useMissionProgress.ts'
+import { missionSignal } from '../orbit/missionStatus.ts'
+import { inputSuggestions } from '../orbit/inputSuggestions.ts'
+import { FlowTimeline } from './FlowTimeline.tsx'
+import { ActionMenu } from './ActionMenu.tsx'
 
 export type Layout = 'grade' | 'foco'
 type Columns = 'auto' | '1' | '2' | '3'
@@ -38,7 +45,9 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   onAddAgent: () => void
 }) {
   const client = useOrbitClient()
-  const { squads, browsers, workspaces, cards } = useOrbit()
+  const progress = useMissionProgress(mission.id)
+  const signal = missionSignal(mission, panes, progress.data, progress.connection, progress.error)
+  const { squads, browsers, workspaces, cards, events } = useOrbit()
   const missionCards = cards.filter((c) => c.missionId === mission.id)
   const cardsDone = missionCards.filter((c) => c.column === 'feito').length
   const squad = squads.find((s) => s.id === mission.squadId)
@@ -51,13 +60,20 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   const [budgetOpen, setBudgetOpen] = useState(false)
   const [leadOpen, setLeadOpen] = useState(false)
   const [deletingMission, setDeletingMission] = useState(false)
-  type Side = 'quadro' | 'arquivos' | 'navegador'
+  type Side = 'atividades' | 'fluxo' | 'quadro' | 'arquivos' | 'navegador'
   const [side, setSide] = useState<Side | null>(null)
   const browserOpen = side === 'navegador'
   const toggleSide = (panel: Side) => setSide((open) => (open === panel ? null : panel))
-  const [command, setCommand] = useState('')
-  const commandInput = useRef<HTMLInputElement>(null)
+  const commandInput = useRef<HTMLTextAreaElement>(null)
   const [columns, setColumns] = useState<Columns>(rememberedColumns)
+  const [suggestionsOn, setSuggestionsOn] = useState(() => {
+    try { return localStorage.getItem('orbit.inputSuggestions') !== 'false' } catch { return true }
+  })
+  const toggleSuggestions = () => {
+    const next = !suggestionsOn
+    setSuggestionsOn(next)
+    try { localStorage.setItem('orbit.inputSuggestions', String(next)) } catch { /* private window */ }
+  }
   useEffect(() => {
     try {
       localStorage.setItem('orbit.columns', columns)
@@ -65,25 +81,11 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
       // private window
     }
   }, [columns])
-  /** What was typed before dictating, plus each phrase already recognized. */
-  const dictated = useRef('')
-  const dictation = useDictation((text, final) => {
-    if (final) {
-      dictated.current = joinText(dictated.current, text)
-      setCommand(dictated.current)
-    } else {
-      setCommand(joinText(dictated.current, text))
-    }
-  })
-  const toggleDictation = () => {
-    if (dictation.listening) return dictation.stop()
-    dictated.current = command
-    dictation.start()
-    commandInput.current?.focus()
-  }
   const archived = mission.status === 'archived'
   const selected = panes.find((p) => p.id === selectedPaneId) ?? panes[0] ?? null
   const visible = layout === 'foco' && selected ? [selected] : panes
+  const leader = panes.find(p => p.role === 'lead')
+  const suggestions = suggestionsOn && leader ? inputSuggestions({ mission, pane: leader, progress: progress.error ? null : progress.data, cards: missionCards, connected: progress.connection === 'open' }) : []
 
   // ⌘1–9 picks an agent, ⌘[ and ⌘] step through them, ⌘J writes to the selected one.
   const latest = useRef({ panes, selected, onSelectPane })
@@ -112,15 +114,6 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
   }, [])
   const alive = panes.filter((p) => p.status !== 'exited').length
 
-  const sendCommand = (event: FormEvent) => {
-    event.preventDefault()
-    if (!selected || !command.trim()) return
-    if (dictation.listening) dictation.stop()
-    dictated.current = ''
-    client.send({ type: 'pane.submit', paneId: selected.id, text: command })
-    setCommand('')
-  }
-
   return (
     <main className="mission">
       <div className="mission__head">
@@ -129,7 +122,6 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
             <h1>{mission.title}</h1>
             <span className={`badge badge--${mission.mode}`}>{MODE_LABEL[mission.mode]}{squad ? ` · ${squad.name}` : ''}</span>
             {archived && <span className="badge">Arquivada</span>}
-            {mission.readyAt && <span className="badge badge--ready" title={mission.readySummary ?? undefined}>Pronta</span>}
           </div>
           <p className="muted">
             {mission.objective || 'Sem objetivo descrito.'} · {alive} {alive === 1 ? 'agente vivo' : 'agentes vivos'}
@@ -137,6 +129,8 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
           </p>
         </div>
         <div className="mission__actions">
+          <ActionMenu label="Visualizar">
+          <span className="eyebrow">Layout dos agentes</span>
           <div className="segmented" role="group" aria-label="Layout dos agentes">
             <button type="button" aria-pressed={layout === 'grade'} onClick={() => onLayout('grade')}>Grade</button>
             <button type="button" aria-pressed={layout === 'foco'} onClick={() => onLayout('foco')}>Foco</button>
@@ -149,38 +143,50 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
               </select>
             </label>
           )}
+          <button type="button" aria-pressed={side === 'fluxo'} onClick={() => toggleSide('fluxo')}>Histórico</button>
+          <button type="button" aria-pressed={side === 'quadro'} onClick={() => toggleSide('quadro')}><BoardIcon size={14} />Quadro{missionCards.length > 0 && <span> {cardsDone}/{missionCards.length}</span>}</button>
+          <button type="button" aria-pressed={browserOpen} onClick={() => toggleSide('navegador')}><GlobeIcon size={14} />Navegador{page && !browserOpen && <span className="dot dot--live" aria-label="página aberta" />}</button>
+          </ActionMenu>
           {mission.git && (
             <button className="btn btn--ghost btn--sm" onClick={() => setPrOpen(true)} title={`Branch ${mission.git.branch} (a partir de ${mission.git.base})`}>
               <BranchIcon size={14} />{mission.git.pr ? `PR #${mission.git.pr.number}` : 'Abrir PR'}
             </button>
           )}
-          <button className="btn btn--ghost btn--sm" aria-pressed={side === 'quadro'} onClick={() => toggleSide('quadro')} title="O que está planejado, em andamento e feito">
-            <BoardIcon size={14} />Quadro{missionCards.length > 0 && <span className="muted"> {cardsDone}/{missionCards.length}</span>}
-          </button>
+          <button type="button" className="btn btn--ghost btn--sm" aria-pressed={side === 'atividades'} onClick={() => toggleSide('atividades')}>Atividades</button>
           {workspace && (
             <button className="btn btn--ghost btn--sm" aria-pressed={side === 'arquivos'} onClick={() => toggleSide('arquivos')} title="O que os agentes mudaram e os arquivos do workspace">
               <FolderIcon size={14} />Arquivos
             </button>
           )}
-          <button className="btn btn--ghost btn--sm browser-toggle" aria-pressed={browserOpen} onClick={() => toggleSide('navegador')}
-            title={page ? `Página aberta: ${page.title || page.url}` : 'Navegador da missão'}>
-            <GlobeIcon size={14} />Navegador{page && !browserOpen && <span className="dot dot--live" aria-label="(página aberta)" />}
-          </button>
           {!archived && <BudgetChip mission={mission} onEdit={() => setBudgetOpen(true)} />}
-          {!archived && <button type="button" className="btn btn--ghost btn--sm" onClick={() => setLeadOpen(true)} title="Passar a liderança para outro agente, sem perder o contexto">Trocar líder</button>}
-          <button className="icon-btn" aria-label="Relatório da missão" title="Relatório da missão" onClick={() => setReportOpen(true)}><ReportIcon /></button>
+          {!archived && <button className="btn btn--ghost btn--sm" onClick={onAddAgent}><PlusIcon size={14} />Agente</button>}
+          <ActionMenu label="Missão">
+          <span className="eyebrow">Gerenciar missão</span>
+          {!archived && <button type="button" onClick={() => setLeadOpen(true)}>Trocar líder</button>}
+          <button type="button" onClick={() => setReportOpen(true)}><ReportIcon />Relatório da missão</button>
           {!archived && (
             <>
-              <button className="btn btn--ghost btn--sm" onClick={onAddAgent}><PlusIcon size={14} />Agente</button>
-              <button className="icon-btn" aria-label="Salvar como modelo" title="Salvar como modelo" onClick={() => setSavingTemplate(true)}><BookmarkIcon /></button>
-              <button className="icon-btn" aria-label="Arquivar missão" title="Arquivar missão (encerra os agentes)" onClick={() => {
+              <button type="button" onClick={() => setSavingTemplate(true)}><BookmarkIcon />Salvar como modelo</button>
+              <button type="button" onClick={() => {
                 if (confirm('Arquivar a missão encerra todos os agentes dela. Continuar?')) client.send({ type: 'mission.archive', missionId: mission.id })
-              }}><ArchiveIcon /></button>
+              }}><ArchiveIcon />Arquivar missão</button>
             </>
           )}
-          <button className="icon-btn icon-btn--danger" aria-label="Apagar missão" title="Apagar a missão para sempre" onClick={() => setDeletingMission(true)}><TrashIcon /></button>
+          <button type="button" className="menu__danger" onClick={() => setDeletingMission(true)}><TrashIcon />Apagar missão…</button>
+          </ActionMenu>
         </div>
       </div>
+
+      <section className="mission-signal" data-state={signal.state} aria-label="Próximo passo da missão">
+        <OrbitCompanion state={signal.state} />
+        <div className="mission-signal__text">
+          <span className="eyebrow">Próximo passo</span>
+          <strong role="status">{signal.title}</strong>
+          <p>{signal.detail}</p>
+          {progress.error && <p className="composer__error" role="alert">{progress.error}</p>}
+        </div>
+        <button type="button" className="btn btn--ghost btn--sm" disabled={progress.connection !== 'open' || progress.loading} onClick={progress.refresh}>{progress.loading ? 'Conferindo…' : 'Conferir agora'}</button>
+      </section>
 
       <div className="mission__body">
         {panes.length === 0 ? (
@@ -190,55 +196,26 @@ export function MissionView({ mission, panes, selectedPaneId, layout, onLayout, 
           </div>
         ) : (
           <div className={`pane-grid pane-grid--${layout}${layout === 'grade' && columns !== 'auto' ? ` pane-grid--cols-${columns}` : ''}`}>
-            {visible.map((p) => <PaneView key={p.id} pane={p} selected={p.id === selected?.id} onSelect={() => onSelectPane(p.id)} />)}
+            {visible.map((p) => <PaneView key={p.id} pane={p} selected={p.id === selected?.id} onSelect={() => onSelectPane(p.id)} suggestions={p.role === 'lead' ? suggestions : []} suggestionsOn={suggestionsOn && p.role === 'lead' && ['claude', 'codex'].includes(p.cli)} />)}
           </div>
         )}
+        {side === 'atividades' && <aside className="activity-panel" aria-label="Histórico das atividades">
+          <div className="activity-panel__head"><h2>Trabalho da missão</h2><button type="button" className="btn btn--ghost btn--sm" onClick={() => setSide(null)}>Recolher</button></div>
+          <MissionProgress progress={progress.data} panes={panes} onSelectPane={onSelectPane} />
+        </aside>}
+        {side === 'fluxo' && <FlowTimeline events={events.filter(e => e.missionId === mission.id)} />}
         {browserOpen && <BrowserPanel missionId={mission.id} archived={archived} onClose={() => setSide(null)} />}
         {side === 'quadro' && <BoardPanel missionId={mission.id} panes={panes} archived={archived} onClose={() => setSide(null)} />}
         {side === 'arquivos' && workspace && <FilesPanel workspace={workspace} missionId={mission.id} onClose={() => setSide(null)} />}
       </div>
 
-      {selected && selected.status !== 'exited' && (
-        <form className="command" onSubmit={sendCommand}>
-          <label htmlFor="command" className="command__label" title="⌘J escreve aqui · ⌘1–9 troca de agente · ⌘[ ⌘] anterior e próximo">Falar com #{selected.id}</label>
-          <input
-            id="command"
-            ref={commandInput}
-            value={command}
-            onChange={(e) => {
-              setCommand(e.target.value)
-              dictated.current = e.target.value
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape' && dictation.listening) {
-                e.preventDefault()
-                dictation.stop()
-              }
-            }}
-            placeholder={dictation.listening ? 'Ouvindo… fale; Esc ou o microfone para parar' : 'Escreva para o agente selecionado e tecle Enter'}
-            autoComplete="off"
-          />
-          {dictationAvailable && (
-            <button type="button" className={`icon-btn icon-btn--boxed mic${dictation.listening ? ' mic--on' : ''}`} aria-pressed={dictation.listening}
-              aria-label={dictation.listening ? 'Parar o ditado' : 'Ditar'} title={dictation.listening ? 'Parar o ditado (Esc)' : 'Ditar para o agente'} onClick={toggleDictation}>
-              <MicIcon />
-            </button>
-          )}
-          <button type="submit" className="icon-btn icon-btn--boxed" aria-label="Enviar"><SendIcon /></button>
-        </form>
-      )}
+      {!archived && panes.filter((p) => p.status !== 'exited').map((p) => <MessageComposer key={p.id} pane={p} active={p.id === selected?.id} inputRef={commandInput} suggestions={p.role === 'lead' ? suggestions : []} suggestionsOn={suggestionsOn} onToggleSuggestions={toggleSuggestions} />)}
       {budgetOpen && <BudgetDialog mission={mission} onClose={() => setBudgetOpen(false)} />}
       {leadOpen && <LeadChangeDialog mission={mission} onClose={() => setLeadOpen(false)} />}
       {deletingMission && <DeleteMissionDialog mission={mission} onClose={() => setDeletingMission(false)} />}
       {reportOpen && <ReportDialog mission={mission} onClose={() => setReportOpen(false)} />}
       {savingTemplate && <SaveTemplateDialog mission={mission} lead={panes.find((p) => p.role === 'lead')} onClose={() => setSavingTemplate(false)} />}
       {prOpen && mission.git && <PrDialog mission={mission} onClose={() => setPrOpen(false)} />}
-      {dictation.error && (
-        <div className="command__note" role="alert">
-          <span>{dictation.error}</span>
-          <button type="button" className="link-btn" onClick={dictation.dismissError}>Ok</button>
-        </div>
-      )}
     </main>
   )
 }

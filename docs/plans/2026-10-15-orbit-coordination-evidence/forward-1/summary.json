@@ -1,0 +1,26 @@
+{
+  "initialExit": {
+    "code": 0,
+    "signal": null
+  },
+  "recoveryExit": null,
+  "recoveryError": null,
+  "passed": true,
+  "error": null,
+  "evaluation": {
+    "passed": true,
+    "issues": [],
+    "workerResultId": "17b75baa-10b3-4de7-babb-c5f6d9d158cc",
+    "reviewerResultId": "0184f5e1-4fce-44c4-8eb3-66f000298ab0"
+  },
+  "missionUsage": {
+    "input": 1027170,
+    "output": 6704,
+    "cacheRead": 926568,
+    "cacheWrite": 26352,
+    "total": 1033874,
+    "costUsd": 0.007078
+  },
+  "openings": 3,
+  "output": "/Users/lucas/Documents/GitHub/Orbit/docs/plans/2026-10-15-orbit-coordination-evidence/forward-1"
+}

@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "runtime": "Node 24.21.0 (tests/build runtime), Node 26.10.0 (read-only source timing)",
+  "modelCalls": 0,
+  "checks": [
+    {
+      "command": "apps/desktop/build/node/node --test --test-timeout=20000 'packages/sidecar/test/**/*.test.ts' scripts/lib/autonomy-observations.test.mjs",
+      "exitCode": 0,
+      "passed": 207,
+      "log": "tests.log"
+    },
+    {
+      "command": "apps/desktop/build/node/node --test 'apps/desktop/src/orbit/*.test.ts'",
+      "exitCode": 0,
+      "passed": 6,
+      "log": "desktop-tests.log"
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "log": "typecheck.log"
+    },
+    {
+      "command": "npm run tauri -w @orbit/desktop -- build --debug",
+      "exitCode": 0,
+      "log": "build.log"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "log": "diff-check.log"
+    }
+  ],
+  "measurement": {
+    "unit": "UTF-8 response bytes, not tokens",
+    "baselineReads": 4,
+    "compactReads": 1,
+    "baselineReplyBytes": 2979,
+    "compactReplyBytes": 1512,
+    "fixture": "one simulated delivery over authenticated MCP"
+  },
+  "hashes": [
+    {
+      "path": "packages/sidecar/src/core.ts",
+      "sha256": "6131fe73164ffff6623e3f381fcd0adb5efd6cbdda4ec214b7e8ebbc6a2611c9"
+    },
+    {
+      "path": "packages/sidecar/src/mcp.ts",
+      "sha256": "13e83b4dfb2d8ff1b7456ad48dc2a5b73f09864619115b96926f1ada60530934"
+    },
+    {
+      "path": "packages/sidecar/src/prompts.ts",
+      "sha256": "33e72cd41dbc610bec5fc9b031bf0d56a7e78e8fdcd3d400c5499aa10f2cd13e"
+    },
+    {
+      "path": "packages/sidecar/test/deliveryContext.test.ts",
+      "sha256": "335393c8d953ef02e906a629f9539964a8175930e7395234bc5b40abb5d57ab4"
+    },
+    {
+      "path": "packages/sidecar/test/mcp.test.ts",
+      "sha256": "3cfb7877231a1a14d281f41a048d5f27b713a3382d980ec41e197cb661866f27"
+    },
+    {
+      "path": "scripts/lib/autonomy-observations.mjs",
+      "sha256": "9062b0605007cc58d3ae2eaa7058dd847e9bf3eff6b1ec4b230d51622b410545"
+    },
+    {
+      "path": "scripts/lib/autonomy-observations.test.mjs",
+      "sha256": "b6578e25e6968baadc3eaf2c4bbf158aa582624dad6357098103df38db65680f"
+    },
+    {
+      "path": "scripts/verify-autonomous-harness.mjs",
+      "sha256": "5c179af7e6813dacad7ab4be71ec9fba21b99bc7a1984227115e91f4ab36a104"
+    },
+    {
+      "path": "apps/desktop/build/sidecar/dist/index.mjs",
+      "sha256": "6486975c10038e42507f670c48d92e9f57ec701ba312d37004ad5a2952e70d0e"
+    },
+    {
+      "path": "apps/desktop/src-tauri/target/debug/bundle/macos/Orbit.app/Contents/Resources/sidecar/dist/index.mjs",
+      "sha256": "6486975c10038e42507f670c48d92e9f57ec701ba312d37004ad5a2952e70d0e"
+    }
+  ],
+  "nativeRetest": false,
+  "dailyUseCertified": false
+}

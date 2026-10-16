@@ -1,0 +1,33 @@
+{
+  "installedAt": "2026-10-16T00:57:47.852Z",
+  "source": "/Users/lucas/Documents/GitHub/Orbit/apps/desktop/src-tauri/target/release/bundle/macos/Orbit.app",
+  "target": "/Applications/Orbit.app",
+  "backup": "/Applications/.Orbit-backups/2026-10-15-8ab376fb",
+  "previousAppPath": "/Applications/.Orbit-backups/2026-10-15-8ab376fb/Orbit.app",
+  "userDataPath": "/Users/lucas/.orbit",
+  "userDataBackup": "/Applications/.Orbit-backups/2026-10-15-8ab376fb/data",
+  "dataUnchanged": true,
+  "validatedBinaryBeforeSigning": "ac3b23cd3bffe5fa24ac9e3c84fc2d134f34dd779f959644d7e2234a8aa05ace",
+  "installedBinaryAfterSigning": "5c081ccd28b7f539070bc2700772399264e2c47ff6e7c578de6b7a3c406a1af4",
+  "localAdHocSigning": true,
+  "signatureVerified": true,
+  "installedFileCount": 61,
+  "previousFileCount": 61,
+  "appOpened": true,
+  "smoke": {
+    "isolatedData": true,
+    "exitCode": 0,
+    "readinessObserved": true,
+    "nativeAccountButtonsObserved": true
+  },
+  "loginCheckBackup": {
+    "authorized": true,
+    "path": "/Applications/.Orbit-backups/2026-10-15-cd5b502f/login-check-profile",
+    "matchesOriginal": true
+  },
+  "personalStateUnchangedAfterSmoke": true,
+  "bundleResources": {
+    "node": "e4b5a3af0e05c75de2eae013904145f40fe7fc2a6e6f17510128bf45cca4e79b",
+    "sidecar": "38e05f69710d9f523123773cedd8c7ee48565662cc8c5edd79dcbd710f4f58da"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "date": "2026-10-14",
+  "phase": "R1",
+  "status": "implemented-in-working-tree",
+  "checks": [
+    {
+      "command": "npm test",
+      "exitCode": 0,
+      "sidecar": 125,
+      "desktop": 2,
+      "failures": 0
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run tauri -w @orbit/desktop -- build --debug",
+      "exitCode": 0,
+      "bundle": "/Users/lucas/Documents/GitHub/Orbit/apps/desktop/src-tauri/target/debug/bundle/macos/Orbit.app",
+      "warnings": [
+        "Existing JavaScript chunk above 500 kB"
+      ]
+    },
+    {
+      "runtime": "v24.21.0",
+      "files": [
+        "activityLedger.test.ts",
+        "sessionAccounting.test.ts",
+        "mcp.test.ts",
+        "deliveryObligations.test.ts"
+      ],
+      "tests": 28,
+      "failures": 0,
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "faultInjection": [
+    "SIGKILL after durable reservation",
+    "SIGKILL after durable result",
+    "Disk write failure before result acknowledgement",
+    "Disk write failure before usage acknowledgement"
+  ],
+  "sha256": {
+    "packages/protocol/src/index.ts": "5bd73486f5ac1f556472b988b10f6438f3e904e59b3127c1bc0ca577b9829632",
+    "packages/sidecar/src/activityLedger.ts": "4903b471b7ca20fd67348052433265533a73ef4cb76488da1529bf2861aef83b",
+    "packages/sidecar/src/sessionAccounting.ts": "e722f30abf5dcd1809469c4b9be62a7d91e5661e54d3a357de437447440e4c52",
+    "packages/sidecar/src/core.ts": "2b44fca1fc8831bf01f8f1d3c5af3527cafa172fa736df10b75027b763394314",
+    "packages/sidecar/src/store.ts": "98d8470325fc5d4fbfe6c033826ddc85567d8e5e88e70d21870cf4726cc1eb6d",
+    "packages/sidecar/src/mcp.ts": "e12c087e1f54a05e906af4196e623ad34f15605fbf1ec75b0fa28c2c32359222",
+    "packages/sidecar/src/prompts.ts": "1322714582c854636cb6dc5bd11aa75afa6b4b3352bccc1a5a80c6750f33afe2",
+    "packages/sidecar/test/activityLedger.test.ts": "cc0060445f33d9f95c38e227ba921c7c86e2bf789294b8352cc679891f71536d",
+    "packages/sidecar/test/sessionAccounting.test.ts": "84a1f6cdd983a9aa581418aea3b6ebcd5b5b72e68f37a0c36ceb830df05b4509",
+    "packages/sidecar/test/mcp.test.ts": "01ef1d125cd7c9fdb5ca046c0f5ea6a85f3e234b3b7ae76a2f9b937ca1c45a05"
+  },
+  "logsSha256": {
+    "tests.log": "4175ab6eaebbfc3d2b78e6412adc57b78c8f90d97efb9260c1ecec63be36640d",
+    "typecheck.log": "2d335bfdd362f0b1017104b28bc87bbe1688e4825e23dc1d2fe4f4f8b97ed6e4",
+    "build.log": "9791b2a8f65434bb6f313750925819f77d52fd7b7e77b0c75b3bc5a1213f491b",
+    "node24.log": "b19dfb717de6b14fc6e0d3d67fc83b867e31cf959aac587c092e794d8316a182"
+  },
+  "modelCallsThisImplementationRound": 0,
+  "installedAppReplaced": false,
+  "remainingPhases": [
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6"
+  ],
+  "limits": [
+    "No provider consumption ACK or durable notification outbox yet",
+    "No execution epochs yet",
+    "No independent diff-bound result validation yet",
+    "No measured model token savings",
+    "No power-loss durability claim"
+  ]
+}

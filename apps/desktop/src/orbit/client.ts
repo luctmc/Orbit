@@ -1,6 +1,7 @@
 import type { Account, AccountLimits, AccountStatus, Card, Catalog, CatalogItem, MissionTemplate, Schedule, UpdateStatus, MissionBrowser, ClientMessage, CliStatus, Mission, MissionEvent, OrbitSettings, Pane, Routing, RoutingProposal, ServerMessage, Squad, UsageDay, Workspace } from '@orbit/protocol'
 
 export interface OrbitState {
+  startup?: import('@orbit/protocol').StartupTask[]
   connection: 'connecting' | 'open' | 'closed'
   workspaces: Workspace[]
   missions: Mission[]
@@ -125,7 +126,7 @@ export class OrbitClient {
       const timer = setTimeout(() => finish(() => reject(new Error('O motor não respondeu a tempo'))), timeoutMs)
       const listener = (m: ServerMessage) => {
         if (m.type === type && match(m as Extract<ServerMessage, { type: T }>)) finish(() => resolve(m as Extract<ServerMessage, { type: T }>))
-        else if (m.type === 'files.error') finish(() => reject(new Error(m.message)))
+        else if ((m.type === 'files.error' && message.type !== 'mission.progress') || ((m.type === 'workspace.error' || m.type === 'attachment.error' || m.type === 'pane.submit.error' || m.type === 'mission.progress.error') && 'requestId' in message && m.requestId === message.requestId)) finish(() => reject(new Error(m.message)))
       }
       const finish = (settle: () => void) => {
         clearTimeout(timer)
@@ -196,11 +197,14 @@ export class OrbitClient {
   }
 
   private receive(message: ServerMessage): void {
-    if (message.type.startsWith('files.') || message.type.startsWith('git.') || message.type.startsWith('report') || message.type === 'ledger') {
+    if (message.type.startsWith('mission.progress') || message.type.startsWith('attachment.') || message.type === 'pane.submitted' || message.type === 'pane.submit.error' || message.type === 'pane.conversation' || message.type.startsWith('files.') || message.type.startsWith('git.') || message.type.startsWith('report') || message.type === 'ledger') {
       for (const answer of [...this.answers]) answer(message)
       return
     }
     switch (message.type) {
+      case 'engine.startup':
+        this.update({ startup: message.tasks })
+        return
       case 'snapshot':
         // Open pages follow as browser.state messages.
         this.update({ ...message.snapshot, browsers: [] })

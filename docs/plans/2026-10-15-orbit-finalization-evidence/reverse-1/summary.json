@@ -1,0 +1,29 @@
+{
+  "initialExit": {
+    "code": null,
+    "signal": "SIGKILL"
+  },
+  "recoveryExit": {
+    "code": 0,
+    "signal": null
+  },
+  "recoveryError": null,
+  "passed": true,
+  "error": null,
+  "evaluation": {
+    "passed": true,
+    "issues": [],
+    "workerResultId": "eaeb9c08-f124-4f30-9e45-c1fd1a5ccbfe",
+    "reviewerResultId": "335bf3a3-3f73-4a23-8cc7-4dbbe14b22bb"
+  },
+  "missionUsage": {
+    "input": 1478305,
+    "output": 12689,
+    "cacheRead": 1385353,
+    "cacheWrite": 77129,
+    "total": 1490994,
+    "costUsd": 0.027286
+  },
+  "openings": 5,
+  "output": "/Users/lucas/Documents/GitHub/Orbit/docs/plans/2026-10-15-orbit-finalization-evidence/reverse-1"
+}

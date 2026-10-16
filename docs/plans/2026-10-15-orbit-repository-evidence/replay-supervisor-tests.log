@@ -1,0 +1,12 @@
+✔ regression replay checks both hashes before mutation and restores only declared source paths (9.015459ms)
+✔ repository snapshot resolves workspace packages locally and excludes personal/build data (66.792667ms)
+✔ oracle rejects modified tests and unexpected files before executing any check (1.478208ms)
+✔ second task protects the first patch and runs the copied sources (219.686458ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 380.806916

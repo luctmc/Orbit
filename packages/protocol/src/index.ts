@@ -104,7 +104,10 @@ export interface UsageEntry {
   model: string | null
   accountId: string | null
   tokens: number
-  costUsd: number
+  /** Known subtotal; null means no USD amount was reported. */
+  costUsd: number | null
+  /** False when some usage in this row lacks a reported cost. Absent on legacy rows. */
+  costComplete?: boolean
 }
 
 /** A mission whose agents each work in their own git worktree and branch. */
@@ -229,8 +232,171 @@ export type PaneHandoff = HandoffStatus | 'auto'
 /** `waiting` = the agent needs a human; set by hook reports, not by output heuristics. */
 export type PaneStatus = 'starting' | 'running' | 'idle' | 'waiting' | 'exited'
 
+/** Durable work identity; terminals are replaceable views of its attempts. */
+export interface ActivityRecord {
+  id: string
+  missionId: string
+  key: string
+  title: string
+  revision: number
+  contractHash: string
+  acceptance: string[]
+  state: 'reserved' | 'running' | 'stopped' | 'blocked' | 'awaiting_validation' | 'accepted' | 'waived'
+  /** Absent on historical work; never invent independent acceptance during migration. */
+  verificationRequired?: boolean
+  dependencies?: Array<{ activityId: string; revision: number; attemptId: string; resultId: string }>
+  activeAttemptId: string
+  deliveryId: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+export interface ActivityAttempt {
+  id: string
+  activityId: string
+  activityRevision: number
+  contractHash: string
+  acceptance: string[]
+  paneId: number
+  executionEpoch?: string | null
+  state: 'reserved' | 'starting' | 'running' | 'stopped' | 'delivered'
+  cli: AgentCli | null
+  model: string | null
+  accountId: string | null
+  sessionId: string | null
+  retryReason: string | null
+  error: string | null
+  decision?: DecisionReceipt
+  /** A retained view for idempotent replies after the terminal is closed. */
+  pane: Pane | null
+  createdAt: number
+  updatedAt: number
+}
+
+/** Submitted evidence is retained independently of the bounded mission event feed. */
+export interface ActivityResult {
+  id: string
+  activityId: string
+  attemptId: string
+  activityRevision: number
+  digest: string
+  status: PaneHandoff
+  state: 'submitted' | 'unverified'
+  summary: string
+  evidence: string
+  details: string
+  deliveredTo: number | null
+  createdAt: number
+  source?: SourceRevision | null
+}
+
+export interface ExecutionPolicy {
+  /** Persisted after spawn; an unknown PID never proves that a process has stopped. */
+  pid?: number
+  missionId: string
+  epoch: string
+  readOnly: boolean
+  /** Canonical physical copies, not file-level filesystem permissions. */
+  roots: string[]
+}
+export interface SourceRevision {
+  version: 1
+  digest: string
+  roots: Array<{ root: string; kind: 'git' | 'files'; head: string | null; digest: string; files: number }>
+}
+export type HarnessModule = 'inspect' | 'recover' | 'reproduce' | 'implement' | 'review' | 'verify' | 'deliver'
+export interface HarnessCandidate {
+  cli: AgentCliForRole
+  model: string
+  effort: Effort
+  cliVersion: string
+  catalogRevision: string
+}
+export interface HarnessStrategy {
+  version: 1
+  policyVersion: string
+  key: string
+  stratum: string
+  modules: HarnessModule[]
+  optionalContextBytes: number
+  readOnly: boolean
+  requireReadOnlySandbox: boolean
+  independentReviewRequired: true
+  qualityFloor: number
+}
+export interface HarnessDecision {
+  strategy: HarnessStrategy
+  status: 'measured' | 'fallback' | 'explicit'
+  selected: HarnessCandidate | null
+  /** Effective requested seat; identity still needs confirmation from provider evidence. */
+  executed?: HarnessCandidate | null
+  executionMode?: 'live' | 'simulated'
+  samples: number
+  qualityLowerBound: number | null
+  tokens: number | null
+  costUsd: number | null
+  durationMs: number | null
+  evidenceDigest: string | null
+  reasons: string[]
+}
+
+export interface DecisionReceipt {
+  version: 1
+  policyRevision: string
+  catalogRevision: string | null
+  source: 'explicit' | 'rule' | 'classifier' | 'fallback' | 'benchmark'
+  requested: { cli: AgentCli | null; model: string | null; effort: Effort | null }
+  effective: { cli: AgentCli; model: string | null; effort: Effort | null; accountId: string | null }
+  reasons: string[]
+  capabilityLimits: string[]
+  /** Composed strategy and comparable evidence; absent on historical attempts. */
+  harness?: HarnessDecision
+  at: number
+}
+export interface ResultInspection {
+  scope: 'result' | 'integration'
+  id: string
+  missionId: string
+  resultId: string
+  reviewer: { paneId: number; epoch: string; attemptId: string | null }
+  source: SourceRevision
+  integration: SourceRevision
+  contractDigest: string
+  createdAt: number
+}
+export interface VerificationInput {
+  inspectionId: string
+  verdict: 'accepted' | 'changes_required' | 'unverified'
+  summary: string
+  checks: Array<{ command: string; exitCode: number; summary: string }>
+  criteria: Array<{ item: number; met: boolean; how: string }>
+}
+export interface VerificationRecord extends VerificationInput {
+  /** Explicit final integration acceptance and mission-ready state committed together. */
+  completion?: { readyAt: number; summary: string; eventId: string }
+  scope: 'result' | 'integration'
+  id: string
+  missionId: string
+  resultId: string
+  activityId: string
+  activityRevision: number
+  attemptId: string
+  reviewer: ResultInspection['reviewer']
+  source: SourceRevision
+  integration: SourceRevision
+  contractDigest: string
+  provenance: 'independent-agent-report'
+  createdAt: number
+}
+
 export interface Pane {
+  /** Effective external MCP profile for this process; legacy panes inherited their CLI config. */
+  toolProfile?: AgentToolProfile
   id: number
+  /** Changes on every process opening, independently of the resumed provider session. */
+  executionEpoch?: string
+  /** Assignment captured with an agent request; changes when a terminal receives new work. */
+  activityAttemptId?: string
   missionId: string
   role: PaneRole
   /** Squad role this helper plays (e.g. "Revisor"), when opened from a squad. */
@@ -268,6 +434,36 @@ export interface Pane {
   createdAt: number
 }
 
+export interface DeliveryNotice {
+  id: string
+  missionId: string
+  resultId: string
+  recipient: { kind: 'lead' } | { kind: 'pane'; paneId: number }
+  text: string
+  state: 'persisted' | 'pty_accepted' | 'agent_acknowledged'
+  deliveries: Array<{ paneId: number; executionEpoch: string; at: number }>
+  acknowledgedBy: { paneId: number; executionEpoch: string; at: number } | null
+  createdAt: number
+}
+
+/** A read-only observation for the visible mission; no model calls or acceptance mutation. */
+export interface MissionProgress {
+  missionId: string
+  observedAt: number
+  activities: ActivityRecord[]
+  attempts: ActivityAttempt[]
+  results: ActivityResult[]
+  verifications: VerificationRecord[]
+  deliveries: Array<Omit<DeliveryNotice, 'text'>>
+  validation: Array<{ activityId: string; resultId: string | null; valid: boolean; reason: string | null }>
+  integration: {
+    state: 'none' | 'pending' | 'current' | 'stale' | 'unknown'
+    reviewId: string | null
+    reason: string | null
+    checkedAt: number | null
+  }
+}
+
 /** Tokens an agent (or a mission, or a day) used. `total` counts every kind. */
 export interface TokenUsage {
   input: number
@@ -297,6 +493,10 @@ export interface AccountLimits {
   weekly: RateWindow | null
   plan: string | null
   updatedAt: number
+  /** Last refresh attempt, distinct from the successful observation timestamp. */
+  checkedAt?: number
+  source?: 'provider' | 'session'
+  refreshError?: string | null
 }
 
 /** Tokens used on one local day (YYYY-MM-DD), per CLI. */
@@ -305,6 +505,7 @@ export type UsageDay = { day: string } & Record<AgentCliForRole, number>
 
 /** One seat in a squad: who fills it and what they are told to do. */
 export interface SquadRole {
+  readOnly?: boolean
   /** Stable slug the lead uses to open the role, e.g. `revisor`. */
   id: string
   name: string
@@ -415,6 +616,14 @@ export interface TaskType {
 
 /** How hard an activity is: simple ones go to a cheaper model, hard ones to a stronger one or more effort. */
 export type Difficulty = 'simples' | 'normal' | 'dificil'
+export const ATTACHMENT_LIMITS = { files: 8, bytes: 4 * 1024 * 1024, totalBytes: 8 * 1024 * 1024 } as const
+export interface Attachment {
+  id: string
+  name: string
+  mime: string
+  size: number
+  path: string
+}
 export const DIFFICULTIES: readonly Difficulty[] = ['simples', 'normal', 'dificil']
 
 /** A CLI, model and effort that can take a kind of work. */
@@ -426,6 +635,8 @@ export interface AgentSeat {
 
 /** Agentic missions: the lead's default and the task table it routes helpers through. */
 export interface Routing {
+  /** Optimistic edit token supplied by the engine; absent on factory/legacy inputs. */
+  revision?: string
   lead: { cli: AgentCliForRole; model: string | null; effort: Effort | null }
   taskTypes: TaskType[]
 }
@@ -485,7 +696,7 @@ export interface AccountInput {
 
 export const ACCOUNT_LIMITS = { accounts: 12, name: 40, key: 512, url: 300 } as const
 /** Above this, a window counts as used up when Orbit picks an account. */
-export const ACCOUNT_FULL_PERCENT = 95
+export const ACCOUNT_FULL_PERCENT = 85
 
 /** The mission's browser: one page agents and the person look at together. */
 export interface MissionBrowser {
@@ -525,6 +736,18 @@ export interface CatalogItem {
   source: string
   /** The CLI's own config already turns it off. */
   offInCli: boolean
+  /** Read-only text resource. Discovery does not execute or load its instructions into an agent. */
+  resource?: {
+    path: string
+    root: string
+    sha256: string
+    bytes: number
+    version: string | null
+    origin: 'bundled' | 'personal' | 'system' | 'project' | 'plugin'
+    projectRoot: string | null
+    role: string | null
+    compatibility: AgentCliForRole[]
+  }
 }
 
 export const catalogId = (cli: AgentCliForRole, kind: CatalogKind, name: string) => `${cli}:${kind}:${name}`
@@ -621,7 +844,10 @@ export interface Snapshot {
 }
 
 /** Choices that change how Orbit behaves, kept with its data. */
+export type AgentToolProfile = 'orbit' | 'inherit'
 export interface OrbitSettings {
+  /** Claude/Codex external MCP visibility on the next opening or resume; native tools remain. */
+  agentToolProfile?: AgentToolProfile
   /** When Orbit opens, bring back the agents of active missions in their conversations. */
   resumeOnStart: boolean
   /** When no keyword tells an activity's type, a small model (Claude Haiku) decides. */
@@ -635,6 +861,8 @@ export type RoutingChange = Partial<Pick<TaskType, 'cli' | 'model' | 'effort' | 
 
 /** A lead's suggestion to change the task table; the person accepts or refuses it. */
 export interface RoutingProposal {
+  /** Legacy proposals lack a base and must be proposed again before acceptance. */
+  baseRevision?: string
   id: string
   missionId: string
   paneId: number
@@ -647,6 +875,8 @@ export interface RoutingProposal {
 }
 
 export interface SpawnPaneRequest {
+  readOnly?: boolean
+  requireReadOnlySandbox?: boolean
   missionId: string
   role: PaneRole
   cli: AgentCli
@@ -666,13 +896,14 @@ export interface SpawnPaneRequest {
 }
 
 export type ClientMessage =
+  | { type: 'mission.progress'; missionId: string; requestId: string }
   | { type: 'workspace.open'; path: string }
   /** A workspace made of several folders; the first is the main one. */
-  | { type: 'workspace.create'; name: string; folders: string[] }
+  | { type: 'workspace.create'; name: string; folders: string[]; requestId?: string }
   /** Rename, replace the folder list or the instructions (new agents get them). */
-  | { type: 'workspace.update'; workspaceId: string; name?: string; folders?: string[]; instructions?: string }
+  | { type: 'workspace.update'; workspaceId: string; name?: string; folders?: string[]; instructions?: string; requestId?: string }
   /** `isolation: 'worktrees'` gives every agent its own git worktree and branch. */
-  | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'>; cards?: string[]; allowedClis?: AgentCliForRole[]; budget?: { tokens: number | null; costUsd: number | null } | null }
+  | { type: 'mission.create'; workspaceId: string; title: string; objective: string; mode: MissionMode; adaptiveLead?: boolean; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'>; cards?: string[]; allowedClis?: AgentCliForRole[]; budget?: { tokens: number | null; costUsd: number | null } | null }
   /** Sets (or clears, with both null) a mission's budget. */
   | { type: 'mission.budget'; missionId: string; tokens: number | null; costUsd: number | null }
   /** The usage ledger of a month, YYYY-MM (answered to this connection). */
@@ -708,7 +939,9 @@ export type ClientMessage =
   /** Raw keystrokes from the terminal view. */
   | { type: 'pane.input'; paneId: number; data: string }
   /** A whole message typed elsewhere (the command bar): pasted, then submitted with Enter. */
-  | { type: 'pane.submit'; paneId: number; text: string }
+  | { type: 'pane.submit'; paneId: number; text: string; attachments?: string[]; requestId?: string }
+  | { type: 'attachment.add'; paneId: number; requestId: string; name: string; mime: string; data: string }
+  | { type: 'pane.conversation'; paneId: number }
   | { type: 'pane.resize'; paneId: number; cols: number; rows: number }
   /** Kills the process if alive and removes the pane from the mission. */
   | { type: 'pane.close'; paneId: number }
@@ -743,6 +976,7 @@ export type ClientMessage =
   | { type: 'account.delete'; accountId: string }
   /** Ask each CLI about its accounts' logins again. */
   | { type: 'account.check' }
+  | { type: 'limits.refresh' }
   /** Opens a terminal running the CLI's login for this account. */
   | { type: 'account.login'; accountId: string }
   /** Git status of each folder of the workspace (answered to this connection only). */
@@ -762,7 +996,23 @@ export type ClientMessage =
   | { type: 'browser.watch'; missionId: string; on: boolean }
   | { type: 'browser.close'; missionId: string }
 
+export interface StartupTask {
+  id: 'recovery' | 'catalog' | 'accounts' | 'clis' | 'skills'
+  state: 'pending' | 'running' | 'ready' | 'error'
+  message?: string
+}
+
 export type ServerMessage =
+  | { type: 'workspace.saved'; requestId: string; workspace: Workspace }
+  | { type: 'workspace.error'; requestId: string; message: string }
+  | { type: 'engine.startup'; tasks: StartupTask[] }
+  | { type: 'mission.progress'; requestId: string; progress: MissionProgress }
+  | { type: 'mission.progress.error'; requestId: string; missionId: string; message: string }
+  | { type: 'attachment.added'; requestId: string; attachment: Attachment }
+  | { type: 'attachment.error'; requestId: string; message: string }
+  | { type: 'pane.submitted'; requestId: string; paneId: number }
+  | { type: 'pane.submit.error'; requestId: string; message: string }
+  | { type: 'pane.conversation'; paneId: number; turns: Array<{ role: 'pessoa' | 'agente'; text: string }> }
   | { type: 'snapshot'; snapshot: Snapshot }
   /**
    * The pane's screen and scrollback, serialized at the PTY's real size. Replaying raw output at

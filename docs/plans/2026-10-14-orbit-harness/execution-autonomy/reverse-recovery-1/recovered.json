@@ -1,0 +1,702 @@
+{
+  "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+  "leadId": 1,
+  "readyAt": null,
+  "missionUsage": {
+    "input": 1660710,
+    "output": 11009,
+    "cacheRead": 1518303,
+    "cacheWrite": 114751,
+    "total": 1671514,
+    "costUsd": 0.03058
+  },
+  "budget": {
+    "tokens": 1500000,
+    "costUsd": 0.15,
+    "warned": true,
+    "exceeded": true
+  },
+  "history": {
+    "activities": [
+      {
+        "id": "078fbe32-2972-43b1-a51b-e2f3f0903a80",
+        "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+        "key": "e41dc8de685ec13f3b1a3a2cac220b615668affb8f330eb8aa314d9fe975a78e",
+        "title": "Fix offset pagination (worker)",
+        "revision": 1,
+        "contractHash": "9652b25a8fb8e9b0b62a9a904b9b65eb6475385844ffb48d8d368ba16dc82c16",
+        "acceptance": [
+          "Preserve protected fixtures and modify only declared paths",
+          "One-based pages and lower bound"
+        ],
+        "verificationRequired": true,
+        "dependencies": [],
+        "state": "accepted",
+        "activeAttemptId": "a5103b1a-6d70-4348-abda-4d3e9ad6e880",
+        "deliveryId": "3602f748-8e1e-45d4-8302-a1ce6d661081",
+        "createdAt": 1792073298183,
+        "updatedAt": 1792073753228
+      },
+      {
+        "id": "ce37c9c1-3b7b-4794-af5b-0002ff0a78ce",
+        "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+        "key": "241e938d79b56d7d365d9c35550cd87e78e91c936dee413c69a0cccee957a319",
+        "title": "Independent review of offset fix (reviewer)",
+        "revision": 1,
+        "contractHash": "86a157a3c9068d859f080408a5b5fd9cfaacf366a4c455e521bf0eff77b25e5a",
+        "acceptance": [
+          "Independently review exact worker result and record executable evidence"
+        ],
+        "verificationRequired": true,
+        "dependencies": [],
+        "state": "awaiting_validation",
+        "activeAttemptId": "ac23562e-e468-4ebe-b60c-995377251924",
+        "deliveryId": "cbb0cc3f-17cb-4d27-a702-3b93cbfcc5a3",
+        "createdAt": 1792073734449,
+        "updatedAt": 1792073755100
+      }
+    ],
+    "attempts": [
+      {
+        "id": "a5103b1a-6d70-4348-abda-4d3e9ad6e880",
+        "activityId": "078fbe32-2972-43b1-a51b-e2f3f0903a80",
+        "activityRevision": 1,
+        "contractHash": "9652b25a8fb8e9b0b62a9a904b9b65eb6475385844ffb48d8d368ba16dc82c16",
+        "acceptance": [
+          "Preserve protected fixtures and modify only declared paths",
+          "One-based pages and lower bound"
+        ],
+        "paneId": 2,
+        "state": "delivered",
+        "cli": "codex",
+        "model": "gpt-6-luna",
+        "accountId": "codex",
+        "sessionId": "01a13fe4-7cbe-7741-be36-fff7003fd534",
+        "retryReason": null,
+        "error": null,
+        "pane": {
+          "id": 2,
+          "executionEpoch": "c7b349a4-5744-4ce5-893a-0c483dd66dfb",
+          "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+          "role": "crew",
+          "squadRole": null,
+          "taskType": "Bug",
+          "cli": "codex",
+          "model": "gpt-6-luna",
+          "effort": "low",
+          "accountId": "codex",
+          "sessionId": "01a13fe4-7cbe-7741-be36-fff7003fd534",
+          "branch": null,
+          "title": "Fix offset pagination (worker)",
+          "cwd": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-0CzAMN/workspace",
+          "status": "running",
+          "attention": null,
+          "choices": null,
+          "deliveredAt": 1792073337366,
+          "handoffStatus": "done",
+          "assignedBy": 1,
+          "usage": {
+            "input": 317156,
+            "output": 1754,
+            "cacheRead": 289536,
+            "cacheWrite": 0,
+            "total": 318705,
+            "costUsd": null
+          },
+          "contextPercent": 12,
+          "pid": 76875,
+          "exitCode": null,
+          "createdAt": 1792073298238,
+          "activityAttemptId": "a5103b1a-6d70-4348-abda-4d3e9ad6e880"
+        },
+        "createdAt": 1792073298183,
+        "updatedAt": 1792073334766,
+        "decision": {
+          "source": "explicit",
+          "requested": {
+            "cli": "codex",
+            "model": "gpt-6-luna",
+            "effort": "low"
+          },
+          "effective": {
+            "cli": "codex",
+            "model": "gpt-6-luna",
+            "effort": "low",
+            "accountId": "codex"
+          },
+          "reasons": [
+            "tipo: Bug (escolhido pelo líder)",
+            "critérios de aceite: 2",
+            "complexidade: simples (líder)",
+            "conta: conta deste Mac (36% usado, 0 agentes nela)"
+          ],
+          "catalogRevision": "fa13110789206d79c374c9f7996bbaaf30f12db5c946a53d13db1bec2c87db54",
+          "capabilityLimits": [
+            "Capacidades vêm do contrato do adapter, não de certificação de toda versão do provedor"
+          ],
+          "version": 1,
+          "policyRevision": "b0ff382afffba8a87656e2a76669cc801ade3d68693e95100ecd7dee94846ba3",
+          "at": 1792073298227
+        },
+        "executionEpoch": "c7b349a4-5744-4ce5-893a-0c483dd66dfb"
+      },
+      {
+        "id": "ac23562e-e468-4ebe-b60c-995377251924",
+        "activityId": "ce37c9c1-3b7b-4794-af5b-0002ff0a78ce",
+        "activityRevision": 1,
+        "contractHash": "86a157a3c9068d859f080408a5b5fd9cfaacf366a4c455e521bf0eff77b25e5a",
+        "acceptance": [
+          "Independently review exact worker result and record executable evidence"
+        ],
+        "paneId": 3,
+        "state": "delivered",
+        "cli": "claude",
+        "model": "claude-haiku-5-5",
+        "accountId": "claude",
+        "sessionId": "431628c7-facf-439f-a57b-236152793f0b",
+        "retryReason": null,
+        "error": null,
+        "pane": {
+          "id": 3,
+          "executionEpoch": "cb4d1202-7115-4f87-aa62-a6a2428dd6cb",
+          "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+          "role": "crew",
+          "squadRole": null,
+          "taskType": "Review",
+          "cli": "claude",
+          "model": "claude-haiku-5-5",
+          "effort": "low",
+          "accountId": "claude",
+          "sessionId": "431628c7-facf-439f-a57b-236152793f0b",
+          "branch": null,
+          "title": "Independent review of offset fix (reviewer)",
+          "cwd": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-0CzAMN/workspace",
+          "status": "running",
+          "attention": null,
+          "choices": null,
+          "deliveredAt": 1792073755100,
+          "handoffStatus": "done",
+          "assignedBy": 1,
+          "usage": {
+            "input": 315751,
+            "output": 1201,
+            "cacheRead": 269365,
+            "cacheWrite": 46376,
+            "total": 316952,
+            "costUsd": 0.009299550000000002
+          },
+          "contextPercent": 7,
+          "pid": 80158,
+          "exitCode": null,
+          "createdAt": 1792073734562,
+          "activityAttemptId": "ac23562e-e468-4ebe-b60c-995377251924"
+        },
+        "createdAt": 1792073734449,
+        "updatedAt": 1792073753449,
+        "decision": {
+          "source": "explicit",
+          "requested": {
+            "cli": "claude",
+            "model": "claude-haiku-5-5",
+            "effort": "low"
+          },
+          "effective": {
+            "cli": "claude",
+            "model": "claude-haiku-5-5",
+            "effort": "low",
+            "accountId": "claude"
+          },
+          "reasons": [
+            "tipo: Review (escolhido pelo líder)",
+            "critérios de aceite: 1",
+            "complexidade: simples (líder)",
+            "conta: conta deste Mac (81% usado, 1 agente nela)"
+          ],
+          "catalogRevision": "fa13110789206d79c374c9f7996bbaaf30f12db5c946a53d13db1bec2c87db54",
+          "capabilityLimits": [
+            "Somente leitura depende de hooks/instruções; sandbox nativo indisponível",
+            "Capacidades vêm do contrato do adapter, não de certificação de toda versão do provedor"
+          ],
+          "version": 1,
+          "policyRevision": "b0ff382afffba8a87656e2a76669cc801ade3d68693e95100ecd7dee94846ba3",
+          "at": 1792073734526
+        },
+        "executionEpoch": "cb4d1202-7115-4f87-aa62-a6a2428dd6cb"
+      }
+    ],
+    "results": [
+      {
+        "status": "done",
+        "summary": "Fixed offset pagination in src/page.mjs: pages are clamped to integer >= 1 and converted to zero-based offsets; size is clamped to a positive integer. No other files changed.",
+        "evidence": "From the owned root, inspected src/page.mjs and .benchmark/all.mjs before edits. Ran `/Users/lucas/Documents/GitHub/Orbit/apps/desktop/build/node/node .benchmark/all.mjs` alone before fix: exit 1, AssertionError `10 !== 0` at .benchmark/check-0.mjs:9. After the edit, ran the same command alone: exit 0, no output. Final `git status --short` showed only `M src/page.mjs`; `git diff -- src/page.mjs` showed only the intended one-line change.",
+        "details": "✓ 1. Preserve protected fixtures and modify only declared paths: Final git status showed only src/page.mjs modified; diff was limited to that path. No new files were created, and .benchmark fixtures were not modified.\n✓ 2. One-based pages and lower bound: Protected .benchmark check exited 0, covering offset(1,10)=0, offset(3,10)=20, offset(0,4)=0, and offset(-2,4)=0. Implementation floors and clamps size to a positive integer.\n\nDiff: replaced direct page*size with (max(1, floor(Number(page)||1)) - 1) * max(1, floor(Number(size)||1)). Final git status showed only src/page.mjs modified.",
+        "deliveredTo": 1,
+        "source": {
+          "version": 1,
+          "roots": [
+            {
+              "root": "/private/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-0CzAMN/workspace",
+              "kind": "git",
+              "head": "2038d5cef67748eb235b86a028ea5c36b70e9cd8",
+              "files": 5,
+              "digest": "0fa0906008932d9e09ffb1a5f895f5b1908a68713bb78227647a9476ce915f15"
+            }
+          ],
+          "digest": "f559a6ff1a986c1d3188e1e4bee190d0f1a6fda68e6de4f2e387d4b6daa4877b"
+        },
+        "activityId": "078fbe32-2972-43b1-a51b-e2f3f0903a80",
+        "attemptId": "a5103b1a-6d70-4348-abda-4d3e9ad6e880",
+        "activityRevision": 1,
+        "id": "5c98abd4-d1d9-4f81-8d05-ec54200410a3",
+        "digest": "57b65db18f5706dc963b160c0febdc44f35b74893a40738f15bd91b5f12f2ecc",
+        "state": "submitted",
+        "createdAt": 1792073337366
+      },
+      {
+        "status": "done",
+        "summary": "Review of worker result 5c98abd4 accepted: src/page.mjs fix is correct, only declared file modified, no new files, protected check exits 0.",
+        "evidence": "From owned root: `git status --short --untracked-files=all` -> only ` M src/page.mjs`. `git diff` -> single-line change to offset. `/Users/lucas/Documents/GitHub/Orbit/apps/desktop/build/node/node .benchmark/all.mjs` run alone -> exit 0, no output. Edge probe via same node binary: offset(1,10)=0, offset(2.7,10)=10, offset(2,0)=1, offset(2,-5)=1, offset(2,2.5)=2, offset(NaN,4)=0. verification_submit recorded on inspection 2e47fa5b-1d40-4632-a249-817fc8f99cae with verdict accepted.",
+        "details": "✓ 1. Independently review exact worker result and record executable evidence: Independently inspected worker result 5c98abd4 (scope=result), reviewed diff and untracked files, ran protected check alone (exit 0) and extra edge probes; recorded verdict accepted via verification_submit with all criteria answered.",
+        "deliveredTo": 1,
+        "source": {
+          "version": 1,
+          "roots": [
+            {
+              "root": "/private/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-0CzAMN/workspace",
+              "kind": "git",
+              "head": "2038d5cef67748eb235b86a028ea5c36b70e9cd8",
+              "files": 5,
+              "digest": "0fa0906008932d9e09ffb1a5f895f5b1908a68713bb78227647a9476ce915f15"
+            }
+          ],
+          "digest": "f559a6ff1a986c1d3188e1e4bee190d0f1a6fda68e6de4f2e387d4b6daa4877b"
+        },
+        "activityId": "ce37c9c1-3b7b-4794-af5b-0002ff0a78ce",
+        "attemptId": "ac23562e-e468-4ebe-b60c-995377251924",
+        "activityRevision": 1,
+        "id": "1fa43b14-d560-45b2-a685-f7fb9245ff15",
+        "digest": "ba4c1c0937d32a8dec684ca92a5c53f3f47ec670e45ed7c4c27b4e1cd2879674",
+        "state": "submitted",
+        "createdAt": 1792073755100
+      }
+    ]
+  },
+  "verifications": [
+    {
+      "inspectionId": "2e47fa5b-1d40-4632-a249-817fc8f99cae",
+      "verdict": "accepted",
+      "summary": "Independent review of worker result 5c98abd4 (attempt a5103b1a). Diff confined to src/page.mjs (single-line change); git status --untracked-files=all shows no new files and .benchmark untouched. Protected check run alone exited 0 with no output. Extra probes: offset(1,10)=0, offset(2.7,10)=10, offset(2,0)=1, offset(2,-5)=1, offset(2,2.5)=2, offset(NaN,4)=0. Lower bound and one-based pages hold; size is clamped to a positive integer.",
+      "checks": [
+        {
+          "command": "cd <owned root> && git status --short && git diff && git status --short --untracked-files=all",
+          "exitCode": 0,
+          "summary": "Only ' M src/page.mjs' modified; no untracked files; diff is one line replacing page*size with (max(1,floor(Number(page)||1))-1)*max(1,floor(Number(size)||1))."
+        },
+        {
+          "command": "/Users/lucas/Documents/GitHub/Orbit/apps/desktop/build/node/node .benchmark/all.mjs",
+          "exitCode": 0,
+          "summary": "Protected check run alone from owned root; exit 0, no stdout/stderr output. Imports check-0.mjs which asserts offset(1,10)=0, offset(3,10)=20, offset(0,4)=0, offset(-2,4)=0 — all pass."
+        },
+        {
+          "command": "/Users/lucas/Documents/GitHub/Orbit/apps/desktop/build/node/node --input-type=module -e \"const {offset}=await import('./src/page.mjs'); ...\"",
+          "exitCode": 0,
+          "summary": "Edge probe output [0,10,1,1,2,0] for inputs (1,10),(2.7,10),(2,0),(2,-5),(2,2.5),(NaN,4)."
+        }
+      ],
+      "criteria": [
+        {
+          "item": 1,
+          "met": true,
+          "how": "git status shows only src/page.mjs modified, no untracked files; .benchmark/ contains only all.mjs and check-0.mjs with no changes; diff limited to src/page.mjs."
+        },
+        {
+          "item": 2,
+          "met": true,
+          "how": "Protected check exited 0; offset(1,10)=0 and lower-bound cases offset(0,4)=0, offset(-2,4)=0 pass; offset(3,10)=20 confirms zero-based offset from one-based page; size clamped to positive integer in extra probes."
+        }
+      ],
+      "scope": "result",
+      "id": "b8f6d46e-04f1-4bc6-b296-ef347c78b35f",
+      "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+      "resultId": "5c98abd4-d1d9-4f81-8d05-ec54200410a3",
+      "activityId": "078fbe32-2972-43b1-a51b-e2f3f0903a80",
+      "activityRevision": 1,
+      "attemptId": "a5103b1a-6d70-4348-abda-4d3e9ad6e880",
+      "reviewer": {
+        "paneId": 3,
+        "epoch": "cb4d1202-7115-4f87-aa62-a6a2428dd6cb",
+        "attemptId": "ac23562e-e468-4ebe-b60c-995377251924"
+      },
+      "source": {
+        "version": 1,
+        "roots": [
+          {
+            "root": "/private/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-0CzAMN/workspace",
+            "kind": "git",
+            "head": "2038d5cef67748eb235b86a028ea5c36b70e9cd8",
+            "files": 5,
+            "digest": "0fa0906008932d9e09ffb1a5f895f5b1908a68713bb78227647a9476ce915f15"
+          }
+        ],
+        "digest": "f559a6ff1a986c1d3188e1e4bee190d0f1a6fda68e6de4f2e387d4b6daa4877b"
+      },
+      "integration": {
+        "version": 1,
+        "roots": [
+          {
+            "root": "/private/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-0CzAMN/workspace",
+            "kind": "git",
+            "head": "2038d5cef67748eb235b86a028ea5c36b70e9cd8",
+            "files": 5,
+            "digest": "0fa0906008932d9e09ffb1a5f895f5b1908a68713bb78227647a9476ce915f15"
+          }
+        ],
+        "digest": "f559a6ff1a986c1d3188e1e4bee190d0f1a6fda68e6de4f2e387d4b6daa4877b"
+      },
+      "contractDigest": "a6aa3d59febcbb5c3f35ef6803b9c5ea7d37d899bca4799960abbf480b4f3af6",
+      "provenance": "independent-agent-report",
+      "createdAt": 1792073753228
+    }
+  ],
+  "notifications": [
+    {
+      "id": "0fa3c121-3311-46d1-967f-9671eaeee328",
+      "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+      "resultId": "5c98abd4-d1d9-4f81-8d05-ec54200410a3",
+      "recipient": {
+        "kind": "lead"
+      },
+      "text": "[Orbit] Retorno de #2 (Fix offset pagination (worker)), concluído: Fixed offset pagination in src/page.mjs: pages are clamped to integer >= 1 and converted to zero-based offsets; size is clamped to a positive integer. No other files changed. · evidência: From the owned root, inspected src/page.mjs and .benchmark/all.mjs before edits. Ran `/Users/lucas/Documents/GitHub/Orbit/apps/desktop/build/node/node .benchmark/all.mjs` alone before fix: exit 1, AssertionError `10 !== 0` at .benchmark/check-0.mjs:9. After the edit, ran the same command alone: exit 0, no output. Final `git status --short` showed only `M src/page.mjs`; `git diff -- src/page.mjs` showed only the intended one-line change. · critérios: 2/2 (detalhes em handoff_list)",
+      "state": "agent_acknowledged",
+      "deliveries": [
+        {
+          "paneId": 1,
+          "executionEpoch": "e81df50e-77c6-430f-84be-9790db8f0404",
+          "at": 1792073338748
+        },
+        {
+          "paneId": 1,
+          "executionEpoch": "0b573618-9871-407d-83ad-12dd3de81a3d",
+          "at": 1792073719788
+        }
+      ],
+      "acknowledgedBy": {
+        "paneId": 1,
+        "executionEpoch": "0b573618-9871-407d-83ad-12dd3de81a3d",
+        "at": 1792073721421
+      },
+      "createdAt": 1792073337366
+    },
+    {
+      "id": "2d1f22d6-c14b-4f02-954f-7ac0bdb82538",
+      "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+      "resultId": "1fa43b14-d560-45b2-a685-f7fb9245ff15",
+      "recipient": {
+        "kind": "lead"
+      },
+      "text": "[Orbit] Retorno de #3 (Independent review of offset fix (reviewer)), concluído: Review of worker result 5c98abd4 accepted: src/page.mjs fix is correct, only declared file modified, no new files, protected check exits 0. · evidência: From owned root: `git status --short --untracked-files=all` -> only ` M src/page.mjs`. `git diff` -> single-line change to offset. `/Users/lucas/Documents/GitHub/Orbit/apps/desktop/build/node/node .benchmark/all.mjs` run alone -> exit 0, no output. Edge probe via same node binary: offset(1,10)=0, offset(2.7,10)=10, offset(2,0)=1, offset(2,-5)=1, offset(2,2.5)=2, offset(NaN,4)=0. verification_submit recorded on inspection 2e47fa5b-1d40-4632-a249-817fc8f99cae with verdict accepted. · critérios: 1/1 (detalhes em handoff_list)",
+      "state": "agent_acknowledged",
+      "deliveries": [
+        {
+          "paneId": 1,
+          "executionEpoch": "0b573618-9871-407d-83ad-12dd3de81a3d",
+          "at": 1792073755226
+        }
+      ],
+      "acknowledgedBy": {
+        "paneId": 1,
+        "executionEpoch": "0b573618-9871-407d-83ad-12dd3de81a3d",
+        "at": 1792073757262
+      },
+      "createdAt": 1792073755100
+    }
+  ],
+  "panes": [
+    {
+      "id": 1,
+      "executionEpoch": "0b573618-9871-407d-83ad-12dd3de81a3d",
+      "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+      "role": "lead",
+      "squadRole": null,
+      "taskType": null,
+      "cli": "claude",
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "accountId": "claude",
+      "sessionId": "e0301c24-da17-43f5-bb4e-db8f58b3b955",
+      "branch": null,
+      "title": "Native autonomous leader",
+      "cwd": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-0CzAMN/workspace",
+      "status": "exited",
+      "attention": null,
+      "choices": null,
+      "deliveredAt": null,
+      "handoffStatus": null,
+      "assignedBy": null,
+      "usage": {
+        "input": 877782,
+        "output": 5737,
+        "cacheRead": 813452,
+        "cacheWrite": 64308,
+        "total": 883519,
+        "costUsd": 0.018153884999999998
+      },
+      "contextPercent": 9,
+      "pid": null,
+      "exitCode": 129,
+      "createdAt": 1792073715718
+    },
+    {
+      "id": 2,
+      "executionEpoch": "435e6894-e7f8-4361-904f-d63272d60b6d",
+      "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+      "role": "crew",
+      "squadRole": null,
+      "taskType": "Bug",
+      "cli": "codex",
+      "model": "gpt-6-luna",
+      "effort": "low",
+      "accountId": "codex",
+      "sessionId": "01a13fe4-7cbe-7741-be36-fff7003fd534",
+      "branch": null,
+      "title": "Fix offset pagination (worker)",
+      "cwd": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-0CzAMN/workspace",
+      "status": "exited",
+      "attention": null,
+      "choices": null,
+      "deliveredAt": null,
+      "handoffStatus": null,
+      "assignedBy": null,
+      "usage": {
+        "input": 317156,
+        "output": 1754,
+        "cacheRead": 289536,
+        "cacheWrite": 0,
+        "total": 318705,
+        "costUsd": null
+      },
+      "contextPercent": 12,
+      "pid": null,
+      "exitCode": 0,
+      "createdAt": 1792073715778,
+      "activityAttemptId": "a5103b1a-6d70-4348-abda-4d3e9ad6e880"
+    },
+    {
+      "id": 3,
+      "executionEpoch": "cb4d1202-7115-4f87-aa62-a6a2428dd6cb",
+      "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+      "role": "crew",
+      "squadRole": null,
+      "taskType": "Review",
+      "cli": "claude",
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "accountId": "claude",
+      "sessionId": "431628c7-facf-439f-a57b-236152793f0b",
+      "branch": null,
+      "title": "Independent review of offset fix (reviewer)",
+      "cwd": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-0CzAMN/workspace",
+      "status": "exited",
+      "attention": null,
+      "choices": null,
+      "deliveredAt": 1792073755105,
+      "handoffStatus": "done",
+      "assignedBy": 1,
+      "usage": {
+        "input": 465772,
+        "output": 3518,
+        "cacheRead": 415315,
+        "cacheWrite": 50443,
+        "total": 469290,
+        "costUsd": 0.012426325000000002
+      },
+      "contextPercent": 8,
+      "pid": null,
+      "exitCode": 129,
+      "createdAt": 1792073734562,
+      "activityAttemptId": "ac23562e-e468-4ebe-b60c-995377251924"
+    }
+  ],
+  "executions": [
+    {
+      "usageSources": [
+        "claude-transcript-v1"
+      ],
+      "epoch": "0b573618-9871-407d-83ad-12dd3de81a3d",
+      "paneId": 1,
+      "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+      "cli": "claude",
+      "model": "claude-haiku-5-5",
+      "role": "lead",
+      "spawnMs": 11.47520800000001,
+      "firstPtyOutputMs": 580.6803749999999,
+      "initialBytes": 0,
+      "sourceBytes": 0,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 1892,
+      "submittedMessages": 2,
+      "ptyAcceptedWakeups": 2,
+      "reports": 22,
+      "usage": {
+        "input": 527108,
+        "output": 3601,
+        "cacheRead": 518022,
+        "cacheWrite": 9074,
+        "total": 530709,
+        "costUsd": null
+      }
+    },
+    {
+      "usageSources": [
+        "codex-session-total-v1"
+      ],
+      "epoch": "435e6894-e7f8-4361-904f-d63272d60b6d",
+      "paneId": 2,
+      "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+      "cli": "codex",
+      "model": "gpt-6-luna",
+      "role": "crew",
+      "spawnMs": 12.98345900000001,
+      "firstPtyOutputMs": 213.01050100000006,
+      "initialBytes": 0,
+      "sourceBytes": 0,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 9,
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0,
+        "costUsd": null
+      }
+    },
+    {
+      "usageSources": [
+        "claude-context-only",
+        "claude-transcript-v1"
+      ],
+      "epoch": "cb4d1202-7115-4f87-aa62-a6a2428dd6cb",
+      "paneId": 3,
+      "missionId": "7665079c-982b-4341-93ab-7a7acd8b7eba",
+      "cli": "claude",
+      "model": "claude-haiku-5-5",
+      "role": "crew",
+      "spawnMs": 29.11149999999907,
+      "firstPtyOutputMs": 385.7640829999982,
+      "initialBytes": 6053,
+      "sourceBytes": 6053,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 22,
+      "usage": {
+        "input": 465772,
+        "output": 3518,
+        "cacheRead": 415315,
+        "cacheWrite": 50443,
+        "total": 469290,
+        "costUsd": 0.012425
+      }
+    }
+  ],
+  "auxiliaryCalls": [],
+  "durationMs": 45360,
+  "checks": [
+    {
+      "command": "verify immutable fixture and declared write scope",
+      "exitCode": 0,
+      "summary": "Protected fixture unchanged; writes stay in declared paths"
+    },
+    {
+      "command": "node .benchmark/check-0.mjs",
+      "exitCode": 0,
+      "summary": "One-based pages and lower bound"
+    }
+  ],
+  "integration": {
+    "state": "pending",
+    "reviewId": null,
+    "checkedAt": null,
+    "reason": "Falta revisão final da integração."
+  },
+  "evaluation": {
+    "passed": false,
+    "issues": [
+      "No ready mission with a current final integration review",
+      "Reviewer did not deliver an independently accepted result"
+    ],
+    "workerResultId": "5c98abd4-d1d9-4f81-8d05-ec54200410a3",
+    "reviewerResultId": null
+  },
+  "accountingReplay": {
+    "before": {
+      "input": 1660710,
+      "output": 11009,
+      "cacheRead": 1518303,
+      "cacheWrite": 114751,
+      "total": 1671514,
+      "costUsd": 0.03058
+    },
+    "after": {
+      "input": 1660710,
+      "output": 11009,
+      "cacheRead": 1518303,
+      "cacheWrite": 114751,
+      "total": 1671514,
+      "costUsd": 0.03058
+    },
+    "reports": [
+      {
+        "paneId": 1,
+        "sameSession": true,
+        "delta": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0,
+          "costUsd": 0
+        }
+      },
+      {
+        "paneId": 2,
+        "sameSession": true,
+        "delta": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0,
+          "costUsd": null
+        }
+      }
+    ],
+    "passed": true
+  },
+  "sessionRecovery": [
+    {
+      "paneId": 1,
+      "priorSessionId": "e0301c24-da17-43f5-bb4e-db8f58b3b955",
+      "currentSessionId": "e0301c24-da17-43f5-bb4e-db8f58b3b955",
+      "priorEpoch": "6e3c3328-7dbd-4765-9996-1ba0f4b2c305",
+      "currentEpoch": "0b573618-9871-407d-83ad-12dd3de81a3d"
+    },
+    {
+      "paneId": 2,
+      "priorSessionId": "01a13fe4-7cbe-7741-be36-fff7003fd534",
+      "currentSessionId": "01a13fe4-7cbe-7741-be36-fff7003fd534",
+      "priorEpoch": "c7b349a4-5744-4ce5-893a-0c483dd66dfb",
+      "currentEpoch": "435e6894-e7f8-4361-904f-d63272d60b6d"
+    }
+  ],
+  "error": "Pilot mission budget exhausted",
+  "passed": false
+}

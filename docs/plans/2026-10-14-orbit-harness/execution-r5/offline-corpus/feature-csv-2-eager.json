@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "id": "8ae21099-fa83-4115-9eb3-3d0ddcb3c8d9",
+  "taskId": "feature-csv",
+  "taskRevision": "169b4fdd8af1814aaebcd39d7e03e219b1716e615e89ca6c07eb34b98cb28bdc",
+  "corpusRevision": "69d519eefdc4120ecfa27ed8476d85c2c446e49ef35b52fded37c0b02c200893",
+  "sourceRevision": "6dfdf3c91327b03fc947a8db8292300dd2fd58d1cb4a2bdf2b5bb20c5dec16aa",
+  "mode": "offline",
+  "configuration": "eager",
+  "repetition": 2,
+  "runtime": {
+    "node": "v24.21.0",
+    "claude": null,
+    "codex": null
+  },
+  "models": {
+    "worker": "claude:claude-haiku-5-5:low",
+    "reviewer": "codex:gpt-6-luna:low"
+  },
+  "durationMs": 944.7424170000013,
+  "firstResponseMs": null,
+  "checks": [
+    {
+      "command": "verify immutable fixture and declared write scope",
+      "exitCode": 0,
+      "summary": "Protected fixture unchanged; writes stay in declared paths"
+    },
+    {
+      "command": "node .benchmark/check-0.mjs",
+      "exitCode": 0,
+      "summary": "CSV quoting and row boundaries"
+    },
+    {
+      "command": "node .benchmark/check-1.mjs",
+      "exitCode": 0,
+      "summary": "CLI serializes JSON rows"
+    },
+    {
+      "command": "verify required changed path src/csv.mjs",
+      "exitCode": 0,
+      "summary": "Required integration path changed"
+    },
+    {
+      "command": "verify required changed path bin/export.mjs",
+      "exitCode": 0,
+      "summary": "Required integration path changed"
+    }
+  ],
+  "accepted": true,
+  "resultReviewed": true,
+  "integrationReviewed": true,
+  "waived": false,
+  "error": null,
+  "executions": [
+    {
+      "epoch": "9fa53ee0-3108-47d4-b609-2d96496025ae",
+      "paneId": 1,
+      "missionId": "6146fb12-11e9-48e3-a48b-edbce283652f",
+      "cli": "shell",
+      "model": null,
+      "role": "lead",
+      "spawnMs": 1.1986249999972642,
+      "firstPtyOutputMs": 922.7379999999976,
+      "initialBytes": 0,
+      "sourceBytes": 0,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 1191,
+      "submittedMessages": 2,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    },
+    {
+      "epoch": "1a80106c-baa4-47a2-9345-97c062da9b14",
+      "paneId": 2,
+      "missionId": "6146fb12-11e9-48e3-a48b-edbce283652f",
+      "cli": "claude",
+      "model": "claude-haiku-5-5",
+      "role": "crew",
+      "spawnMs": 4.79316700000345,
+      "firstPtyOutputMs": null,
+      "initialBytes": 4356,
+      "sourceBytes": 4356,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    },
+    {
+      "epoch": "ae8cc0f3-29cc-469c-bb4f-13a032fad0a2",
+      "paneId": 3,
+      "missionId": "6146fb12-11e9-48e3-a48b-edbce283652f",
+      "cli": "codex",
+      "model": "gpt-6-luna",
+      "role": "crew",
+      "spawnMs": 4.862166999999317,
+      "firstPtyOutputMs": null,
+      "initialBytes": 4279,
+      "sourceBytes": 4279,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    }
+  ],
+  "auxiliaryCalls": [],
+  "attempts": 2,
+  "retries": 0,
+  "reopenings": 0,
+  "results": 2
+}

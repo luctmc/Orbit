@@ -7,7 +7,7 @@ import type { AgentLaunch } from '../src/command.ts'
 import { startServer } from '../src/server.ts'
 import { connect, offline, ORIGIN, TOKEN } from './helpers.ts'
 
-const status = (input: number) => ({ model: { display_name: 'Opus' }, cost: { total_cost_usd: input / 100_000 }, context_window: { total_input_tokens: input, total_output_tokens: 0, used_percentage: 5 } })
+const status = (input: number) => ({ model: { display_name: 'Opus' }, cost: { total_cost_usd: input / 100_000 }, context_window: { total_input_tokens: input, total_output_tokens: 0, used_percentage: 5 }, orbit_session_usage: { format: 'claude-transcript-v1', input: input, output: 0, cacheRead: 0, cacheWrite: 0, total: input + 0 } })
 
 test('a mission budget warns at 80%, stops the agents at 100% and frees them when raised; usage goes to the ledger', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-data-'))

@@ -109,7 +109,7 @@ test('accounts: each runs in its own folder, keys stay in the sidecar, logins op
     await ui.next('account.status', (m) => m.statuses.some((s) => s.accountId === work.id && s.loginPaneId === null && s.busy === null))
 
     // Without a choice, Codex agents go to the logged-in account.
-    ui.send({ type: 'pane.spawn', request: { missionId: lead.missionId, role: 'crew', cli: 'codex', model: null, title: 'auto' } })
+    ui.send({ type: 'pane.spawn', request: { missionId: lead.missionId, role: 'crew', cli: 'codex', model: null, title: 'auto', readOnly: true } })
     assert.equal((await ui.next('pane.updated', (m) => m.pane.title === 'auto')).pane.accountId, 'codex')
     // Limits are recorded per account.
     ui.send({ type: 'pane.input', paneId: lead.id, data: 'echo "TOKEN:$ORBIT_PANE_TOKEN:"\r' })

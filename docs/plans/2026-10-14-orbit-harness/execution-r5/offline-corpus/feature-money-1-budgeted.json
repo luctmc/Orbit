@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "id": "2dc9f8c4-90f8-4ef7-b7ef-a1a0bc11aa6d",
+  "taskId": "feature-money",
+  "taskRevision": "1cf4802b5827995e08579e8b2b1654d0890cae18c820877ebf05440d539a51cd",
+  "corpusRevision": "69d519eefdc4120ecfa27ed8476d85c2c446e49ef35b52fded37c0b02c200893",
+  "sourceRevision": "6dfdf3c91327b03fc947a8db8292300dd2fd58d1cb4a2bdf2b5bb20c5dec16aa",
+  "mode": "offline",
+  "configuration": "budgeted",
+  "repetition": 1,
+  "runtime": {
+    "node": "v24.21.0",
+    "claude": null,
+    "codex": null
+  },
+  "models": {
+    "worker": "claude:claude-haiku-5-5:low",
+    "reviewer": "codex:gpt-6-luna:low"
+  },
+  "durationMs": 974.5950420000008,
+  "firstResponseMs": null,
+  "checks": [
+    {
+      "command": "verify immutable fixture and declared write scope",
+      "exitCode": 0,
+      "summary": "Protected fixture unchanged; writes stay in declared paths"
+    },
+    {
+      "command": "node .benchmark/check-0.mjs",
+      "exitCode": 0,
+      "summary": "Signed integer cents library"
+    },
+    {
+      "command": "node .benchmark/check-1.mjs",
+      "exitCode": 0,
+      "summary": "CLI uses the library contract"
+    },
+    {
+      "command": "verify required changed path src/money.mjs",
+      "exitCode": 0,
+      "summary": "Required integration path changed"
+    },
+    {
+      "command": "verify required changed path bin/money.mjs",
+      "exitCode": 0,
+      "summary": "Required integration path changed"
+    }
+  ],
+  "accepted": true,
+  "resultReviewed": true,
+  "integrationReviewed": true,
+  "waived": false,
+  "error": null,
+  "executions": [
+    {
+      "epoch": "b4ee0105-e341-4ace-b330-f8bc1613f601",
+      "paneId": 1,
+      "missionId": "846a7134-2913-4a2a-b31a-a73c99824cb0",
+      "cli": "shell",
+      "model": null,
+      "role": "lead",
+      "spawnMs": 1.1552909999991243,
+      "firstPtyOutputMs": 950.1594569999979,
+      "initialBytes": 0,
+      "sourceBytes": 0,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 1195,
+      "submittedMessages": 2,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    },
+    {
+      "epoch": "3c0fde1c-4ff8-43e3-ac2e-f3b3c9782e01",
+      "paneId": 2,
+      "missionId": "846a7134-2913-4a2a-b31a-a73c99824cb0",
+      "cli": "claude",
+      "model": "claude-haiku-5-5",
+      "role": "crew",
+      "spawnMs": 6.0165000000015425,
+      "firstPtyOutputMs": null,
+      "initialBytes": 4286,
+      "sourceBytes": 4286,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    },
+    {
+      "epoch": "3071b155-0ee2-44e8-868a-0e4f05549c0e",
+      "paneId": 3,
+      "missionId": "846a7134-2913-4a2a-b31a-a73c99824cb0",
+      "cli": "codex",
+      "model": "gpt-6-luna",
+      "role": "crew",
+      "spawnMs": 4.678208000001177,
+      "firstPtyOutputMs": null,
+      "initialBytes": 4281,
+      "sourceBytes": 4281,
+      "contextReadBytes": 0,
+      "skillReadBytes": 0,
+      "submittedBytes": 0,
+      "submittedMessages": 0,
+      "ptyAcceptedWakeups": 0,
+      "reports": 0,
+      "usage": {
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "costUsd": null
+      }
+    }
+  ],
+  "auxiliaryCalls": [],
+  "attempts": 2,
+  "retries": 0,
+  "reopenings": 0,
+  "results": 2
+}

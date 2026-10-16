@@ -57,7 +57,7 @@ test('deleting an agent, a mission or a workspace leaves nothing behind in Orbit
     ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Apagável', objective: '', mode: 'livre', lead: { cli: 'claude', model: null, title: 'Líder' }, cards: ['Uma tarefa'] })
     const { mission } = await ui.next('mission.updated')
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
-    ui.send({ type: 'pane.spawn', request: { missionId: mission.id, role: 'crew', cli: 'codex', model: null, title: 'Ajudante' } })
+    ui.send({ type: 'pane.spawn', request: { missionId: mission.id, role: 'crew', cli: 'codex', model: null, title: 'Ajudante', readOnly: true } })
     const { pane: helper } = await ui.next('pane.updated', (m) => m.pane.cli === 'codex')
     ;(server.core as unknown as { panes: { setSession: (id: number, s: string) => void } }).panes.setSession(lead.id, CLAUDE_SESSION)
     ;(server.core as unknown as { panes: { setSession: (id: number, s: string) => void } }).panes.setSession(helper.id, CODEX_SESSION)

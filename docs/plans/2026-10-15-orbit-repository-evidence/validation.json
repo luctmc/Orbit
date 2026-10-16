@@ -1,0 +1,87 @@
+{
+  "runtime": "v24.21.0",
+  "source": [
+    {
+      "path": "packages/sidecar/src/usage.ts",
+      "sha256": "80d79ce4b41479309be977cce9cae19cf1923484ac7f703d24f5c9ab20ad9ca8"
+    },
+    {
+      "path": "packages/sidecar/src/report.ts",
+      "sha256": "800807026a41c6eb0ec20cdc44174058595ddf073f03c7b1449a49c441803662"
+    },
+    {
+      "path": "packages/sidecar/test/usageCounters.test.ts",
+      "sha256": "db7b32f70760098b5746df816bb27018c151269b937ecba02b315865f90824fb"
+    },
+    {
+      "path": "packages/sidecar/test/reportCost.test.ts",
+      "sha256": "846b75ab457abd841f1d597b72affc7ee9ab315672920c6a49ca167599b0f982"
+    },
+    {
+      "path": "packages/sidecar/test/usage.test.ts",
+      "sha256": "9dc034d46d99c4f2c316ed4555516004155d451dfe14ad24a34f552332d2253c"
+    },
+    {
+      "path": "packages/sidecar/test/report.test.ts",
+      "sha256": "b65fc9ff81f1d138483aed190204182a4956ef3a21c4b36b88f19f9a02784c05"
+    },
+    {
+      "path": "scripts/verify-autonomous-harness.mjs",
+      "sha256": "13752e2625deb23711385fd641ba06d0c4bddfed0ebe6c9109f4bc5cfc464ecd"
+    },
+    {
+      "path": "scripts/lib/repository-pilot.mjs",
+      "sha256": "b0ac957f308c5ccdce94f440e04837e01b82f30fe56ee99149761d32b9d6a817"
+    },
+    {
+      "path": "scripts/lib/repository-pilot.test.mjs",
+      "sha256": "22ee4fc22d107a63a455721b5cf83dcf0f2ddc30ce0dedc0091f75407b948b17"
+    }
+  ],
+  "checks": [
+    {
+      "command": "apps/desktop/build/node/node --test --test-timeout=20000 'packages/sidecar/test/**/*.test.ts' scripts/lib/autonomy-observations.test.mjs scripts/lib/repository-pilot.test.mjs",
+      "exitCode": 0,
+      "tests": 223,
+      "passed": 223,
+      "log": "tests.log"
+    },
+    {
+      "command": "apps/desktop/build/node/node --test 'apps/desktop/src/orbit/*.test.ts'",
+      "exitCode": 0,
+      "tests": 6,
+      "passed": 6,
+      "log": "desktop-tests.log"
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "log": "typecheck.log"
+    },
+    {
+      "command": "npm run tauri -w @orbit/desktop -- build --debug",
+      "exitCode": 0,
+      "log": "build.log"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "artifact": {
+    "built": "apps/desktop/build/sidecar/dist/index.mjs",
+    "bundled": "apps/desktop/src-tauri/target/debug/bundle/macos/Orbit.app/Contents/Resources/sidecar/dist/index.mjs",
+    "sha256": "38e05f69710d9f523123773cedd8c7ee48565662cc8c5edd79dcbd710f4f58da",
+    "bundleSha256": "38e05f69710d9f523123773cedd8c7ee48565662cc8c5edd79dcbd710f4f58da",
+    "match": true,
+    "bytes": 2320313
+  },
+  "native": {
+    "status": "blocked_by_automatic_approval_review",
+    "attemptedLaunches": 1,
+    "startedLaunches": 0,
+    "modelCalls": 0,
+    "knownCostThisPilot": 0,
+    "reason": "A execução lança CLIs reais e pode enviar código privado da cópia do repositório a provedores externos; embora o piloto em duas tarefas tenha sido autorizado em substância, não há autorização explícita para esse payload específico aos destinos externos."
+  }
+}

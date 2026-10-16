@@ -22,6 +22,8 @@ const baseName = (path: string) => path.replace(/\/+$/, '').split('/').pop() || 
 function FolderListField({ folders, onChange }: { folders: string[]; onChange: (next: string[]) => void }) {
   const id = useId()
   const [typed, setTyped] = useState('')
+  const [pickError, setPickError] = useState<string | null>(null)
+  const [picking, setPicking] = useState(false)
   const add = (paths: string[]) => {
     const next = [...folders]
     for (const p of paths.map((s) => s.trim()).filter(Boolean)) if (!next.includes(p)) next.push(p)
@@ -30,9 +32,10 @@ function FolderListField({ folders, onChange }: { folders: string[]; onChange: (
 
   return (
     <fieldset className="field">
-      <legend>Pastas <span className="muted">(a primeira é a principal: os agentes começam nela e enxergam todas)</span></legend>
+      <legend>01 <strong>Escolha as pastas do projeto</strong></legend>
+      <p className="note">A pasta principal é o ponto de partida dos agentes. Você pode reunir até {WORKSPACE_LIMITS.folders} pastas no mesmo workspace.</p>
       {folders.length === 0 ? (
-        <p className="folder-empty">Nenhuma pasta ainda.</p>
+        <div className="folder-empty"><FolderIcon size={28} /><strong>Onde vamos trabalhar?</strong><span>Selecione uma pasta existente ou cole o caminho abaixo.</span></div>
       ) : (
         <ol className="folder-list">
           {folders.map((f, i) => (
@@ -52,17 +55,18 @@ function FolderListField({ folders, onChange }: { folders: string[]; onChange: (
       )}
       <div className="folder-add">
         {isTauri && (
-          <button type="button" className="btn btn--ghost btn--sm" disabled={folders.length >= WORKSPACE_LIMITS.folders}
-            onClick={async () => { const picked = await pickFolders(); if (picked) add(picked) }}>
-            <FolderIcon size={14} />Escolher pastas…
+          <button type="button" className="btn btn--ghost btn--sm" disabled={picking || folders.length >= WORKSPACE_LIMITS.folders}
+            onClick={async () => { setPicking(true); setPickError(null); try { const picked = await pickFolders(); if (picked) add(picked) } catch { setPickError('Não foi possível abrir o seletor. Você pode colar o caminho abaixo.') } finally { setPicking(false) } }}>
+            <FolderIcon size={14} />{picking ? 'Abrindo…' : 'Escolher no Mac…'}
           </button>
         )}
         <label className="sr-only" htmlFor={`${id}-typed`}>Caminho absoluto de uma pasta</label>
         <input id={`${id}-typed`} className="mono" value={typed} onChange={(e) => setTyped(e.target.value)} spellCheck={false}
           placeholder={isTauri ? 'ou cole um caminho: /Users/voce/projetos/api' : '/Users/voce/projetos/meu-app'}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add([typed]); setTyped('') } }} />
-        <button type="button" className="btn btn--ghost btn--sm" disabled={!typed.trim()} onClick={() => { add([typed]); setTyped('') }}><PlusIcon size={14} />Adicionar</button>
+        <button type="button" className="btn btn--ghost btn--sm" disabled={!typed.trim() || folders.length >= WORKSPACE_LIMITS.folders} onClick={() => { add([typed]); setTyped('') }}><PlusIcon size={14} />Adicionar</button>
       </div>
+      {pickError && <p className="form-error" role="alert">{pickError}</p>}
     </fieldset>
   )
 }
@@ -75,22 +79,27 @@ export function WorkspaceDialog({ workspace, onClose }: { workspace?: Workspace;
   const [instructions, setInstructions] = useState(workspace?.instructions ?? '')
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const { missions } = useOrbit()
+  const [saving, setSaving] = useState(false)
+  const { missions, connection } = useOrbit()
   const editing = Boolean(workspace)
   const suggested = folders.length ? `${baseName(folders[0]!)}${folders.length > 1 ? ` + ${folders.length - 1}` : ''}` : 'meu-projeto'
 
   return (
-    <Dialog eyebrow="Workspace" title={editing ? 'Editar workspace' : 'Novo workspace'} submitLabel={editing ? 'Salvar' : 'Criar workspace'} onClose={onClose} onSubmit={() => {
+    <Dialog busy={saving} eyebrow="Seu projeto no Orbit" title={editing ? 'Editar workspace' : 'Novo workspace'} submitLabel={saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Criar workspace'} submitDisabled={saving || connection !== 'open'} onClose={() => { if (!saving) onClose() }} onSubmit={() => {
+      if (saving || connection !== 'open') return
       if (folders.length === 0) return setError('Inclua pelo menos uma pasta.')
       if (folders.some((f) => !f.startsWith('/'))) return setError('Use caminhos absolutos (começando com /).')
-      if (workspace) client.send({ type: 'workspace.update', workspaceId: workspace.id, name, folders, instructions })
-      else client.send({ type: 'workspace.create', name, folders })
-      onClose()
+      const requestId = crypto.randomUUID()
+      setSaving(true); setError(null)
+      void client.ask(workspace ? { type: 'workspace.update', workspaceId: workspace.id, name, folders, instructions, requestId } : { type: 'workspace.create', name, folders, requestId }, 'workspace.saved', message => message.requestId === requestId)
+        .then(onClose, cause => { setSaving(false); setError(cause instanceof Error ? cause.message : String(cause)) })
     }}>
+      {!editing && <div className="workspace-intro"><p>Um espaço para seu projeto e para a equipe que vai construí-lo.</p><span>As pastas continuam no seu Mac. As missões e o contexto ficam organizados no Orbit.</span></div>}
       <FolderListField folders={folders} onChange={(next) => { setFolders(next); setError(null) }} />
       <div className="field">
-        <label htmlFor="ws-name">Nome <span className="muted">(opcional)</span></label>
+        <label htmlFor="ws-name">02 <strong>Dê um nome ao workspace</strong> <span className="muted">(opcional)</span></label>
         <input id="ws-name" value={name} maxLength={WORKSPACE_LIMITS.name} onChange={(e) => setName(e.target.value)} placeholder={suggested} />
+        <p className="note">Sem nome? Usaremos o nome da pasta principal.</p>
       </div>
       {editing && (
         <div className="field">

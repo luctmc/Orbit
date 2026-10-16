@@ -1,0 +1,30 @@
+✔ missing cost, reported zero and partial known subtotals remain distinguishable (1.0095ms)
+✔ suggestions follow real activity state and do not certify readiness from readyAt (0.711875ms)
+✔ unknown, stale and other-mission context cannot produce an old action (0.359041ms)
+✔ predictions stay out of shell, helpers, permission prompts, exhausted budgets and disconnected missions (0.923833ms)
+✔ prefix completion preserves spelling/case and never substitutes unrelated or multiline input (1.20175ms)
+✔ Tab accepts only without modifiers or composition (0.111875ms)
+✔ quota is explicitly remaining and genuine zero usage means 100% remaining (0.40325ms)
+✔ expired, stale, future or invalid data never claims a renewed/unused quota (0.108ms)
+✔ Claude matches the official used meter while Codex keeps the official remaining meter (0.077834ms)
+✔ a historical ready declaration never overrides disconnected, unknown, stale or waived verification (0.883458ms)
+✔ permission, budget and unresolved work take precedence over a ready declaration (0.246708ms)
+✔ waiting, handoffs and exits become notices as the person chose (0.708667ms)
+✔ a Claude agent finishing a long turn is a notice; quick answers and Codex are not (0.188417ms)
+✔ progress requests ignore unrelated errors and match the response request id (11.5605ms)
+✔ Codex native focus/cursor replies and its empty placeholder do not consume the first draft (1.148292ms)
+✔ Claude native Try placeholder anchors typing without accepting existing text or a permission choice (0.201792ms)
+✔ an empty recognized prompt offers a visual next step without owning or changing the buffer (0.090125ms)
+✔ an echoed draft may mark Codex running; starting, permission and exited panes remain excluded (0.058541ms)
+✔ native prediction appears only after the exact draft echo and returns only a suffix (0.113ms)
+✔ unknown prompt, existing native draft and shell menus are never owned by the predictor (0.078917ms)
+✔ cursor controls, multiline and bracketed paste suspend until a new line (1.170584ms)
+✔ dismissal, backspace and execution reset never insert or submit text (0.177541ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 97.805833

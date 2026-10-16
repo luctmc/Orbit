@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "name": "orbit-pilot",
+      "version": "1.0.0",
+      "role": "pilot",
+      "compatibility": [
+        "claude",
+        "codex",
+        "gemini",
+        "antigravity"
+      ],
+      "sha256": "c29fb9355afa527c464eca45437d9d8ac733735fb56dece1a3add3013b1aae1c",
+      "bytes": 1130
+    },
+    {
+      "name": "orbit-build",
+      "version": "1.0.0",
+      "role": "build",
+      "compatibility": [
+        "claude",
+        "codex",
+        "gemini",
+        "antigravity"
+      ],
+      "sha256": "0263327bd66f8972c6c0aa0d4c162cc3f0d22689ea8ec548e6d13497d70b4d5c",
+      "bytes": 952
+    },
+    {
+      "name": "orbit-review",
+      "version": "1.0.0",
+      "role": "review",
+      "compatibility": [
+        "claude",
+        "codex",
+        "gemini",
+        "antigravity"
+      ],
+      "sha256": "4875b812ba27e75a1ec9dfdfd89af1aa6582f374d1d6d49f697dab88e419ddba",
+      "bytes": 875
+    },
+    {
+      "name": "orbit-research",
+      "version": "1.0.0",
+      "role": "research",
+      "compatibility": [
+        "claude",
+        "codex",
+        "gemini",
+        "antigravity"
+      ],
+      "sha256": "2392f1a9037e55b257cd6083baaafea636941b8d87bf9a551de5967c629f0853",
+      "bytes": 882
+    },
+    {
+      "name": "orbit-verify",
+      "version": "1.0.0",
+      "role": "verify",
+      "compatibility": [
+        "claude",
+        "codex",
+        "gemini",
+        "antigravity"
+      ],
+      "sha256": "2e167f8c0e923b36cbb7b1a219779312befb55d71b2b563a8bb3c9f497f938b7",
+      "bytes": 885
+    }
+  ]
+}

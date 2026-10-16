@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-16T01:42:35.161Z",
+  "source": "Claude desktop usage popover",
+  "lines": [
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t252 botão pop up Uso: Semanal · todos os modelos: 84% e Reinicia dom., 21:00",
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t254 container Uso Ver detalhamento Configurações de uso Limites de uso",
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t259 container Limites de uso",
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t261 indicador de nível Limite de sessão, Value: 0, Details: 0% usado",
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t262 texto Reinicia em 3 h 38 min",
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t264 indicador de nível Semanal, Value: 84, Details: 84% usado",
+    "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t265 texto Reinicia dom., 21:00",
+    "The focused UI element is 254 container Uso Ver detalhamento Configurações de uso Limites de uso"
+  ]
+}

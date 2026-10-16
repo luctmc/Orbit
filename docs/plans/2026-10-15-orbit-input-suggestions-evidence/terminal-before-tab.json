@@ -1,0 +1,17 @@
+{
+  "count": 3,
+  "rows": [
+    {
+      "text": "[Orbit] Retorno de #2 (Corrigir cálculo de frete), concluído: Fixture de entrega para revisar. · evidência: Evidência sintética para QA visual, não executada por modelo. · critérios: 1/1 (detalhes em handoff_list)",
+      "at": 1792106929288
+    },
+    {
+      "text": "[Orbit] Recibo 064eea6d-489d-40b4-9c11-7ad1aa9fc2e2; resultado 00deb080-e66c-47d8-a59d-7942e4dad5b9. Após ler, confirme com delivery_ack(deliveryId: \"064eea6d-489d-40b4-9c11-7ad1aa9fc2e2\").",
+      "at": 1792106929407
+    },
+    {
+      "text": "ReRere",
+      "at": 1792107150779
+    }
+  ]
+}

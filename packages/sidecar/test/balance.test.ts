@@ -1,4 +1,5 @@
 import { test } from 'node:test'
+import { initRepository } from './gitFixture.ts'
 import assert from 'node:assert/strict'
 import { mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -21,7 +22,7 @@ test('the load of a CLI is its freest subscription, counting the agents on it; u
   const room = (a: Account, used: number | null, live: number, full = false): AccountRoom => ({ account: a, used, live, full, resetsAt: null })
   assert.equal(cliLoad([room(acc('a'), 40, 1), room(acc('b'), 70, 0)]), 55)
   assert.equal(cliLoad([room(acc('a'), 99, 0, true), room(acc('k', 'api'), null, 0)]), null)
-  assert.equal(cliLoad([room(acc('a'), null, 0)]), 0)
+  assert.equal(cliLoad([room(acc('a'), null, 0)]), null, 'unknown quota cannot participate as zero load')
 })
 
 test('difficulty moves the seat inside the CLI: cheaper model for simple work, stronger model or more effort for hard work', () => {
@@ -58,9 +59,9 @@ test('the maestro shares work across CLIs by load, uses the table\'s equivalent,
   try {
     await ui.opened
     assert.deepEqual(server.core.store.routing().taskTypes.find((t) => t.id === 'bug')!.alt, DEFAULT_ROUTING.taskTypes.find((t) => t.id === 'bug')!.alt)
-    ui.send({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-'))) })
+    ui.send({ type: 'workspace.open', path: initRepository(realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-')))) })
     const { workspace } = await ui.next('workspace.updated')
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Carga', objective: '', mode: 'agentica', lead: { cli: 'shell', model: null, title: 'Líder' } })
+    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Carga', objective: '', mode: 'agentica', isolation: 'worktrees', lead: { cli: 'shell', model: null, title: 'Líder' } })
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
     const screen = server.core as unknown as { panes: { screenText: (id: number, lines: number) => string } }
     ui.send({ type: 'pane.input', paneId: lead.id, data: 'clear; echo "TOKEN:$ORBIT_PANE_TOKEN:"\r' })

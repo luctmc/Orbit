@@ -3,6 +3,9 @@ import { AGENT_CLIS, type UsageEntry } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { accountLabel, CLI_LABEL, costText, tokensText } from '../orbit/labels.ts'
 import { budgetShare } from './Budget.tsx'
+import { sumCost } from '../orbit/costCoverage.ts'
+
+const costLabel = (cost: ReturnType<typeof sumCost>) => cost.costUsd === null ? 'Não informado' : `${costText(cost.costUsd) ?? 'US$ 0,00'}${cost.costComplete ? '' : ' (parcial)'}`
 
 type GroupBy = 'missao' | 'workspace' | 'modelo' | 'conta'
 const GROUPS: Array<[GroupBy, string]> = [['missao', 'Missão'], ['workspace', 'Workspace'], ['modelo', 'CLI e modelo'], ['conta', 'Conta']]
@@ -48,14 +51,14 @@ export function UsagePanel() {
 
   const list = entries ?? []
   const total = list.reduce((sum, e) => sum + e.tokens, 0)
-  const cost = list.reduce((sum, e) => sum + e.costUsd, 0)
+  const cost = sumCost(list)
   const groups = [...list.reduce((map, e) => {
     const key = label[groupBy](e)
-    const g = map.get(key) ?? { name: key, tokens: 0, costUsd: 0 }
+    const g = map.get(key) ?? { name: key, tokens: 0, entries: [] }
     g.tokens += e.tokens
-    g.costUsd += e.costUsd
+    g.entries.push(e)
     return map.set(key, g)
-  }, new Map<string, { name: string; tokens: number; costUsd: number }>()).values()].sort((a, b) => b.tokens - a.tokens)
+  }, new Map<string, { name: string; tokens: number; entries: UsageEntry[] }>()).values()].sort((a, b) => b.tokens - a.tokens)
 
   // One bar per day of the month, the CLIs stacked.
   const [y, m] = month.split('-').map(Number) as [number, number]
@@ -70,7 +73,7 @@ export function UsagePanel() {
   const budgets = missions.filter((x) => x.status === 'active' && x.budget)
 
   const copyCsv = async () => {
-    const rows = [['dia', 'workspace', 'missão', 'cli', 'modelo', 'conta', 'tokens', 'custo_usd'], ...list.map((e) => [e.day, label.workspace(e), label.missao(e), e.cli, e.model ?? '', label.conta(e), String(e.tokens), e.costUsd.toFixed(4)])]
+    const rows = [['dia', 'workspace', 'missão', 'cli', 'modelo', 'conta', 'tokens', 'custo_usd', 'custo_completo'], ...list.map((e) => [e.day, label.workspace(e), label.missao(e), e.cli, e.model ?? '', label.conta(e), String(e.tokens), e.costUsd?.toFixed(4) ?? '', String(e.costComplete === true)])]
     const csv = rows.map((r) => r.map((v) => (/[",\n;]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v)).join(',')).join('\n')
     try {
       await navigator.clipboard.writeText(csv)
@@ -100,7 +103,7 @@ export function UsagePanel() {
         <>
           <div className="usage__totals">
             <div><strong>{tokensText(total)}</strong><span className="muted">tokens</span></div>
-            <div><strong>{costText(cost) ?? 'US$ 0,00'}</strong><span className="muted">em preço de API, só do Claude (na assinatura não é cobrado)</span></div>
+            <div><strong>{costLabel(cost)}</strong><span className="muted">estimativa informada pelo CLI; custo ausente não equivale a zero</span></div>
           </div>
 
           <div className="usage__chart" role="img" aria-label={`Tokens por dia em ${monthName(month)}`}>
@@ -117,7 +120,7 @@ export function UsagePanel() {
           </div>
           <table className="usage__table">
             <thead>
-              <tr><th scope="col">{GROUPS.find(([k]) => k === groupBy)![1]}</th><th scope="col">Tokens</th><th scope="col"><span className="sr-only">Parte do mês</span></th><th scope="col">Custo (Claude)</th></tr>
+              <tr><th scope="col">{GROUPS.find(([k]) => k === groupBy)![1]}</th><th scope="col">Tokens</th><th scope="col"><span className="sr-only">Parte do mês</span></th><th scope="col">Custo informado</th></tr>
             </thead>
             <tbody>
               {groups.map((g) => (
@@ -125,7 +128,7 @@ export function UsagePanel() {
                   <td>{g.name}</td>
                   <td>{tokensText(g.tokens)}</td>
                   <td className="usage__share"><span style={{ width: `${(g.tokens / Math.max(1, total)) * 100}%` }} /></td>
-                  <td>{costText(g.costUsd) ?? '—'}</td>
+                  <td>{costLabel(sumCost(g.entries))}</td>
                 </tr>
               ))}
             </tbody>

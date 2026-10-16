@@ -1,0 +1,22 @@
+{
+  "id": 2,
+  "cursor": {
+    "row": 8,
+    "column": 4,
+    "before": "❯ Re",
+    "after": ""
+  },
+  "lines": [
+    "",
+    " ▐▛███▛█   Claude Code v2.1.296",
+    "▝▜██████▀  Haiku 5.5 with low effort · Claude Team",
+    " ▝▝   ▝▝   /…/T/orbit-native-tab-yrC8ZM/claude",
+    "",
+    "",
+    "",
+    "────────────────────────────────────────────────────────────────────────────────",
+    "❯ Re",
+    "────────────────────────────────────────────────────────────────────────────────",
+    "  ◎ Orbit · Haiku 5.5 · esforço low · 0 tokens no contexto"
+  ]
+}

@@ -1,0 +1,97 @@
+- banner:
+  - generic: Orbit
+  - button "0.1.0"
+  - generic: 2 agentes vivos
+  - generic: Motor ativo
+- navigation "Workspaces":
+  - button "Base":
+  - button "workspace"
+  - button "Novo workspace":
+  - button "Squads"
+  - button "Ajustes"
+  - button "Nova missão":
+    - text: Nova missão
+- complementary "Missões":
+  - generic: workspace
+  - generic "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-r6-preview-8OEHKm/workspace": ‎/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-r6-preview-8OEHKm/workspace‎
+  - button "Editar workspace workspace": Editar
+  - generic: Missões
+  - button "Nova missão":
+  - list:
+    - button "QA local · dados sintéticos Agêntica · 2 agentes":
+      - generic: QA local · dados sintéticos
+      - generic: Agêntica · 2 agentes
+  - generic: Tripulação
+  - list:
+    - 'button "Líder · #1 ocioso"':
+      - generic: "Líder · #1"
+      - generic: ocioso
+    - 'button "Ajudante · #2 iniciando"':
+      - generic: "Ajudante · #2"
+      - generic: iniciando
+- main:
+  - heading "QA local · dados sintéticos" [level=1]
+  - generic: Agêntica
+  - paragraph: Conferir o fluxo visual de entrega e revisão sem chamadas a modelos. · 2 agentes vivos
+  - group "Layout dos agentes":
+    - button "Grade"
+    - button "Foco" [pressed]
+  - button "Atividades" [pressed]
+  - button "Histórico"
+  - button "Quadro":
+    - text: Quadro
+  - button "Arquivos":
+    - text: Arquivos
+  - button "Navegador":
+    - text: Navegador
+  - button "Orçamento"
+  - button "Trocar líder"
+  - button "Relatório da missão":
+  - button "Agente":
+    - text: Agente
+  - button "Salvar como modelo":
+  - button "Arquivar missão":
+  - button "Apagar missão":
+  - region "Próximo passo da missão":
+    - img "Orbit, companheiro orbital grafite com anel verde"
+    - generic "Opções do mascote Orbit": Orbit
+    - generic: Próximo passo
+    - status: Entrega aguardando revisão
+    - paragraph: Corrigir média de array vazio · Entregar o resultado ainda não conclui a validação.
+    - button "Conferir agora"
+  - 'region "Agente 1: Líder de demonstração"':
+    - generic "ocioso"
+    - generic: Líder
+    - generic: "#1"
+    - button "Líder de demonstração"
+    - generic: Codex
+    - button "Terminal" [pressed]
+    - 'button "Ações de #1"':
+    - button "Encerrar agente 1":
+    - 'generic "Conversa com #1"':
+      - paragraph: As mensagens aparecem quando o agente registra sua conversa. O terminal mostra a execução ao vivo.
+    - generic "ocioso · Atividade recente"
+    - generic: ocioso
+    - generic: ·
+    - generic "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-r6-preview-8OEHKm/workspace": ‎/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-r6-preview-8OEHKm/workspace‎
+  - complementary "Histórico das atividades":
+    - heading "Trabalho da missão" [level=2]
+    - button "Recolher"
+    - region "Atividades e evidências da missão":
+      - generic: Atividades e evidências
+      - generic: Observado às 10:41:00
+      - list:
+        - generic "Corrigir média de array vazio Aguardando revisão":
+          - generic: Corrigir média de array vazio
+          - generic: Aguardando revisão
+  - text: Falar com
+  - strong: "#1 Líder de demonstração"
+  - generic: Enter envia · Shift+Enter quebra linha
+  - 'textbox "Falar com #1 Líder de demonstração"':
+    - /placeholder: Descreva o que deseja construir, cole uma imagem ou anexe arquivos…
+  - button "Escolher anexos"
+  - button "Anexar imagens ou arquivos":
+  - button "Ditar mensagem":
+  - generic: ⌘J para escrever
+  - button "Enviar" [disabled]:
+    - text: Enviar

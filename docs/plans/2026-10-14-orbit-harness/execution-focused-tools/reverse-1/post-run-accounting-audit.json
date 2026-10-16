@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "modelCalls": 0,
+  "kind": "offline replay of retained session baselines after helper closure",
+  "stateSha256": "34308a7aedfdbd219a6ebdb25579b7d101053f742d5696eff098f8de09da9301",
+  "reports": [
+    {
+      "paneId": 1,
+      "delta": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0,
+        "costUsd": 0
+      }
+    },
+    {
+      "paneId": 2,
+      "delta": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0,
+        "costUsd": null
+      }
+    }
+  ],
+  "passed": true,
+  "limits": [
+    "No native retry and no rewrite of failed run",
+    "Does not reconstruct missing final worker identity observations",
+    "Original recovery accounting check remains false; future runner now retains observations before helper closure"
+  ]
+}

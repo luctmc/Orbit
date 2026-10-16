@@ -1,0 +1,30 @@
+[
+  {
+    "headerHeight": 48,
+    "overflow": false,
+    "refreshHeight": 44,
+    "scrollable": true,
+    "width": 375
+  },
+  {
+    "headerHeight": 48,
+    "overflow": false,
+    "refreshHeight": 44,
+    "scrollable": true,
+    "width": 768
+  },
+  {
+    "headerHeight": 48,
+    "overflow": false,
+    "refreshHeight": 44,
+    "scrollable": true,
+    "width": 1024
+  },
+  {
+    "headerHeight": 48,
+    "overflow": false,
+    "refreshHeight": 44,
+    "scrollable": false,
+    "width": 1440
+  }
+]

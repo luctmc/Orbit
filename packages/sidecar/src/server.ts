@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { WebSocketServer, type WebSocket } from 'ws'
-import type { ClientMessage, ServerMessage } from '@orbit/protocol'
+import type { ClientMessage, ServerMessage, StartupTask } from '@orbit/protocol'
 import { OrbitCore, type CoreOptions } from './core.ts'
 import type { HookPayload } from './hooks.ts'
 import { handleMcp } from './mcp.ts'
@@ -16,6 +16,8 @@ export interface ServerOptions {
   dataDir: string
   shell: string
   agentCommand?: CoreOptions['agentCommand']
+  measurements?: CoreOptions['measurements']
+  benchmarkEagerContext?: CoreOptions['benchmarkEagerContext']
   run?: CoreOptions['run']
   browser?: CoreOptions['browser']
   /** Tests drive the schedules with their own clock. */
@@ -25,6 +27,8 @@ export interface ServerOptions {
 export interface RunningServer {
   port: number
   core: OrbitCore
+  /** Optional services have settled; transport readiness deliberately does not await this. */
+  initialized: Promise<void>
   close(): Promise<void>
 }
 
@@ -39,6 +43,10 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
    * and the missions whose browser it is watching (frames only go there).
    */
   const clients = new Map<WebSocket, { id: string; attaching: Map<number, ServerMessage[]>; watching: Set<string> }>()
+  const tasks: StartupTask[] = ['recovery', 'catalog', 'accounts', 'clis', 'skills'].map(id => ({ id: id as StartupTask['id'], state: 'pending' }))
+  let closed = false
+  let resolveInitialized!: () => void
+  const initialized = new Promise<void>(resolve => { resolveInitialized = resolve })
   const send = (ws: WebSocket, message: ServerMessage) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message))
   }
@@ -48,6 +56,8 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     agentCommand: options.agentCommand,
     run: options.run,
     browser: options.browser,
+    measurements: options.measurements,
+    benchmarkEagerContext: options.benchmarkEagerContext,
     broadcast: (message) => {
       for (const [ws, { attaching, watching }] of clients) {
         if (message.type === 'browser.frame' && !watching.has(message.missionId)) continue
@@ -83,7 +93,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
       res.end(error instanceof Error ? error.message : 'erro')
     })
   })
-  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_BODY })
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 6 * 1024 * 1024 })
 
   http.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
@@ -100,6 +110,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     const client = { id: randomUUID(), attaching: new Map<number, ServerMessage[]>(), watching: new Set<string>() }
     clients.set(ws, client)
     for (const message of core.welcome()) send(ws, message)
+    send(ws, { type: 'engine.startup', tasks })
     ws.on('message', (raw) => {
       try {
         const message = JSON.parse(String(raw)) as ClientMessage
@@ -108,7 +119,8 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
           if (message.on) client.watching.add(message.missionId)
           else client.watching.delete(message.missionId)
           core.browser.watch(message.missionId, client.id, message.on)
-        } else core.handle(message, (answer) => send(ws, answer))
+        } else void Promise.resolve(core.handle(message, (answer) => send(ws, answer)))
+          .catch(error => send(ws, { type: 'error', message: error instanceof Error ? error.message : String(error) }))
       } catch (error) {
         send(ws, { type: 'error', message: error instanceof Error ? error.message : String(error) })
       }
@@ -123,21 +135,48 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   const address = http.address()
   port = typeof address === 'object' && address ? address.port : options.port
   core.setEndpoint(`http://127.0.0.1:${port}`)
-  core.resumeCrews()
-  void core.refreshCatalog()
-  void core.checkAccounts()
-  void core.inspectClis()
   core.startUsageWatch()
-  void core.scanSkills().catch(() => {})
-  if (options.scheduler !== false) core.startScheduler()
+  // Report ORBIT_READY before optional discovery/recovery. A slow login shell or old crew must
+  // not hold the desktop handshake hostage. Each service is observable on reconnect as well.
+  const publish = () => { for (const ws of clients.keys()) send(ws, { type: 'engine.startup', tasks }) }
+  const jobs: Record<StartupTask['id'], () => Promise<void>> = {
+    recovery: () => core.resumeCrews(), catalog: () => core.refreshCatalog(),
+    accounts: () => core.checkAccounts(), clis: () => core.inspectClis(), skills: () => core.scanSkills(),
+  }
+  const startup = setTimeout(() => {
+    if (closed) return
+    const pending = tasks.map(task => {
+      task.state = 'running'
+      return Promise.resolve().then(jobs[task.id]).then(() => { task.state = 'ready' }, error => {
+        task.state = 'error'
+        task.message = error instanceof Error ? error.message : String(error)
+      }).finally(() => { if (!closed) publish() })
+    })
+    void Promise.allSettled(pending).then(() => resolveInitialized())
+    publish()
+    if (options.scheduler !== false) core.startScheduler()
+  }, 0)
 
   return {
     port,
     core,
+    initialized,
     async close() {
-      core.shutdown()
+      closed = true
+      clearTimeout(startup)
+      resolveInitialized()
+      const shutdown = core.shutdown()
       for (const ws of clients.keys()) ws.terminate()
-      await new Promise<void>((resolve) => wss.close(() => http.close(() => resolve())))
+      await Promise.all([
+        shutdown,
+        new Promise<void>((resolve) => wss.close(() => resolve())),
+        new Promise<void>((resolve) => {
+          http.close(() => resolve())
+          // An interrupted CLI can leave an incomplete body or an active MCP request behind.
+          // Shutdown must release these connections after stopping admission, not wait forever.
+          http.closeAllConnections()
+        }),
+      ])
     },
   }
 }
@@ -183,14 +222,16 @@ async function handleAgentRequest(core: OrbitCore, port: number, req: IncomingMe
 
   if (req.method !== 'POST') return void res.writeHead(405, { allow: 'POST' }).end()
   const body = await readJson(req)
+  // Authentication preceded an await: the same pane number may now belong to another process.
+  try { core.assertCurrent(caller) } catch { return void res.writeHead(409).end('Execução substituída') }
 
   if (path === '/hooks') {
-    const decision = core.hookReport(caller.id, (body ?? {}) as HookPayload)
+    const decision = core.hookReport(caller.id, (body ?? {}) as HookPayload, caller.executionEpoch)
     if (!decision) return void res.writeHead(204).end()
     return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(decision))
   }
   if (path === '/status') {
-    core.statusReport(caller.id, body)
+    core.statusReport(caller.id, body, caller.executionEpoch)
     return void res.writeHead(204).end()
   }
   await handleMcp(core, caller, req, res, body)

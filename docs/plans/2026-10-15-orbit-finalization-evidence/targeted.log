@@ -1,0 +1,18 @@
+✔ dependencies require acceptance, pin an exact result and become invalid when that prerequisite is retried (650.235958ms)
+✔ a newer done result invalidates an inspection even when source bytes did not change (115.567166ms)
+✔ review persistence fails closed and rolls back acceptance when disk commit fails (229.773ms)
+✔ final review and mission completion commit together and replay keeps the same receipt and event (338.34375ms)
+✔ combined completion refuses helper, result scope, non-accepted verdict and incomplete evidence without mutations (243.691ms)
+✔ source changes, new work and stale caller cannot finalize an old inspection (299.18725ms)
+✔ disk failure rolls back final verdict, ready state and ready event in one transaction (251.56825ms)
+✔ mission progress retains delivery and review identity and observes stale final source without changing historical acceptance (346.679208ms)
+✔ progress replies correlate failures and success to the requesting UI without broadcasting or mutating the ledger (92.587708ms)
+✔ authenticated WebSocket progress replies only to its requester and correlates missing-mission errors (58.008ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1313.031583

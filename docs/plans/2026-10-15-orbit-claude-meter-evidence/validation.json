@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-16T01:43:06.477Z",
+  "sources": {
+    "apps/desktop/src/orbit/limitPresentation.ts": "f79208901d478d0ade67ec50002ce164a4bc16939a911e07ea75e72a209f3ece",
+    "apps/desktop/src/components/chrome.tsx": "ce3be5b19edf9d51f0b726fe659458b5e01c6e3d256e239f2b2408ad381284fe",
+    "apps/desktop/src/components/AccountsPanel.tsx": "a1ebbcf0b0b238b7d8fe5d16db8269486beb060602e0b9aedbf20e1e3bb2cd2a"
+  },
+  "binaryHashes": {
+    "apps/desktop/src-tauri/target/release/bundle/macos/Orbit.app/Contents/MacOS/orbit-desktop": "40146157c5b7078bb01ee382657c95c227aae826a91fb683985ede2c29c86532",
+    "apps/desktop/src-tauri/target/release/orbit-desktop": "40146157c5b7078bb01ee382657c95c227aae826a91fb683985ede2c29c86532"
+  },
+  "checks": {
+    "desktopTests": 22,
+    "typecheckExit": 0,
+    "buildExit": 0
+  }
+}

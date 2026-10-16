@@ -1,0 +1,5 @@
+{
+  "data": "\u001b[?1049h\u001b[H \u001b[1C\u001b[1mWarnings · 1 of 1 · Startup\r\n\r\n\u001b[2C\u001b[0mRunning without the shared background server: command-line\u001b[1Cconfiguration\r\n\u001b[2Coverrides (-c, --enable, --disable, or --search) requires\u001b[1Cembedded\u001b[1Cmode.\r\n\r\n\r\n\r\n \r\n\r\n\r\n\u001b[2C\u001b[1mk\u001b[1C\u001b[0mkeep & next ·\u001b[1C\u001b[1mesc\u001b[1C\u001b[0mdismiss\u001b[1C&\u001b[1Cclose\u001b[1C·\u001b[1C\u001b[1m⌃o\u001b[1C\u001b[0mcopy\u001b[1C·\u001b[1C\u001b[1m←/→\u001b[1C\u001b[0mwarning · \u001b[1m↓\u001b[0m scroll\u001b[?2004h\u001b[?1004h\u001b[?1003h",
+  "cols": 80,
+  "rows": 11
+}

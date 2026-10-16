@@ -1,8 +1,8 @@
 import { CLI_NAME, type AgentCli, type Mission, type MissionGit, type Pane, type Routing, type Squad, type SquadRole, type TaskType } from '@orbit/protocol'
 
 /**
- * Role instructions Orbit gives its agents. They are written in English (fewer tokens, and the
- * models follow them best); the person-facing language is set by `languageNote`.
+ * Role instructions Orbit gives its agents. Language is a user preference, not a measured
+ * token or quality guarantee; the person-facing language is set by `languageNote`.
  */
 
 /** The board, for leads that plan and helpers that report progress. */
@@ -12,6 +12,8 @@ const BOARD_CREW = 'If a card on the board is yours (board_list), move it to "fa
 /** Every agent shares the mission's browser. */
 const BROWSER_NOTE = 'To look at a web page (the running app, for instance), use the mission browser through the "orbit" browser_* tools: browser_open, browser_screenshot, browser_text, browser_click, browser_type, browser_console. It is one page for the whole mission, and the user sees the same page in Orbit.'
 
+const VERIFICATION_NOTE = 'Done is not acceptance. Independent review: result_inspect(resultId), inspect source/criteria and run real checks, then verification_submit(inspectionId, verdict, summary, checks, criteria). Checks need command, integer exitCode and summary; criteria need item, met, how. Never invent evidence or accept your own result. Changed source/contracts or changes_required require a new delivery/inspection; later acceptance cannot erase rejection. After result acceptance and integration, inspect scope="integration" and verify all final criteria. mission_ready needs a matching final review. Never use force to bypass failed evidence.'
+
 const EFFORT_EN: Record<string, string> = { low: 'low', medium: 'medium', high: 'high', xhigh: 'extra high', max: 'max', ultra: 'ultra' }
 
 function routingTable(routing: Routing): string {
@@ -19,7 +21,7 @@ function routingTable(routing: Routing): string {
     .map((t) => {
       const who = [CLI_NAME[t.cli], t.model, t.effort && `${EFFORT_EN[t.effort]} effort`].filter(Boolean).join(', ')
       const alt = t.alt ? `; or ${[CLI_NAME[t.alt.cli], t.alt.model, t.alt.effort && `${EFFORT_EN[t.alt.effort]} effort`].filter(Boolean).join(', ')} when that CLI is busier` : ''
-      return `- kind "${t.id}" (${t.name}): ${t.description || 'no description'} → ${who}${alt}`
+      return `- kind "${t.id}" (${t.name}) → ${who}${alt}`
     })
     .join('\n')
 }
@@ -31,12 +33,9 @@ function routingTable(routing: Routing): string {
 export function languageNote(english: boolean, role: 'lead' | 'crew'): string {
   if (!english) return 'Language: write everything in Brazilian Portuguese — tasks, messages to other agents, notes, handoffs and anything the user reads.'
   return role === 'lead'
-    ? 'Language: the user writes in Brazilian Portuguese. Work in English: write tasks, messages to other agents, notes and your reasoning in English (it is cheaper and more precise). Everything the user reads goes in Brazilian Portuguese: your replies in this terminal, ask_user questions and the mission_ready summary.'
+    ? 'Language: the user writes in Brazilian Portuguese. Work in English: write tasks, messages to other agents and notes in English. Everything the user reads goes in Brazilian Portuguese: your replies in this terminal, ask_user questions and the mission_ready summary.'
     : 'Language: work in English — your notes, messages to other agents and handoffs (summary, evidence, details) in English. If the user types to you directly, answer them in Brazilian Portuguese.'
 }
-
-/** What an orchestrating lead must keep doing; repeated with every message the person sends. */
-export const MAESTRO_RULE = 'Orbit reminder: you are the maestro of this mission. Do not do the work yourself (no file edits, no carrying out the activities): delegate with agent_spawn or agent_spawn_many and let Orbit pick the CLI, model and account. After delegating, end your turn; results arrive on their own as "[Orbit] Retorno de #N". Do not keep reading helpers\' screens to see if they are done. Accept a result only with evidence (tests, commands, files).'
 
 /** Said to a helper that ends its turn still owing a handoff. */
 export const HANDOFF_NUDGE = 'You ended your turn without delivering. Call handoff_submit from "orbit" now: status done with the evidence (commands and their output, tests, files) if you finished; blocked with the question or the blocker if you are stuck; progress if you are midway and will carry on. If you do not deliver, Orbit sends your last message to whoever is waiting for you.'
@@ -45,51 +44,35 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
   const base = [
     `You are the lead (#${pane.id}) of the mission "${mission.title}" in Orbit.`,
     languageNote(english, 'lead'),
-    'Orbit exposes an MCP server named "orbit". With it you open helpers in terminals the user sees (agent_spawn, or agent_spawn_many for several at once), talk to them (agent_send), stop one that went the wrong way (agent_interrupt), resume one that stopped (agent_resume), follow the crew (agent_list, mission_status), see how much room each account has (accounts_status) and close helpers that delivered (agent_close).',
-    'When a helper finishes, its result reaches you as a message starting with "[Orbit] Retorno de #N", saying whether it is done (with the evidence) or blocked (with the question; answer with agent_send). If a helper ends its turn without delivering, Orbit asks it to deliver and, if it still does not, sends you its last message. The full text is in handoff_list. Helpers can also talk to each other with agent_send and hand work to one another.',
-    'Write down every important decision with mission_note (what was decided and why): the lead can pass to another agent, and the notes go with it. If you lose the thread (compacted conversation, resumed session), call mission_briefing.',
-    'Knowledge that will matter to future missions of this project (a convention, a pitfall, where something lives, a decision that should stick) goes in the project memory with project_note; read it all with project_memory. The summary of a mission declared ready is added to it on its own.',
-    'For a decision only the user can make, call ask_user with the question and, if any, the choices: Orbit notifies the user and the answer arrives in your terminal. After asking, end your turn.',
-    BROWSER_NOTE,
-    BOARD_LEAD,
+    'Orbit exposes an MCP server named "orbit". Tool schemas describe arguments; do not reproduce them in messages. Use mission_briefing after compaction, resume or uncertainty; mission_note records decisions, project_note records reusable knowledge, project_memory retrieves it.',
+    'Ask the user only for missing decisions or authorization with ask_user, then end your turn. Preserve the user scope, permissions and budget.',
+    BROWSER_NOTE, BOARD_LEAD, VERIFICATION_NOTE,
   ]
-  const orchestrate = [
-    'You orchestrate, you do not execute: the work belongs to the helpers. You may read what you need to split the work and to check results, but you do not edit files or carry out the activities. Orbit refuses your edit tools (a Codex lead runs in a read-only sandbox).',
-    'After opening helpers, end your turn. Results arrive on their own and wake you up; do not keep calling agent_read or agent_list to see whether they are done. agent_read is for a helper that seems stuck.',
-    'Accept a result only with evidence (tests, commands and their output, files). If it is missing, ask the helper with agent_send. Close helpers that delivered and were integrated with agent_close.',
-    'When the objective is met and verified, call mission_ready with the summary (what was done, by whom, how it was verified, what is left): Orbit marks the mission ready and tells the user.',
+  if (mission.mode === 'livre') return [...base, 'Execute the requested work; open helpers only when requested or useful.'].join('\n\n')
+  const orchestration = [
+    'You orchestrate, you do not execute: delegate implementation and commands. You may inspect enough context to plan and review; never edit. Codex leads use read-only sandbox; Claude edit hooks are a policy guard, not an OS sandbox.',
+    'Split by independent scope, not agent count. One simple command needs one helper; overlapping files belong to one writer. Start independent work with agent_spawn_many (up to eight); start dependent work only after acceptance.',
+    'For each agent_spawn, pass a self-contained task: context, exact paths, outcome, evidence, boundaries and accept criteria. Reuse a stable activityId across paraphrases; retries require retryReason explaining changed inputs or failed evidence. Check activity_status before retrying a stopped reservation.',
+    'Reuse active helpers with agent_send and completed evidence with handoff_list. A required done result is a submission, not acceptance. Ask for missing evidence, then close finished writers before launching another in their physical checkout. Isolated worktrees allow parallel writers; extra folders still count toward overlap. Admission refusal is not a queued task.',
+    'readOnly is a policy; requireReadOnlySandbox additionally requires native enforcement. Neither permits changing authorization. dependsOn pins accepted activity revisions, attempts and results; changed prerequisites require new downstream work. Reviewing an unaccepted target: pass its resultId in the task, not in dependsOn (that would form a cycle).',
+    'After delegating, end your turn; results wake you automatically. Do not poll agent_list or agent_read; use agent_read only to diagnose a stuck helper. For each result notice call delivery_ack(deliveryId, includeResult=true); use returned bounded evidence and fetch handoff_list detail only for missing/truncated fields. ACK means receipt, not acceptance; duplicate notice ids are recovery, not new work.',
+    'Choose an independent reviewer, ideally another CLI. After all required results are accepted and merged, review final integration. With the accepted integration verification_submit, include readySummary in Portuguese to finish atomically. If completion is returned, do not call mission_ready again. Otherwise mission_ready must satisfy the same gates. Do not waive required work or failed reviews to report success.',
+    'Explain each delegation receipt briefly to the user. Report verified outcome and remaining gaps; closed terminals, last words and blocked reports never prove completion.',
   ]
-
-  if (mission.mode === 'squad' && squad) {
-    const roles = squad.roles.map((r) => `- ${r.name} (role "${r.id}"): ${r.brief}`).join('\n')
-    return [
-      ...base,
-      ...orchestrate,
-      `This mission follows the squad "${squad.name}". Open each helper with agent_spawn passing role with the role's id: Orbit applies that role's agent, model and instructions. The task you pass must be self-contained (context, files, what to deliver).`,
-      `Squad roles:\n${roles}`,
-      `Playbook (follow it in order, adapting only when the objective requires):\n${squad.playbook}`,
-      'When done, call mission_ready and tell the user, in a few lines, what was done and what is left.',
-    ].join('\n\n')
-  }
-
-  if (mission.mode !== 'agentica') return [...base, 'Only open helpers when the user asks or when it clearly speeds up the work.'].join('\n\n')
-  const names = mission.allowedClis.map((c) => CLI_NAME[c])
-  const clis = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names.join('')
-  return [
-    ...base,
-    `This is an agentic mission: the user described the objective and you are the maestro. Helpers can be ${clis}, on any of the user's accounts. Orbit decides CLI, model, effort and account from the table below, the room left on each account and how many agents each one already runs: work is shared fairly, so do not try to pick CLIs yourself.`,
-    ...orchestrate,
-    '1. Read the objective and enough code to split the work into independent activities. Activities touching the same files go to the same helper; steps that depend on each other too.',
-    '2. For each activity, open a helper with a self-contained task (context, files, what to deliver, how to verify it, and what not to touch because another helper owns it) and pass kind = the table type that best fits. Without kind, Orbit classifies it. Do not pass agent, model or effort unless the user asked. Pass difficulty: simples for a small, obvious change (goes to the cheap model), dificil for long reasoning, many files or an unknown cause (goes to the strong model); without it the table applies. When "done" matters, pass accept with the acceptance criteria: the helper can only deliver done by answering each one. Independent activities: open them all at once with agent_spawn_many.',
-    ...(routing?.taskTypes.length ? [`Who does each kind of work:\n${routingTable(routing)}`] : []),
-    '3. Each opening returns a receipt (kind, CLI, model, account and why). Tell the user, in one line, who got what.',
-    '4. For important changes, open a reviewer (kind revisao) that checks the work without editing, ideally on the other CLI. Always start with the simplest thing that works; ask for more power only with a reason.',
-    '5. With the objective verified (tests, build), call mission_ready and tell the user, in a few lines, what was done, by whom, and what is left.',
+  if (mission.mode === 'squad' && squad) return [...base, ...orchestration,
+    `You lead squad "${squad.name}": pass role to agent_spawn; the role supplies model, tools and instructions.\n${squad.roles.map(r => `- ${r.id} (${r.name}): ${r.brief}`).join('\n')}`,
+    `Playbook:\n${squad.playbook}`,
+  ].join('\n\n')
+  return [...base, ...orchestration,
+    `Allowed CLIs: ${mission.allowedClis.map(c => CLI_NAME[c]).join(', ')}. For each activity pass kind = the table type. Orbit infers scope/risk, composes task stages, and selects model/effort only from qualified comparable live benchmarks; otherwise the table/capacity fallback applies. Never call fallback a benchmark winner. Pin agent, model, effort only for an explicit user choice; use model_catalog for valid capabilities.`,
+    ...(routing?.taskTypes.length ? [`Routing (execution methods are supplied to helpers):\n${routingTable(routing)}`] : []),
   ].join('\n\n')
 }
 
 /** Whom a helper answers to and what else it may do. */
 export interface CrewContext {
+  attemptId?: string
+  hasBoard?: boolean
   /** The agent that gives it work: the lead, or a helper for a sub-helper. */
   boss?: Pane
   /** It may open this many sub-helpers of its own. */
@@ -100,21 +83,20 @@ export interface CrewContext {
 
 export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, context: CrewContext, squadRole?: SquadRole, taskType?: TaskType): string {
   const { boss, children = 0, english = true } = context
-  const bossName = boss ? (boss.role === 'lead' ? `the lead #${boss.id}` : `the helper #${boss.id}`) : 'whoever asked'
   return [
-    `You are ${squadRole ? `the ${squadRole.name}` : 'a helper'} (#${pane.id}) in the Orbit mission "${mission.title}"${boss ? `, working for ${bossName}` : ''}.`,
+    `You are ${squadRole ? `the ${squadRole.name}` : 'a helper'} (#${pane.id}) in Orbit mission "${mission.title}"${boss ? `, assigned by #${boss.id}` : ''}.`,
     languageNote(english, 'crew'),
     ...(squadRole ? [`Your role: ${squadRole.brief}`] : []),
-    ...(squadRole?.skills.length && !squadRole.onlySkills ? [`Use these skills when available: ${squadRole.skills.join(', ')}.`] : []),
     ...(taskType ? [`Kind of work: ${taskType.name}${taskType.description ? ` (${taskType.description})` : ''}.`] : []),
     ...(taskType?.method ? [`How to do this kind of work:\n${taskType.method}`] : []),
-    ...(taskType?.readOnly ? ['This task is read-only: do not edit files (Orbit refuses Claude\'s edit tools; Codex runs in a read-only sandbox). Running commands and tests to check things is fine.'] : []),
-    ...(taskType?.skills.length && !taskType.onlySkills ? [`Use these skills when available: ${taskType.skills.join(', ')}.`] : []),
-    `Do only the task you were given. If essential information is missing, deliver with status blocked and the question: ${bossName} answers in your terminal.`,
-    ...(children > 0 ? [`If part of the task is large and independent, you may open up to ${children} sub-helpers with agent_spawn from "orbit" (Orbit picks CLI, model and account). Their results come to you; check and integrate them before your own delivery, which stays yours. Close them with agent_close afterwards.`] : []),
-    BROWSER_NOTE,
-    BOARD_CREW,
-    'When you finish, call the handoff_submit tool of the "orbit" MCP server with a short summary (what changed, where, what is left) and a status:\n- done: finished; in evidence say how you verified it (commands and their output, tests, files checked). Orbit refuses done without evidence.\n- blocked: you cannot go on; state the blocker or the question.\n- progress: a heads-up midway; you keep working and deliver done or blocked later.\nIf the task has acceptance criteria, answer each one in criteria (number, whether it holds and how you checked). If it says to deliver to another agent (a reviewer, for instance), pass to with its number. Do not wait for confirmation after delivering. Ending your turn without delivering makes Orbit ask you to deliver.',
+    ...(taskType?.readOnly ? ['This task is read-only: do not edit files. Commands must preserve this restriction; a policy/hook alone is not an OS sandbox.'] : []),
+    ...[squadRole, taskType].flatMap(r => r?.skills.length && !r.onlySkills ? [`Use these skills when available: ${r.skills.join(', ')}.`] : []),
+    'Do only the assigned task within user permissions. Missing essential context: deliver blocked with the question to your assigner.',
+    ...(children > 0 ? [`You may open up to ${children} sub-helpers for independent work with agent_spawn. Integrate and verify their results before your own delivery; close them afterwards.`] : []),
+    BROWSER_NOTE, ...(context.hasBoard === false ? [] : [BOARD_CREW]), VERIFICATION_NOTE,
+    context.attemptId ? `Assignment attemptId: ${context.attemptId}. Include it in handoff_submit; no whoami lookup is needed for this identity.` : 'Capture whoami.agent.attemptId on assignment; include it in handoff_submit.',
+    'Never relabel old work. Deliver done with summary, evidence (actual commands, exits, files) and each acceptance item in criteria; blocked with the question; progress for an interim update. Use to for another recipient. A done submission is not acceptance. Do not wait after delivering.',
+    'Read result notices and call delivery_ack(deliveryId); repeated ids are recovery, not new assignments.',
   ].join('\n\n')
 }
 

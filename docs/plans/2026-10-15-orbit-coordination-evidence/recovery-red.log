@@ -1,0 +1,25 @@
+file:///Users/lucas/Documents/GitHub/Orbit/scripts/lib/autonomy-observations.test.mjs:3
+import { sessionObservations, auditRecovery } from './autonomy-observations.mjs'
+                              ^^^^^^^^^^^^^
+SyntaxError: The requested module './autonomy-observations.mjs' does not provide an export named 'auditRecovery'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:455:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:553:5)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.21.0
+✖ scripts/lib/autonomy-observations.test.mjs (146.382ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 154.42575
+
+✖ failing tests:
+
+test at scripts/lib/autonomy-observations.test.mjs:1:1
+✖ scripts/lib/autonomy-observations.test.mjs (146.382ms)
+  'test failed'

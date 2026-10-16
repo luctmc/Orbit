@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "mode": "offline",
+  "requestedTasks": [
+    "op-build",
+    "bug-mean"
+  ],
+  "repetitions": 1,
+  "fullTarget": {
+    "tasks": [
+      "op-tests",
+      "op-build",
+      "op-config",
+      "op-health",
+      "bug-mean",
+      "bug-pagination",
+      "bug-escape",
+      "bug-unique",
+      "feature-money",
+      "feature-config",
+      "feature-csv",
+      "feature-profile"
+    ],
+    "repetitions": 3
+  },
+  "corpusRevision": "69d519eefdc4120ecfa27ed8476d85c2c446e49ef35b52fded37c0b02c200893",
+  "sourceRevision": "0ec3862a7198c6bf9a1a317db7ef89fff0882b9cfe7a67b240e18734a999a48d",
+  "runtime": {
+    "node": "v24.21.0",
+    "claude": null,
+    "codex": null
+  },
+  "models": {
+    "worker": "claude:claude-haiku-5-5:low",
+    "reviewer": "codex:gpt-6-luna:low"
+  },
+  "limits": {
+    "tokens": 750000,
+    "knownClaudeCostUsd": 0.1
+  },
+  "coordinator": "deterministic Orbit controller; not an autonomous LLM maestro evaluation",
+  "comparison": "eager versus budgeted optional context, identical safety gates",
+  "firstResponse": "Not observable from PTY banners; left null"
+}

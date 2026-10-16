@@ -19,14 +19,14 @@ const ORBIT_CLI = fileURLToPath(new URL('../hooks/orbit-cli.mjs', import.meta.ur
 
 test('Gemini and Antigravity commands: model, folders, first prompt, resume, and the orbit command first on the PATH', () => {
   const gemini = buildCommand({ cli: 'gemini', model: 'pro', addDirs: ['/w/api', '/w/docs'], systemSettingsPath: '/p/gemini-settings.json', rolePromptPath: '/p/role.md', taskPath: '/p/task.md', binDir: '/p/bin' }, '/bin/zsh').args[2]!
-  assert.match(gemini, /^PATH='\/p\/bin':"\$PATH" GEMINI_CLI_SYSTEM_SETTINGS_PATH='\/p\/gemini-settings\.json' gemini -m pro --include-directories '\/w\/api,\/w\/docs' -i "\$\(cat '\/p\/role\.md' '\/p\/task\.md'\)"; exec/)
+  assert.match(gemini, /^PATH='\/p\/bin':"\$PATH" GEMINI_CLI_SYSTEM_SETTINGS_PATH='\/p\/gemini-settings\.json' gemini -m pro --include-directories '\/w\/api,\/w\/docs' -i "\$\(cat '\/p\/role\.md' '\/p\/task\.md'\)"/)
   const back = buildCommand({ cli: 'gemini', model: null, resume: SESSION, rolePromptPath: '/p/role.md', taskPath: '/p/task.md' }, '/bin/zsh').args[2]!
   assert.match(back, new RegExp(`^gemini --resume ${SESSION} -i "\\$\\(cat '/p/task\\.md'\\)"`))
   assert.doesNotMatch(back, /role\.md/)
 
   const agy = buildCommand({ cli: 'antigravity', model: 'gemini-3.1-pro', effort: 'high', addDirs: ['/w/api'], rolePromptPath: '/p/role.md', taskPath: '/p/task.md' }, '/bin/zsh').args[2]!
-  assert.match(agy, /^agy --model gemini-3\.1-pro --effort high --add-dir '\/w\/api' --prompt-interactive "\$\(cat '\/p\/role\.md' '\/p\/task\.md'\)"; exec/)
-  assert.match(buildCommand({ cli: 'antigravity', model: null, resume: SESSION }, '/bin/zsh').args[2]!, new RegExp(`^agy --conversation ${SESSION}; exec`))
+  assert.match(agy, /^agy --model gemini-3\.1-pro --effort high --add-dir '\/w\/api' --prompt-interactive "\$\(cat '\/p\/role\.md' '\/p\/task\.md'\)"/)
+  assert.match(buildCommand({ cli: 'antigravity', model: null, resume: SESSION }, '/bin/zsh').args[2]!, new RegExp(`^agy --conversation ${SESSION}`))
 
   assert.deepEqual(buildCommand({ cli: 'gemini', model: null, login: true }, '/bin/zsh').args, ['-l', '-c', 'gemini'])
   assert.deepEqual(buildCommand({ cli: 'antigravity', model: null, login: true }, '/bin/zsh').args, ['-l', '-c', 'agy'])
@@ -118,7 +118,7 @@ test('Gemini agents run with a known conversation and Orbit rules through their 
     assert.match((await exec(process.execPath, [ORBIT_CLI, 'whoami'], { env })).stdout, new RegExp(`"id": ${helper.id}`))
     await assert.rejects(exec(process.execPath, [ORBIT_CLI, 'handoff_submit', '--summary', 'Revisado'], { env }), /evidence/)
     const delivered = await exec(process.execPath, [ORBIT_CLI, 'handoff_submit', JSON.stringify({ summary: 'README revisado', status: 'done', evidence: 'li o README inteiro' })], { env })
-    assert.match(delivered.stdout, new RegExp(`entregue a #${lead.id}`))
+    assert.match(delivered.stdout, new RegExp(`enfileirado para #${lead.id}`))
     await assert.rejects(exec(process.execPath, [ORBIT_CLI, 'whoami'], { env: { ...env, ORBIT_PANE_TOKEN: 'falso' } }), /401|negado|Unauthorized/i)
 
     // AfterAgent with nothing owed lets it stop; status follows.

@@ -1,0 +1,213 @@
+{
+  "date": "2026-10-14",
+  "phase": "R3",
+  "status": "implemented-in-working-tree",
+  "checks": [
+    {
+      "command": "npm test",
+      "exitCode": 0,
+      "sidecar": 152,
+      "desktop": 2,
+      "failures": 0
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "runtime": "v24.21.0",
+      "files": [
+        "contextPack.test.ts",
+        "contextIntegration.test.ts",
+        "skillPackages.test.ts",
+        "skills.test.ts",
+        "mcp.test.ts",
+        "memory.test.ts",
+        "leadership.test.ts",
+        "executionEpoch.test.ts"
+      ],
+      "tests": 24,
+      "failures": 0,
+      "exitCode": 0
+    },
+    {
+      "command": "npm run tauri -w @orbit/desktop -- build --debug",
+      "exitCode": 0,
+      "bundle": "apps/desktop/src-tauri/target/debug/bundle/macos/Orbit.app",
+      "warnings": [
+        "Existing JavaScript chunk above 500 kB"
+      ]
+    },
+    {
+      "check": "Packaged skill manifest and source hashes match",
+      "packages": 5,
+      "adapterResources": 20,
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/measure-context.mjs",
+      "exitCode": 0,
+      "unit": "utf8-bytes",
+      "realTokenSavings": null
+    }
+  ],
+  "limitations": [
+    "No full coding mission with real Claude/Codex tested in R3",
+    "Native provider skill visibility remains unknown",
+    "Loaded means text served, not verified consumption or fulfillment",
+    "Synthetic byte probe excludes schemas, native catalogs, tokenization and extra calls",
+    "Python quick_validate.py unavailable because PyYAML is missing",
+    "No install, commit, push or release performed"
+  ],
+  "hashes": [
+    {
+      "path": "packages/protocol/src/index.ts",
+      "bytes": 37910,
+      "sha256": "c4ede8b9af64e4cfb6c9d45d1bd0b892857ac6db519682dd52dbb3f5e5515e20"
+    },
+    {
+      "path": "packages/sidecar/src/core.ts",
+      "bytes": 150597,
+      "sha256": "14256b01ce085ebadbcb5db70d4dd1f990417b44e2f3061b1c72a77a2e4b4010"
+    },
+    {
+      "path": "packages/sidecar/src/mcp.ts",
+      "bytes": 35612,
+      "sha256": "dfbfdd62fa72170a02c624ee1acc9a1acb2790190d3f41f39bfff6845c896698"
+    },
+    {
+      "path": "packages/sidecar/src/prompts.ts",
+      "bytes": 17208,
+      "sha256": "dc46d44186d66a2cf022dece43d3702001c1be2ea0e3acdbc3db2c3e638eeba5"
+    },
+    {
+      "path": "packages/sidecar/src/skills.ts",
+      "bytes": 14152,
+      "sha256": "7714e6e22e5ae50d34bdb93e94e6cbde9297d9bf7457c57564c7d83c5b352858"
+    },
+    {
+      "path": "packages/sidecar/src/skillSessions.ts",
+      "bytes": 2123,
+      "sha256": "a8f40f9bd2beb4f94707975c1ce71a73d44e9f15db0029ee97999cbdf4637b57"
+    },
+    {
+      "path": "packages/sidecar/src/contextPack.ts",
+      "bytes": 4908,
+      "sha256": "5da25ffc49463ebb641fd0013c8776a826a42935cdfa419c9416cc16dc4ce8dd"
+    },
+    {
+      "path": "packages/sidecar/test/contextPack.test.ts",
+      "bytes": 2492,
+      "sha256": "6287f274a3934c4fe5924cb5c5678aad428f874f838f523bccd14983283b06c1"
+    },
+    {
+      "path": "packages/sidecar/test/contextIntegration.test.ts",
+      "bytes": 3510,
+      "sha256": "5f71c6449d6a7d549fb4ec3dbfddf730ed3c868b0b8bfdc911f3bba1c65fe369"
+    },
+    {
+      "path": "packages/sidecar/test/skillPackages.test.ts",
+      "bytes": 4628,
+      "sha256": "5ce9afb2a28b66bf3e665df568b31573fdc4d48cd07a319d41fca7ae7a3a23b7"
+    },
+    {
+      "path": "packages/sidecar/test/mcp.test.ts",
+      "bytes": 11928,
+      "sha256": "bcc09d6cd72c03171d60df33819d19a138b4109c69fdb8b34aee4adc87de10db"
+    },
+    {
+      "path": "packages/sidecar/test/memory.test.ts",
+      "bytes": 6863,
+      "sha256": "f49fb20a1a76c89de3d92543705b15f6eeadf61958fbfe022d76e6addeb04e68"
+    },
+    {
+      "path": "scripts/build-sidecar.mjs",
+      "bytes": 2222,
+      "sha256": "a784df368482daada34f6fb2097f1cc9d68e7f17f9c2eaff4a49833e8047074c"
+    },
+    {
+      "path": "scripts/measure-context.mjs",
+      "bytes": 2545,
+      "sha256": "9088171c4ccf61e258b2e94a9ef0c5dc04c56254c56a3435979bba5586d46675"
+    },
+    {
+      "path": "packages/sidecar/resources/skills/manifest.json",
+      "bytes": 1563,
+      "sha256": "e665475c8ea820b461bd438de0222fd120587e8312e17c8d80b757b7b833c1e5"
+    },
+    {
+      "path": "packages/sidecar/resources/skills/orbit-pilot/SKILL.md",
+      "bytes": 1130,
+      "sha256": "c29fb9355afa527c464eca45437d9d8ac733735fb56dece1a3add3013b1aae1c"
+    },
+    {
+      "path": "packages/sidecar/resources/skills/orbit-build/SKILL.md",
+      "bytes": 952,
+      "sha256": "0263327bd66f8972c6c0aa0d4c162cc3f0d22689ea8ec548e6d13497d70b4d5c"
+    },
+    {
+      "path": "packages/sidecar/resources/skills/orbit-review/SKILL.md",
+      "bytes": 875,
+      "sha256": "4875b812ba27e75a1ec9dfdfd89af1aa6582f374d1d6d49f697dab88e419ddba"
+    },
+    {
+      "path": "packages/sidecar/resources/skills/orbit-research/SKILL.md",
+      "bytes": 882,
+      "sha256": "2392f1a9037e55b257cd6083baaafea636941b8d87bf9a551de5967c629f0853"
+    },
+    {
+      "path": "packages/sidecar/resources/skills/orbit-verify/SKILL.md",
+      "bytes": 885,
+      "sha256": "2e167f8c0e923b36cbb7b1a219779312befb55d71b2b563a8bb3c9f497f938b7"
+    },
+    {
+      "path": "docs/plans/2026-10-14-orbit-harness/execution-r3/tests.log",
+      "bytes": 14711,
+      "sha256": "f9f958eb3fd445d7e980569c630eef75f78ba9ccb66ca6d4bd87a96b619f78ac"
+    },
+    {
+      "path": "docs/plans/2026-10-14-orbit-harness/execution-r3/tests-first-run.log",
+      "bytes": 33735,
+      "sha256": "522e0658517699fc2340e88c16072294d0285ac2d134a47b5aab63ad420e524c"
+    },
+    {
+      "path": "docs/plans/2026-10-14-orbit-harness/execution-r3/typecheck.log",
+      "bytes": 248,
+      "sha256": "2d335bfdd362f0b1017104b28bc87bbe1688e4825e23dc1d2fe4f4f8b97ed6e4"
+    },
+    {
+      "path": "docs/plans/2026-10-14-orbit-harness/execution-r3/node24-tests.log",
+      "bytes": 2433,
+      "sha256": "244d05eff20b9140601df94a377a894f686a4e2e7a6571c682790062a572eeda"
+    },
+    {
+      "path": "docs/plans/2026-10-14-orbit-harness/execution-r3/build.log",
+      "bytes": 3470,
+      "sha256": "bcaabfd8f6ac32cdb1de34e0691f227852ab33187d0693ea5b90059de465b472"
+    },
+    {
+      "path": "docs/plans/2026-10-14-orbit-harness/execution-r3/diff-check.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/plans/2026-10-14-orbit-harness/execution-r3/context-bytes.json",
+      "bytes": 2318,
+      "sha256": "a77ac28e2dc510af54ccb92cafe987445b75e0baa2850ae091ef32ded677b0e8"
+    },
+    {
+      "path": "docs/plans/2026-10-14-orbit-harness/execution-r3/bundle-skills.json",
+      "bytes": 219,
+      "sha256": "c8a866aaeec1644d8cae4f6d4c7e1bce777dfa8ceb3831735a7ba0a1eff95fe4"
+    },
+    {
+      "path": "docs/plans/2026-10-14-orbit-harness/implementation-r3.md",
+      "bytes": 8453,
+      "sha256": "4eecfeef6ba6fa97b691d7f39f44fd2dd39eefacb186e158812e92610636bd48"
+    }
+  ]
+}

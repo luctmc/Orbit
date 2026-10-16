@@ -1,0 +1,107 @@
+{
+  "date": "2026-10-14",
+  "phase": "R2",
+  "status": "implemented-in-working-tree",
+  "checks": [
+    {
+      "command": "npm test",
+      "exitCode": 0,
+      "sidecar": 144,
+      "desktop": 2,
+      "failures": 0
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "runtime": "v24.21.0",
+      "files": [
+        "adapters.test.ts",
+        "executionEpoch.test.ts",
+        "deliveryQueue.test.ts",
+        "submission.test.ts",
+        "mcp.test.ts",
+        "sessionAccounting.test.ts"
+      ],
+      "tests": 32,
+      "failures": 0,
+      "exitCode": 0
+    },
+    {
+      "command": "npm run tauri -w @orbit/desktop -- build --debug",
+      "exitCode": 0,
+      "bundle": "/Users/lucas/Documents/GitHub/Orbit/apps/desktop/src-tauri/target/debug/bundle/macos/Orbit.app",
+      "warnings": [
+        "Existing JavaScript chunk above 500 kB"
+      ]
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "faultInjection": [
+    "SIGKILL after atomic result/outbox commit",
+    "Disk failure before result acknowledgement",
+    "Restart before deferred Enter",
+    "PTY write failure at deferred Enter",
+    "HTTP authenticated before a partial body, then process restart or exit: hooks/status/MCP",
+    "Old assignment request in same process and explicit old attempt id on a new request",
+    "Late progress after a done submission",
+    "Leader replacement and stopped reviewer recovery"
+  ],
+  "deliveryLevels": [
+    "persisted",
+    "pty_accepted",
+    "agent_acknowledged"
+  ],
+  "deliverySemantics": "at-least-once notification transport; explicit recipient receipt; no exactly-once external execution claim",
+  "adapterEvidence": "fixture contracts, existing parsers, and synthetic CLI processes; real installed CLI code roundtrip not repeated",
+  "sha256": {
+    "packages/protocol/src/index.ts": "2fccbc4415214f8f630f001f2dd0fb7f2a9e9eff72bd8b52f6b36e4c00100ab9",
+    "packages/sidecar/src/adapters/types.ts": "7f84f5f54e7c5c0dca31da4339ef1daab13d25be7367a7f7a6b6c6eeb14cf809",
+    "packages/sidecar/src/adapters/claude.ts": "e4d087ada2b469bcf4d8de426fd01a0d7da32a12798386ab0dc2b39100b1325a",
+    "packages/sidecar/src/adapters/codex.ts": "3a7924d31689ddb477c5918f6a61faa588bf3fd944ed30410bb05e1073b68a2d",
+    "packages/sidecar/src/adapters/gemini.ts": "5e9bf45a148d9c33e50b3b794635a95e82b84469960030a29cea3a7a2239b370",
+    "packages/sidecar/src/deliveryQueue.ts": "ce423610e5922a537dee6551bc3ebce4f3a8b0a47283988636a62a0386353b8a",
+    "packages/sidecar/src/core.ts": "36ab1f3dd8e15ab8dab658c7d6534c0b12d496a53da2e53e4a2c8f715c7a2877",
+    "packages/sidecar/src/store.ts": "f3842f2b30654a68fb1966271df029ac8f6e7a662d1081f49eac47e8b9ce986a",
+    "packages/sidecar/src/panes.ts": "875ead7b430fe347d28b584584800dcedd40ca2eb4f457bbdd3f65b9125e5646",
+    "packages/sidecar/src/mcp.ts": "988eb1b670be8caf85a185154ba8d79d0844c7ef3755fb0acdb4af3da6bcd428",
+    "packages/sidecar/src/server.ts": "52586e94ced1916bab4e3f82516d67d9abb8c051319fd2a6b97fe567e9ec480e",
+    "packages/sidecar/src/activityLedger.ts": "aff1eb062f2b0d3ab5e5d8beeaabb50cb33d9b8ccd65cc7ec8567f232de1b72f",
+    "packages/sidecar/src/sessionAccounting.ts": "4d51ffa729961ceb83bdd59cb48956c730b8e0150f87702d388abaca29db0200",
+    "packages/sidecar/src/prompts.ts": "044f69f1d792c8891baa839291375327224ad858ef0aaeba8d8d0eaef78c41a9",
+    "packages/sidecar/test/adapters.test.ts": "a7d4dbacf2b1d55bec8e50f8e9af59cebff91e10f2972afaa05d8ae0cd3cdab5",
+    "packages/sidecar/test/deliveryQueue.test.ts": "23543561d02e648c1c4454709e53944ac46f6e5b00270b6e0c843329641b770a",
+    "packages/sidecar/test/executionEpoch.test.ts": "33bec8306030cc9329cbafbc2eaeb6d701288133364a416a56294f548ebd7024",
+    "packages/sidecar/test/r2Fixture.ts": "73f21aa6656ea01d42c0f65a454e0abe154b01f90e10bd318d54d43d1076af53",
+    "packages/sidecar/test/submission.test.ts": "500f26aaec1f2b914d3af934f2a726a62ce32cd6e427794b63124604dd78deed",
+    "packages/sidecar/test/mcp.test.ts": "31adeb8b208f0b6dbd3d00546323f48506e82e55e56418d6844fa3e18d194ad8",
+    "packages/sidecar/test/agents.test.ts": "52cc5688081184a86cd8a7631a21bdf8284d3a64407d36de5d29f60d94b2bd98",
+    "packages/sidecar/test/delivery.test.ts": "cb406571a8f36294c6b318e2ee53c2198e4b220c05a308cbf96c722f25850af4",
+    "packages/sidecar/test/quality.test.ts": "9b74062c1b34289aaeb41f855dcd221bbad17631ab7db135728bc9435e9fcc5a"
+  },
+  "logsSha256": {
+    "tests.log": "caefc5a7442c80afc36099b4db8fb90288660aad07b878fb922d9237be6e5012",
+    "typecheck.log": "2d335bfdd362f0b1017104b28bc87bbe1688e4825e23dc1d2fe4f4f8b97ed6e4",
+    "build.log": "c0796d4bd0ee130583e66b935580ed3393c82ce5a9bea3538f10458dd1d10e5d",
+    "node24.log": "00b884e6ee871d3f18cf8fffc155dc36cfbad73d3cd14332cbf8a6bf300fc09c"
+  },
+  "modelCallsInTests": 0,
+  "installedAppReplaced": false,
+  "remainingPhases": [
+    "R3",
+    "R4",
+    "R5",
+    "R6"
+  ],
+  "limits": [
+    "attemptId is optional for legacy compatibility; content without provider turn identity is not inferred",
+    "No native provider consumption ACK",
+    "Queue covers result notifications, not arbitrary command mutations",
+    "No independent diff-bound validation or measured token savings yet",
+    "No power-loss durability claim"
+  ]
+}

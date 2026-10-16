@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import type { Difficulty, TaskType } from '@orbit/protocol'
 import type { Run } from './clis.ts'
 import { shellQuote } from './command.ts'
+import { performance } from 'node:perf_hooks'
+import { headlessUsage, unknownUsage, type AuxiliaryObservation } from './measurements.ts'
 
 /**
  * The maestro's second opinion: when no keyword says what kind of work an activity is, a small
@@ -48,7 +50,7 @@ export function parseDecision(stdout: string, types: TaskType[]): { type: TaskTy
   }
 }
 
-export async function decideTaskType(run: Run, dir: string, text: string, types: TaskType[]): Promise<{ type: TaskType; why: string; difficulty: Difficulty } | null> {
+export async function decideTaskType(run: Run, dir: string, text: string, types: TaskType[], observe?: (value: AuxiliaryObservation) => void): Promise<{ type: TaskType; why: string; difficulty: Difficulty } | null> {
   mkdirSync(dir, { recursive: true })
   const file = join(dir, `decisao-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`)
   writeFileSync(file, decisionPrompt(text, types))
@@ -64,10 +66,16 @@ export async function decideTaskType(run: Run, dir: string, text: string, types:
     `"$(cat ${shellQuote(file)})"`,
     '< /dev/null',
   ].join(' ')
+  const started = performance.now()
+  let observation: AuxiliaryObservation = { exitCode: null, durationMs: 0, usage: unknownUsage(), reportedModels: [], outcome: 'error' }
   try {
     const { code, stdout } = await run(command, TIMEOUT_MS)
-    return code === 0 ? parseDecision(stdout, types) : null
+    const parsed = code === 0 ? parseDecision(stdout, types) : null
+    const measured = headlessUsage(stdout)
+    observation = { ...observation, exitCode: code, usage: measured.usage, reportedModels: measured.models, outcome: code !== 0 ? 'error' : parsed ? 'classified' : 'invalid' }
+    return parsed
   } finally {
     rmSync(file, { force: true })
+    observe?.({ ...observation, durationMs: performance.now() - started })
   }
 }

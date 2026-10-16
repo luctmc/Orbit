@@ -4,7 +4,6 @@ import { useOrbit, useOrbitClient } from './orbit/context.tsx'
 import { TitleBar, WorkspaceTabs } from './components/chrome.tsx'
 import { MissionRail } from './components/MissionRail.tsx'
 import { MissionView, type Layout } from './components/MissionView.tsx'
-import { FlowTimeline } from './components/FlowTimeline.tsx'
 import { AddAgentDialog, NewMissionDialog } from './components/dialogs.tsx'
 import { WorkspaceDialog } from './components/WorkspaceDialog.tsx'
 import { SquadsDialog } from './components/SquadsDialog.tsx'
@@ -39,10 +38,17 @@ export function App() {
   const state = useOrbit()
   const client = useOrbitClient()
   const updater = useUpdater()
+  useEffect(() => {
+    if (state.connection !== 'open') return
+    const refresh = () => { if (document.visibilityState === 'visible') client.send({ type: 'limits.refresh' }) }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
+  }, [client, state.connection])
   const [workspaceId, setWorkspaceId] = useState<string | null>(() => remembered('workspace', null))
   const [missionId, setMissionId] = useState<string | null>(() => remembered('mission', null))
   const [paneId, setPaneId] = useState<number | null>(null)
-  const [layout, setLayout] = useState<Layout>(() => remembered('layout', 'grade'))
+  const [layout, setLayout] = useState<Layout>(() => remembered('layout', 'foco'))
   const [dialog, setDialog] = useState<DialogKind>(null)
   // The app opens on the Base; picking a mission or workspace switches to the mission screen.
   const [view, setView] = useState<'home' | 'mission'>('home')
@@ -52,7 +58,6 @@ export function App() {
   const missions = state.missions.filter((m) => m.workspaceId === workspace?.id)
   const mission = missions.find((m) => m.id === missionId) ?? missions.filter((m) => m.status === 'active').sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null
   const panes = state.panes.filter((p) => p.missionId === mission?.id).sort((a, b) => (a.role === b.role ? a.id - b.id : a.role === 'lead' ? -1 : 1))
-  const events = state.events.filter((e) => e.missionId === mission?.id)
   const liveAgents = state.panes.filter((p) => p.status !== 'exited').length
 
   useEffect(() => remember('workspace', workspace?.id ?? null), [workspace?.id])
@@ -122,20 +127,13 @@ export function App() {
         </div>
       )}
 
-      {!workspace ? (
-        <div className="welcome">
-          <OrbitMark size={48} />
-          <h1>Bem-vindo ao Orbit</h1>
-          <p className="muted">Crie um workspace com uma ou mais pastas de projeto para lançar a primeira missão.</p>
-          <button className="btn btn--primary" onClick={() => setDialog('workspace')} disabled={state.connection !== 'open'}>
-            <PlusIcon size={14} />Novo workspace
-          </button>
-        </div>
-      ) : view === 'home' ? (
+      {state.startup && state.startup.some(task => task.state !== 'ready') && <details className="startup-status"><summary><span className="dot dot--idle" />{state.startup.some(task => task.state === 'error') ? 'Alguns serviços precisam de atenção' : 'Preparando seu ambiente em segundo plano…'}</summary><ul>{state.startup.map(task => <li key={task.id}><strong>{{ recovery: 'Retomada das equipes', catalog: 'Catálogo de modelos', accounts: 'Contas', clis: 'CLIs', skills: 'Skills' }[task.id]}</strong><span>{task.state === 'ready' ? 'Pronto' : task.state === 'error' ? task.message || 'Falha ao iniciar' : task.state === 'running' ? 'Em preparação' : 'Aguardando'}</span></li>)}</ul></details>}
+
+      {!workspace || view === 'home' ? (
         <HomeView
           onOpenMission={openMission}
           onOpenWorkspace={(w) => { setWorkspaceId(w.id); setMissionId(null); setView('mission') }}
-          onNewMission={() => setDialog('mission')}
+          onNewMission={workspace ? () => setDialog('mission') : null}
           onAddFolder={() => setDialog('workspace')}
         />
       ) : (
@@ -167,7 +165,6 @@ export function App() {
               <button className="btn btn--primary" onClick={() => setDialog('mission')}><PlusIcon size={14} />Nova missão</button>
             </main>
           )}
-          {mission && <FlowTimeline events={events} />}
         </div>
       )}
 

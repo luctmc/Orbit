@@ -1,0 +1,61 @@
+{
+  "transcriptSha256": "25ae6b20ac980286e052afc7b8ce5864f4e299e5c89fa330f6dd1c79bc69f8e5",
+  "responses": [
+    {
+      "responseId": "msg_011Cg4ozutzVsG1mkDtb2tGy",
+      "tools": [
+        "Bash"
+      ],
+      "input": 62863,
+      "output": 374,
+      "readySummaryRequested": false
+    },
+    {
+      "responseId": "msg_011Cg4p18dhxPoc19tWB11Qs",
+      "tools": [
+        "mcp__orbit__verification_submit"
+      ],
+      "input": 63422,
+      "output": 709,
+      "readySummaryRequested": false
+    },
+    {
+      "responseId": "msg_011Cg4p1QC6fk2J8eoVYAZ3r",
+      "tools": [
+        "mcp__orbit__result_inspect"
+      ],
+      "input": 65506,
+      "output": 333,
+      "readySummaryRequested": false
+    },
+    {
+      "responseId": "msg_011Cg4p1bEcG8wTacazSkdxM",
+      "tools": [
+        "mcp__orbit__verification_submit"
+      ],
+      "input": 68508,
+      "output": 1097,
+      "readySummaryRequested": true
+    },
+    {
+      "responseId": "msg_011Cg4p1yRrKUcbPcFGowWFM",
+      "tools": [
+        "mcp__orbit__board_update",
+        "mcp__orbit__board_update"
+      ],
+      "input": 71426,
+      "output": 292,
+      "readySummaryRequested": false
+    },
+    {
+      "responseId": "msg_011Cg4p2ASPYi3njUWuTm6vw",
+      "tools": [],
+      "input": 72077,
+      "output": 635,
+      "readySummaryRequested": false
+    }
+  ],
+  "missionReadyToolCalls": 0,
+  "modelCallsForAnalysis": 0,
+  "tokenSavings": null
+}

@@ -1,0 +1,65 @@
+{
+  "at": "2026-10-16T01:24:10.305Z",
+  "limits": [
+    {
+      "cli": "codex",
+      "fiveHour": {
+        "usedPercent": 72,
+        "resetsAt": 1792125808000,
+        "windowMinutes": 300
+      },
+      "weekly": {
+        "usedPercent": 56,
+        "resetsAt": 1792657498000,
+        "windowMinutes": 10080
+      },
+      "plan": "plus",
+      "updatedAt": 1792113849444,
+      "checkedAt": 1792113849444,
+      "source": "provider",
+      "refreshError": null,
+      "accountId": "codex"
+    },
+    {
+      "accountId": "claude",
+      "cli": "claude",
+      "fiveHour": {
+        "usedPercent": 0,
+        "resetsAt": 1792128000000,
+        "windowMinutes": 300
+      },
+      "weekly": {
+        "usedPercent": 84,
+        "resetsAt": 1792368000000,
+        "windowMinutes": 10080
+      },
+      "plan": null,
+      "updatedAt": 1792113850305,
+      "checkedAt": 1792113850305,
+      "source": "provider",
+      "refreshError": null
+    }
+  ],
+  "observations": [
+    {
+      "kind": "auth-status",
+      "code": 0
+    },
+    {
+      "kind": "auth-status",
+      "code": 0
+    },
+    {
+      "kind": "codex-quota",
+      "code": 0
+    },
+    {
+      "kind": "claude-usage",
+      "code": 0,
+      "inferenceTokens": {
+        "input": 0,
+        "output": 0
+      }
+    }
+  ]
+}

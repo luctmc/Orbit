@@ -1,0 +1,16 @@
+{
+  "direction": "reverse",
+  "toolProfile": "orbit",
+  "output": "/Users/lucas/Documents/GitHub/Orbit/docs/plans/2026-10-14-orbit-harness/execution-focused-tools/reverse-1",
+  "scratch": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-GOyWIl",
+  "root": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-GOyWIl/workspace",
+  "data": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-autonomy-GOyWIl/data",
+  "taskId": "bug-pagination",
+  "worker": "codex",
+  "reviewer": "claude",
+  "leader": "claude",
+  "interruptDelivery": true,
+  "maxOpenings": 7,
+  "missionId": "5b785702-2558-484e-b4b5-85f4281ff482",
+  "leadId": 1
+}

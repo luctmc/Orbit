@@ -1,0 +1,34 @@
+✖ Codex permissions match the activity on launch and restart, independent of CLI defaults (128.781291ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 258.305791
+
+✖ failing tests:
+
+test at packages/sidecar/test/codexPermissions.test.ts:10:1
+✖ Codex permissions match the activity on launch and restart, independent of CLI defaults (128.781291ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      'read-only',
+  +   undefined,
+  -   'workspace-write',
+      'read-only'
+    ]
+  
+      at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/codexPermissions.test.ts:27:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'read-only', undefined, 'read-only' ],
+    expected: [ 'read-only', 'workspace-write', 'read-only' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

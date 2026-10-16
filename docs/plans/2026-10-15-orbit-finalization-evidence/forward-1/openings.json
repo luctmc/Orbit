@@ -1,0 +1,23 @@
+[
+  {
+    "cli": "codex",
+    "model": "gpt-6-luna",
+    "effort": "low",
+    "resumeSessionId": null,
+    "at": 1792103061918
+  },
+  {
+    "cli": "claude",
+    "model": "claude-haiku-5-5",
+    "effort": "low",
+    "resumeSessionId": null,
+    "at": 1792103079503
+  },
+  {
+    "cli": "codex",
+    "model": "gpt-6-luna",
+    "effort": "low",
+    "resumeSessionId": null,
+    "at": 1792103109863
+  }
+]

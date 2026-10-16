@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { buildCommand, type AgentLaunch } from '../src/command.ts'
 import { startServer } from '../src/server.ts'
 import { connect, offline, ORIGIN, TOKEN } from './helpers.ts'
+import type { ServerMessage } from '@orbit/protocol'
 
 const SESSION = '3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f'
 
@@ -14,11 +15,11 @@ test('resuming continues the CLI conversation; the role is not sent again, only 
   assert.match(claude, new RegExp(`^claude --resume ${SESSION} --model opus`))
   assert.doesNotMatch(claude, /task\.md/)
   const codex = buildCommand({ cli: 'codex', model: 'gpt-6', rolePromptPath: '/p/role.md', resume: SESSION }, '/bin/zsh').args[2]!
-  assert.match(codex, new RegExp(`^codex resume -m gpt-6 .*-- ${SESSION}; exec`))
+  assert.match(codex, new RegExp(`^codex resume -m gpt-6 .*-- ${SESSION}`))
   assert.doesNotMatch(codex, /role\.md|task\.md/)
   // The lead resuming a helper: the message goes as the next turn of the same conversation.
   const next = buildCommand({ cli: 'codex', model: null, taskPath: '/p/task.md', rolePromptPath: '/p/role.md', resume: SESSION }, '/bin/zsh').args[2]!
-  assert.match(next, new RegExp(`-- ${SESSION} "\\$\\(cat '/p/task\\.md'\\)"; exec`))
+  assert.match(next, new RegExp(`-- ${SESSION} "\\$\\(cat '/p/task\\.md'\\)"`))
   assert.doesNotMatch(next, /role\.md/)
   assert.match(buildCommand({ cli: 'claude', model: null, taskPath: '/p/task.md', resume: SESSION }, '/bin/zsh').args[2]!, new RegExp(`--resume ${SESSION} .*-- "\\$\\(cat '/p/task\\.md'\\)"`))
   assert.throws(() => buildCommand({ cli: 'claude', model: null, resume: 'x; rm -rf ~' }, '/bin/zsh'), /Conversa inválida/)
@@ -31,14 +32,26 @@ test('agents are renamed, duplicated, reopened, and resumed even after Orbit res
     launches.push(launch)
     return { file: shell, args: ['-c', `exec ${shell}`] }
   }
-  const start = () => startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline, agentCommand: fake, browser: null })
+  const start = async () => {
+    const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline, agentCommand: fake, browser: null })
+    // PTY data is a stream. Force short frames so token lookup must survive chunk boundaries.
+    const core = server.core as unknown as { broadcast: (message: ServerMessage) => void }
+    const send = core.broadcast
+    core.broadcast = message => {
+      if (message.type !== 'pane.data') return send(message)
+      for (let offset = 0; offset < message.data.length; offset += 4) send({ ...message, data: message.data.slice(offset, offset + 4) })
+    }
+    // Transport readiness precedes background recovery. This test inspects recovered crews.
+    await server.initialized
+    return server
+  }
   let server = await start()
   let ui = connect(server.port)
   try {
     await ui.opened
     ui.send({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-'))) })
     const { workspace } = await ui.next('workspace.updated')
-    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Retomar', objective: '', mode: 'livre', lead: { cli: 'claude', model: 'opus', effort: 'high', title: 'Líder' } })
+    ui.send({ type: 'mission.create', workspaceId: workspace.id, title: 'Retomar', objective: '', mode: 'livre', lead: { cli: 'claude', model: 'opus', effort: 'high', title: 'Líder', readOnly: true } })
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
 
     ui.send({ type: 'pane.rename', paneId: lead.id, title: 'Arquiteto' })
@@ -46,7 +59,9 @@ test('agents are renamed, duplicated, reopened, and resumed even after Orbit res
 
     // Claude's hooks carry the conversation id.
     ui.send({ type: 'pane.input', paneId: lead.id, data: 'echo "TOKEN:$ORBIT_PANE_TOKEN:"\r' })
-    const token = /TOKEN:([\w-]{20,}):/.exec((await ui.next('pane.data', (m) => m.paneId === lead.id && /TOKEN:[\w-]{20,}:/.test(m.data))).data)![1]!
+    const paneText = () => ui.inbox.flatMap(m => m.type === 'pane.data' && m.paneId === lead.id ? [m.data] : []).join('')
+    await ui.next('pane.data', m => m.paneId === lead.id && /TOKEN:[\w-]{20,}:/.test(paneText()))
+    const token = /TOKEN:([\w-]{20,}):/.exec(paneText())![1]!
     await fetch(`http://127.0.0.1:${server.port}/hooks`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ hook_event_name: 'SessionStart', session_id: SESSION }) })
     await ui.next('pane.updated', (m) => m.pane.id === lead.id && m.pane.sessionId === SESSION)
 

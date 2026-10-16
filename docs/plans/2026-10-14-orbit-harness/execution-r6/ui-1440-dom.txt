@@ -1,0 +1,112 @@
+- banner:
+  - generic: Orbit
+  - button "0.1.0"
+  - generic: 1 agente vivo
+  - generic: Motor ativo
+- navigation "Workspaces":
+  - button "Base":
+  - button "workspace"
+  - button "Novo workspace":
+  - button "Squads"
+  - button "Ajustes"
+  - button "Nova missão":
+    - text: Nova missão
+- complementary "Missões":
+  - generic: workspace
+  - generic "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-r6-preview-c67wTI/workspace": ‎/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-r6-preview-c67wTI/workspace‎
+  - button "Editar workspace workspace": Editar
+  - generic: Missões
+  - button "Nova missão":
+  - list:
+    - button "QA local · dados sintéticos Agêntica · 1 agente":
+      - generic: QA local · dados sintéticos
+      - generic: Agêntica · 1 agente
+  - generic: Tripulação
+  - list:
+    - 'button "Líder · #1 espera você"':
+      - generic: "Líder · #1"
+      - generic: espera você
+- main:
+  - heading "QA local · dados sintéticos" [level=1]
+  - generic: Agêntica
+  - paragraph: Conferir o fluxo visual de entrega e revisão sem chamadas a modelos. · 1 agente vivo
+  - group "Layout dos agentes":
+    - button "Grade"
+    - button "Foco" [pressed]
+  - button "Atividades" [pressed]
+  - button "Histórico"
+  - button "Quadro":
+    - text: Quadro
+  - button "Arquivos":
+    - text: Arquivos
+  - button "Navegador":
+    - text: Navegador
+  - button "Orçamento"
+  - button "Trocar líder"
+  - button "Relatório da missão":
+  - button "Agente":
+    - text: Agente
+  - button "Salvar como modelo":
+  - button "Arquivar missão":
+  - button "Apagar missão":
+  - region "Próximo passo da missão":
+    - img "Orbit, companheiro orbital grafite com anel verde"
+    - generic "Opções do mascote Orbit": Orbit
+    - generic: Próximo passo
+    - status: Precisa de você
+    - paragraph: "#1 · Autorizar a próxima etapa da demonstração?"
+    - button "Conferir agora"
+  - 'region "Agente 1: Líder de demonstração"':
+    - generic "espera você"
+    - generic: Líder
+    - generic: "#1"
+    - button "Líder de demonstração"
+    - generic: Codex
+    - button "Terminal" [pressed]
+    - 'button "Ações de #1"':
+    - button "Encerrar agente 1":
+    - 'generic "Conversa com #1"':
+      - paragraph: As mensagens aparecem quando o agente registra sua conversa. O terminal mostra a execução ao vivo.
+    - generic "espera você · Atividade recente"
+    - status:
+      - generic: "Precisa de você: Autorizar a próxima etapa da demonstração?"
+      - button "Continuar"
+      - button "Revisar antes"
+      - button "Outra resposta"
+    - generic: espera você
+    - generic: ·
+    - generic "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-r6-preview-c67wTI/workspace": ‎/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-r6-preview-c67wTI/workspace‎
+  - complementary "Histórico das atividades":
+    - heading "Trabalho da missão" [level=2]
+    - button "Recolher"
+    - region "Atividades e evidências da missão":
+      - generic: Atividades e evidências
+      - generic: Observado às 09:54:29
+      - generic "Revisão final · precisa de nova conferência"
+      - list:
+        - generic "Corrigir média de array vazio Aceita":
+          - generic: Corrigir média de array vazio
+          - generic: Aceita
+        - generic: Claude
+        - generic "Por que este modelo · Escolha explícita"
+        - strong: Critérios de aceite
+        - list:
+          - listitem: Array vazio retorna zero.
+          - listitem: Números positivos e negativos preservam a média.
+        - strong: Último retorno · entrega declarada
+        - paragraph: Ajuste sintético entregue; aguardando revisão independente.
+        - generic: Fixture de interface. Nenhum modelo executou esta tarefa.
+        - generic "Detalhes do retorno"
+        - paragraph: Enviado ao terminal; confirmação pendente · líder. Recebimento não equivale a aceite.
+        - 'generic "Revisão · Aceito por #1"'
+  - text: Falar com
+  - strong: "#1 Líder de demonstração"
+  - generic: Enter envia · Shift+Enter quebra linha
+  - 'textbox "Falar com #1 Líder de demonstração"':
+    - /placeholder: Descreva o que deseja construir, cole uma imagem ou anexe arquivos…
+  - button "Escolher anexos"
+  - button "Anexar imagens ou arquivos":
+  - button "Ditar mensagem":
+  - generic: ⌘J para escrever
+  - button "Enviar" [disabled]:
+    - text: Enviar

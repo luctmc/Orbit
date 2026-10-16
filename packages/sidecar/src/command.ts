@@ -1,4 +1,5 @@
 import { EFFORTS, MODEL_ID, SESSION_ID, type AgentCli, type Effort } from '@orbit/protocol'
+import { fileURLToPath } from 'node:url'
 
 export interface PaneCommand {
   file: string
@@ -7,6 +8,7 @@ export interface PaneCommand {
 
 /** Files Orbit prepared for this agent; every path is ours, never user text. */
 export interface AgentLaunch {
+  toolProfile?: 'orbit' | 'inherit'
   cli: AgentCli
   model: string | null
   effort?: Effort | null
@@ -32,8 +34,8 @@ export interface AgentLaunch {
   systemSettingsPath?: string
   /** Folder with the `orbit` command, put first on the agent's PATH. */
   binDir?: string
-  /** Codex: sandbox policy for its commands and edits (read-only for orchestrating leads). */
-  sandbox?: 'read-only'
+  /** Codex: explicit activity permissions, independent of the user's CLI default. */
+  sandbox?: 'read-only' | 'workspace-write'
 }
 
 /** What each CLI runs to sign in an account. */
@@ -46,8 +48,8 @@ export function shellQuote(value: string): string {
 const fromFile = (path: string) => `"$(cat ${shellQuote(path)})"`
 
 /**
- * The agent runs inside a login shell so it sees the user's PATH. When the agent exits the pane
- * drops to an interactive shell instead of dying, like a terminal tab would. Free text (role,
+ * The agent runs inside a login shell so it sees the user's PATH. Its exit ends the process and
+ * preserves the real exit status; a failed CLI must not appear as an idle agent. Free text (role,
  * task) only reaches the command line as `$(cat <file>)`, so it is never parsed by the shell.
  */
 export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
@@ -92,17 +94,26 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
     if (effort) parts.push('--effort', effort)
     for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
     if (launch.mcpConfigPath) parts.push('--mcp-config', shellQuote(launch.mcpConfigPath))
+    if (launch.toolProfile === 'orbit') {
+      if (!launch.mcpConfigPath) throw new Error('O perfil Orbit exige uma configuração MCP explícita')
+      parts.push('--strict-mcp-config')
+    }
     if (launch.settingsPath) parts.push('--settings', shellQuote(launch.settingsPath))
     if (launch.rolePromptPath) parts.push('--append-system-prompt', fromFile(launch.rolePromptPath))
     // On resume the task is the next message of the same conversation.
     if (launch.taskPath) parts.push('--', fromFile(launch.taskPath))
   } else {
-    parts.push('codex')
+    if (launch.toolProfile === 'orbit') {
+      if (!launch.mcpUrl) throw new Error('O perfil Orbit exige o endpoint MCP da missão')
+      parts.push(shellQuote(process.execPath), shellQuote(fileURLToPath(new URL('../hooks/codex-profile.mjs', import.meta.url))), '--')
+    } else parts.push('codex')
     if (resume) parts.push('resume')
-    if (launch.sandbox === 'read-only') parts.push('-s', 'read-only')
+    if (launch.sandbox) parts.push('-s', launch.sandbox)
     if (model) parts.push('-m', model)
     if (effort) parts.push('-c', shellQuote(`model_reasoning_effort="${effort}"`))
-    for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
+    // --add-dir requests writable roots; Codex rejects it in read-only sessions. The role already
+    // carries absolute read references to workspace folders and attachments.
+    if (launch.sandbox !== 'read-only') for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
     if (launch.mcpUrl) {
       parts.push('-c', shellQuote(`mcp_servers.orbit.url="${launch.mcpUrl}"`))
       parts.push('-c', shellQuote('mcp_servers.orbit.bearer_token_env_var="ORBIT_PANE_TOKEN"'))
@@ -110,7 +121,9 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
       // policy Codex would otherwise refuse every handoff.
       parts.push('-c', shellQuote('mcp_servers.orbit.default_tools_approval_mode="approve"'))
     }
-    for (const name of launch.disabledMcp ?? []) {
+    // The focused helper disables the complete external catalog with valid transport stubs.
+    // Passing partial entries first can make plugin-provided MCPs fail config validation.
+    for (const name of launch.toolProfile === 'orbit' ? [] : launch.disabledMcp ?? []) {
       if (/^[A-Za-z0-9_-]{1,64}$/.test(name) && name !== 'orbit') parts.push('-c', shellQuote(`mcp_servers.${name}.enabled=false`))
     }
     if (resume) {
@@ -123,7 +136,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
       if (prompt.length) parts.push('--', `"$(cat ${prompt.map(shellQuote).join(' ')})"`)
     }
   }
-  return { file: shell, args: ['-l', '-c', `${parts.join(' ')}; exec ${shellQuote(shell)} -l`] }
+  return { file: shell, args: ['-l', '-c', parts.join(' ')] }
 }
 
 /** Child environment: the user's env minus Orbit's own secrets, plus pane identity for hooks. */

@@ -1,0 +1,11 @@
+{
+  "partialMiss": {
+    "proposedFingerprintUnchanged": true,
+    "contentActuallyChanged": true
+  },
+  "degradedMiss": {
+    "proposedFingerprintUnchanged": true,
+    "contentChangedFrom": "bbb",
+    "contentChangedTo": "ccc"
+  }
+}

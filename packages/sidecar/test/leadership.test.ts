@@ -93,10 +93,10 @@ test('the lead changes hands without losing anything: briefing, notes, helpers a
     }
     const asCodexLead = await mcpAs(codexLead.id)
     assert.match(await asCodexLead.call('mission_note', { text: 'Média divide por length; não mexer em soma' }), /1 notas/)
-    const helperId = Number(/#(\d+) /.exec(await asCodexLead.call('agent_spawn', { title: 'Correção', task: 'Corrija a média', kind: 'bug', agent: 'claude' }))![1])
+    const helperId = Number(/#(\d+) /.exec(await asCodexLead.call('agent_spawn', { title: 'Correção', task: 'Analise a correção da média', kind: 'bug', agent: 'claude', readOnly: true }))![1])
     const asHelper = await mcpAs(helperId)
     await asHelper.call('agent_send', { agent: codexLead.id, message: 'Comecei pela média' })
-    await sees(codexLead.id, 'Orbit reminder: you are the maestro')
+    await sees(codexLead.id, 'Comecei pela média')
 
     // Claude takes over: a new agent with the briefing as its first prompt; the helper now owes it.
     ui.send({ type: 'mission.lead.change', missionId: mission.id, to: { kind: 'new', cli: 'claude', model: 'sonnet', effort: 'high', accountId: null } })

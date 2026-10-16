@@ -77,6 +77,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   const [mode, setMode] = useState<MissionMode>('livre')
   const [squadId, setSquadId] = useState<string | null>(null)
   const [lead, setLead] = useState<AgentChoice>(DEFAULT_AGENT)
+  const [adaptiveLead, setAdaptiveLead] = useState(true)
   const [worktrees, setWorktrees] = useState(false)
   const [clis, setClis] = useState<AgentCliForRole[]>(['claude', 'codex'])
   const readiness = useAgentReadiness()
@@ -87,6 +88,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   /** A template fills the whole form; everything stays editable. */
   const applyTemplate = (id: string) => {
     setTemplateId(id)
+    setAdaptiveLead(false)
     const t = templates.find((x) => x.id === id)
     if (!t) return setCards([])
     setTitle(t.title)
@@ -115,7 +117,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
       if (!title.trim()) return setError('Dê um título para a missão.')
       if (mode === 'squad' && !squadId) return setError('Escolha o squad da missão.')
       if (invalidModel(lead)) return setError('Modelo inválido: use só letras, números, ponto, hífen, barra ou dois-pontos.')
-      client.send({ type: 'mission.create', workspaceId, title, objective, mode, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, cards, allowedClis: clis, budget: budgetFrom(budgetTokens, budgetCost), lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
+      client.send({ type: 'mission.create', workspaceId, title, objective, mode, adaptiveLead: mode === 'agentica' && adaptiveLead, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, cards, allowedClis: clis, budget: budgetFrom(budgetTokens, budgetCost), lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
       onClose()
     }}>
       {templates.length > 0 && (
@@ -172,7 +174,11 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
           </div>
         </fieldset>
       )}
-      <AgentFields value={lead} onChange={setLead} label={mode === 'livre' ? 'Agente' : 'Líder'} />
+      {mode === 'agentica' && <label className="check">
+        <input type="checkbox" checked={adaptiveLead} onChange={(e) => setAdaptiveLead(e.target.checked)} />
+        <span>Escolher modelo e esforço do líder pelo objetivo</span>
+      </label>}
+      {mode === 'agentica' && adaptiveLead ? <p className="note">O Orbit usa a configuração da tabela e reduz os recursos para operações simples. Para fixar modelo, esforço e conta, desligue a escolha automática.</p> : <AgentFields value={lead} onChange={setLead} label={mode === 'livre' ? 'Agente' : 'Líder'} />}
       {mode === 'agentica' && (
         <fieldset className="field">
           <legend>O maestro pode usar</legend>

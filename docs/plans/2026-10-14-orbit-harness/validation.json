@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-14",
+  "productionCodeChangedThisPlanningRound": false,
+  "syntheticProbes": {
+    "command": "node docs/plans/2026-10-14-orbit-harness/reproduce-current.mjs",
+    "observed": [
+      {
+        "id": "HAR-01",
+        "case": "progress then natural process exit",
+        "readyWithoutFinalResult": true
+      },
+      {
+        "id": "HAR-02",
+        "case": "same cumulative usage after resume",
+        "expectedMissionTokens": 1100,
+        "observedMissionTokens": 2200
+      }
+    ]
+  },
+  "plannedRegressionTests": {
+    "currentCheckout": {
+      "pass": 1,
+      "fail": 2,
+      "exitCode": 1,
+      "reason": "resume adds old cumulative usage again"
+    },
+    "isolatedSourceWithProposedPatch": {
+      "pass": 3,
+      "fail": 0,
+      "exitCode": 0
+    },
+    "scope": "same pane and conversation; normal flush/reload, not arbitrary crash or shared/imported sessions"
+  },
+  "prototype": {
+    "widths": [
+      375,
+      768,
+      1024,
+      1440
+    ],
+    "horizontalOverflow": false,
+    "checked": [
+      "scenario label consistency",
+      "terminal/conversation switch",
+      "mascot hide/show",
+      "local form feedback",
+      "image loaded"
+    ],
+    "data": "synthetic"
+  },
+  "skillDrafts": {
+    "count": 5,
+    "frontmatter": "validated with Orbit frontMatter parser, naming and placeholder checks",
+    "standardValidator": "not run successfully: host python lacks PyYAML",
+    "runtimeEffectiveness": "not benchmarked"
+  }
+}

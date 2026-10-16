@@ -1,0 +1,30 @@
+[
+  {
+    "cli": "claude",
+    "model": "claude-haiku-5-5",
+    "effort": "low",
+    "resumeSessionId": null,
+    "at": 1792073284714
+  },
+  {
+    "cli": "codex",
+    "model": "gpt-6-luna",
+    "effort": "low",
+    "resumeSessionId": null,
+    "at": 1792073298233
+  },
+  {
+    "cli": "claude",
+    "model": "claude-haiku-5-5",
+    "effort": "low",
+    "resumeSessionId": "e0301c24-da17-43f5-bb4e-db8f58b3b955",
+    "at": 1792073338614
+  },
+  {
+    "cli": "codex",
+    "model": "gpt-6-luna",
+    "effort": "low",
+    "resumeSessionId": "01a13fe4-7cbe-7741-be36-fff7003fd534",
+    "at": 1792073338663
+  }
+]

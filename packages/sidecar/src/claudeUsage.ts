@@ -55,7 +55,8 @@ export function parseClaudeUsage(text: string, now = Date.now()): ClaudeUsage | 
     const used = line && /(\d+(?:\.\d+)?)%\s*used/i.exec(line)
     if (!line || !used) return null
     const resetsAt = parseReset(line.slice(line.toLowerCase().indexOf('resets')), now)
-    return { usedPercent: Number(used[1]), resetsAt: resetsAt ?? now + minutes * 60_000, windowMinutes: minutes }
+    const percent = Number(used[1])
+    return resetsAt !== null && Number.isFinite(percent) && percent >= 0 && percent <= 100 ? { usedPercent: percent, resetsAt, windowMinutes: minutes } : null
   }
   const fiveHour = window(/current session/i, 300)
   const weekly = window(/current week \(all models\)|current week:/i, 10_080)

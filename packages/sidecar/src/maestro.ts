@@ -1,4 +1,11 @@
-import { ACCOUNT_FULL_PERCENT, type Difficulty, type Effort, type Account, type AccountLimits, type AccountStatus, type AgentCliForRole, type TaskType } from '@orbit/protocol'
+import { ACCOUNT_FULL_PERCENT, type CliCatalog, type Difficulty, type Effort, type Account, type AccountLimits, type AccountStatus, type AgentCliForRole, type TaskType } from '@orbit/protocol'
+import type { DecisionReceipt, Routing, Squad } from '@orbit/protocol'
+import { createHash } from 'node:crypto'
+
+export function decisionReceipt(input: Omit<DecisionReceipt, 'version' | 'policyRevision' | 'at'>, policy: { routing: Routing; squad?: Squad; allowedClis: AgentCliForRole[]; requireReadOnlySandbox: boolean }): DecisionReceipt {
+  const { revision: _, ...routing } = policy.routing
+  return { ...input, version: 1, policyRevision: createHash('sha256').update(JSON.stringify({ ...policy, routing })).digest('hex'), at: Date.now() }
+}
 
 /**
  * The maestro's decisions, kept apart from the core so they can be tested: which task type an
@@ -7,17 +14,18 @@ import { ACCOUNT_FULL_PERCENT, type Difficulty, type Effort, type Account, type 
 
 /** Words that point to each built-in task type; custom types match by their own name. */
 const KEYWORDS: Record<string, RegExp> = {
-  bug: /\b(bug|erro|falha|quebr|corrig|conserta|regress|exce[cç][aã]o|crash|n[aã]o funciona)/gi,
+  operacao: /\b(build|compil|execut|inici|start|run|install|instal|servidor|dev server)/gi,
+  bug: /\b(bug|erro|error|fail|fix|broken|falha|quebr|corrig|conserta|regress|exce[cç][aã]o|crash|n[aã]o funciona)/gi,
   testes: /\b(testes?|test|cobertura|spec|unit[aá]rio|e2e|jest|vitest|pytest)\b/gi,
   documentacao: /\b(doc|docs|documenta|readme|changelog|coment[aá]rio|guia|notas de vers)|[\w-]+\.md\b/gi,
   refatoracao: /\b(refator|refactor|reorganiz|limpa|renomei|extrai|simplific)/gi,
-  investigacao: /\b(investig|analis|descobr|entend|mapei|audit|por que|porqu[eê]|diagn[oó]stic|medi[rç])/gi,
+  investigacao: /\b(investig|analis|analy|diagnos|research|descobr|entend|mapei|audit|por que|porqu[eê]|diagn[oó]stic|medi[rç])/gi,
   revisao: /\b(revis|review|revisar|conferir|validar o trabalho|cr[ií]tic)/gi,
   funcionalidade: /\b(implement|criar|cria|adicion|nova|novo|feature|funcionalidade|tela|endpoint)/gi,
 }
 
 /** On equal scores the first wins (a "test for a bug fix" is a test). */
-const ORDER = ['revisao', 'testes', 'bug', 'documentacao', 'refatoracao', 'investigacao', 'funcionalidade']
+const ORDER = ['revisao', 'testes', 'bug', 'documentacao', 'refatoracao', 'investigacao', 'funcionalidade', 'operacao']
 /** A word in the title says more about the activity than one in the task's details. */
 const TITLE_WEIGHT = 3
 
@@ -61,6 +69,18 @@ export function classifyTask(text: string, types: TaskType[], title = ''): Class
   }
 }
 
+/** Conservative local policy. Risk wins over a cheap operation; no model call for obvious work. */
+export function assessDifficulty(title: string, task: string): { difficulty: Difficulty; why: string } {
+  const text = `${title}\n${task}`.slice(0, 20_200)
+  const risk = /architect|arquitet|reestrutur|cross[- ]cutting|v[aá]rios m[oó]dulos|multiple modules|race condition|concurren|concorr|intermittent|intermitente|unknown cause|causa desconhecida|seguran[cç]a|security|migra.{0,30}(banco|database)|distributed|distribu[ií]d/i
+  if (risk.test(text)) return { difficulty: 'dificil', why: 'escopo amplo, risco ou diagnóstico complexo' }
+  const operation = /\b(run|execute|executar|rodar|inicie|iniciar|start|install|instalar|verificar|check)\b.{0,80}\b(build|compil|npm|pnpm|yarn|test|testes|projeto|project|servidor|server|depend)/i
+  const small = /\b(typo|ortografia|renomear|rename|small|pequeno|simples|simple)\b/i
+  const changes = /implement|refactor|refator|reestrutur|diagnos|investig|corrig|fix|adicion|add\b|create|criar/i
+  if ((operation.test(text) || small.test(text)) && !changes.test(text)) return { difficulty: 'simples', why: 'operação delimitada sem implementação ou diagnóstico' }
+  return { difficulty: 'normal', why: 'escopo sem sinais suficientes para reduzir ou elevar o modelo' }
+}
+
 export interface AccountRoom {
   account: Account
   /** Highest use of its running windows, 0–100; null when nothing was read yet. */
@@ -78,10 +98,13 @@ export function accountRooms(cli: AgentCliForRole, accounts: Account[], statuses
     .filter((a) => a.cli === cli && a.auto && (a.kind === 'api' ? a.keyHint !== null : statuses.find((s) => s.accountId === a.id)?.loggedIn !== false))
     .map((account) => {
       const l = limits.find((x) => x.accountId === account.id)
-      const windows = l ? [l.fiveHour, l.weekly].filter((w): w is NonNullable<typeof w> => Boolean(w && w.resetsAt > now)) : []
-      const used = l ? Math.max(0, ...windows.map((w) => w.usedPercent)) : null
-      const full = account.kind === 'assinatura' && used !== null && used >= ACCOUNT_FULL_PERCENT
-      const resetsAt = full ? Math.min(...windows.filter((w) => w.usedPercent >= ACCOUNT_FULL_PERCENT).map((w) => w.resetsAt)) : null
+      const windows = l ? [l.fiveHour, l.weekly].filter((w): w is NonNullable<typeof w> => Boolean(w && Number.isFinite(w.usedPercent) && w.usedPercent >= 0 && w.usedPercent <= 100 && Number.isFinite(w.resetsAt))) : []
+      const fresh = !!l && l.source !== 'session' && !l.refreshError && l.updatedAt <= now && now - l.updatedAt <= 90000
+      const used = fresh && windows.length && windows.every(w => w.resetsAt > now) ? Math.max(...windows.map(w => w.usedPercent)) : null
+      // A failed refresh or elapsed timestamp is not evidence that a saturated subscription recovered.
+      const blocked = windows.filter(w => w.usedPercent >= ACCOUNT_FULL_PERCENT)
+      const full = account.kind === 'assinatura' && blocked.length > 0
+      const resetsAt = full && fresh && blocked.every(w => w.resetsAt > now) ? Math.max(...blocked.map(w => w.resetsAt)) : null
       return { account, used, live: live.get(account.id) ?? 0, resetsAt, full }
     })
 }
@@ -97,16 +120,24 @@ const LADDER: Partial<Record<AgentCliForRole, { cheap: string; strong: string }>
  * hard to its stronger model with more effort (or just more effort). `efforts` are the levels the
  * resulting model takes, in order; an effort it does not take is dropped.
  */
-export function seatForDifficulty(cli: AgentCliForRole, model: string | null, effort: Effort | null, difficulty: Difficulty, effortsOf: (model: string | null) => readonly Effort[]): { model: string | null; effort: Effort | null; changed: boolean } {
+export function seatForDifficulty(cli: AgentCliForRole, model: string | null, effort: Effort | null, difficulty: Difficulty, effortsOf: (model: string | null) => readonly Effort[], catalog?: CliCatalog): { model: string | null; effort: Effort | null; changed: boolean } {
   if (difficulty === 'normal') return { model, effort, changed: false }
   const ladder = LADDER[cli]
-  const nextModel = ladder ? (difficulty === 'simples' ? ladder.cheap : ladder.strong) : model
+  // Catalog order is the CLI's preference. Select known families only, never invent a Codex id.
+  const candidates = catalog?.models ?? []
+  const family = difficulty === 'simples' ? /luna|mini|haiku|flash|fast and affordable|lightweight|cost.efficient/i : /astra|opus|frontier|most demanding/i
+  const candidate = !ladder ? candidates.find((m) => family.test(`${m.id} ${m.description}`)) : undefined
+  const nextModel = candidate?.id ?? (ladder ? (difficulty === 'simples' ? ladder.cheap : ladder.strong) : model)
   const levels = effortsOf(nextModel)
   const at = effort ? levels.indexOf(effort) : -1
   let nextEffort: Effort | null = effort
   if (levels.length) {
     if (difficulty === 'simples') nextEffort = levels[0]!
-    else nextEffort = levels[Math.min(levels.length - 1, Math.max(at, levels.indexOf('medium')) + 1)] ?? effort
+    else {
+      const high = levels.indexOf('high')
+      const floor = high >= 0 ? high : levels.length - 1
+      nextEffort = levels[Math.min(levels.length - 1, Math.max(floor, at >= 0 ? at + 1 : 0))]!
+    }
   }
   if (nextEffort && !levels.includes(nextEffort)) nextEffort = null
   return { model: nextModel, effort: nextEffort, changed: nextModel !== model || nextEffort !== effort }
@@ -122,7 +153,7 @@ export const BALANCE_GAP = 30
  * null when every subscription is used up. API keys do not count: they are the last resort.
  */
 export function cliLoad(rooms: AccountRoom[]): number | null {
-  const open = rooms.filter((r) => r.account.kind === 'assinatura' && !r.full).map((r) => (r.used ?? 0) + r.live * LIVE_WEIGHT)
+  const open = rooms.filter((r) => r.account.kind === 'assinatura' && !r.full && r.used !== null).map((r) => r.used! + r.live * LIVE_WEIGHT)
   return open.length ? Math.min(...open) : null
 }
 
@@ -142,7 +173,7 @@ export interface AccountChoice {
 export function chooseAccount(rooms: AccountRoom[]): AccountChoice {
   const label = (r: AccountRoom) => `${r.account.builtin ? 'conta deste Mac' : r.account.name} (${r.used === null ? 'sem leitura de limite' : `${Math.round(r.used)}% usado`}, ${r.live} ${r.live === 1 ? 'agente' : 'agentes'} nela)`
   const open = rooms.filter((r) => r.account.kind === 'assinatura' && !r.full)
-    .sort((a, b) => (a.used ?? 0) + a.live * LIVE_WEIGHT - ((b.used ?? 0) + b.live * LIVE_WEIGHT) || Number(b.account.builtin) - Number(a.account.builtin) || a.account.createdAt - b.account.createdAt)
+    .sort((a, b) => Number(a.used === null) - Number(b.used === null) || (a.used ?? 100) + a.live * LIVE_WEIGHT - ((b.used ?? 100) + b.live * LIVE_WEIGHT) || Number(b.account.builtin) - Number(a.account.builtin) || a.account.createdAt - b.account.createdAt)
   if (open[0]) return { account: open[0].account, reason: open.length > 1 ? `${label(open[0])}: a de mais folga entre ${open.length}` : label(open[0]), exhausted: false, backAt: null }
   const api = rooms.filter((r) => r.account.kind === 'api').sort((a, b) => a.account.createdAt - b.account.createdAt)[0]
   const resets = rooms.filter((r) => r.resetsAt !== null).map((r) => r.resetsAt!)

@@ -7,6 +7,8 @@ import type { AccountLimits, RateWindow, TokenUsage } from '@orbit/protocol'
 export type ReportedLimits = Omit<AccountLimits, 'accountId'>
 
 export interface UsageReport {
+  origin?: 'claude-transcript-v1' | 'claude-context-only' | 'codex-session-total-v1'
+  observed?: Partial<Record<keyof TokenUsage, boolean>>
   usage: TokenUsage | null
   contextPercent: number | null
   limits: ReportedLimits | null
@@ -24,25 +26,23 @@ function window(raw: unknown, minutes: number, resetsInSeconds: boolean): RateWi
 }
 
 /**
- * Claude Code's status line input: session token totals, cost, context use and — after the
- * first API call — the account's 5-hour and weekly limits.
+ * Claude status supplies current context and cumulative estimated cost. Consumption comes
+ * only from Orbit's normalized transcript snapshot, never context_window.total_*.
  */
 export function fromClaudeStatus(payload: unknown, now = Date.now()): UsageReport {
   const p = (payload ?? {}) as Record<string, any>
   const ctx = p.context_window ?? {}
-  const input = num(ctx.total_input_tokens)
-  const output = num(ctx.total_output_tokens)
-  const hasTokens = typeof ctx.total_input_tokens === 'number' || typeof ctx.total_output_tokens === 'number'
-  // Cache figures here are the last call's only, not the session's, so they are left out
-  // (the session totals already include cached input).
-  const usage: TokenUsage | null = hasTokens
-    ? { input, output, cacheRead: 0, cacheWrite: 0, total: input + output, costUsd: typeof p.cost?.total_cost_usd === 'number' ? p.cost.total_cost_usd : null }
-    : null
+  const normalized = p.orbit_session_usage
+  const keys = ['input', 'output', 'cacheRead', 'cacheWrite', 'total'] as const
+  const hasTokens = normalized?.format === 'claude-transcript-v1' && keys.every(key => Number.isSafeInteger(normalized[key]) && normalized[key] >= 0) && normalized.input + normalized.output === normalized.total
+  const cost = typeof p.cost?.total_cost_usd === 'number' && Number.isFinite(p.cost.total_cost_usd) && p.cost.total_cost_usd >= 0 ? p.cost.total_cost_usd : null
+  const usage: TokenUsage | null = hasTokens ? { input: normalized.input, output: normalized.output, cacheRead: normalized.cacheRead, cacheWrite: normalized.cacheWrite, total: normalized.total, costUsd: cost } : cost !== null ? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, costUsd: cost } : null
   const rate = p.rate_limits
   const limits: ReportedLimits | null = rate
     ? { cli: 'claude', fiveHour: window(rate.five_hour, 300, true), weekly: window(rate.seven_day, 10080, true), plan: null, updatedAt: now }
     : null
-  return { usage, contextPercent: typeof ctx.used_percentage === 'number' ? ctx.used_percentage : null, limits }
+  const complete = hasTokens && normalized.complete !== false
+  return { usage, origin: hasTokens ? 'claude-transcript-v1' : 'claude-context-only', observed: { input: complete, output: complete, total: complete, cacheRead: complete, cacheWrite: complete, costUsd: cost !== null }, contextPercent: typeof ctx.used_percentage === 'number' ? ctx.used_percentage : null, limits }
 }
 
 /** The last `token_count` event of a Codex session file: session totals and account limits. */
@@ -61,16 +61,19 @@ export function fromCodexRollout(text: string, now = Date.now()): UsageReport {
     if (payload?.type !== 'token_count') continue
     const total = payload.info?.total_token_usage
     const usage: TokenUsage | null = total
-      ? { input: num(total.input_tokens), output: num(total.output_tokens) + num(total.reasoning_output_tokens), cacheRead: num(total.cached_input_tokens), cacheWrite: num(total.cache_write_input_tokens), total: num(total.total_tokens), costUsd: null }
+      // reasoning_output_tokens is a breakdown of output_tokens, not additional output.
+      ? { input: num(total.input_tokens), output: num(total.output_tokens), cacheRead: num(total.cached_input_tokens), cacheWrite: num(total.cache_write_input_tokens), total: num(total.total_tokens), costUsd: null }
       : null
     const context = payload.info?.model_context_window
     const last = payload.info?.last_token_usage
     const contextPercent = context && last ? Math.min(100, Math.round((num(last.input_tokens) / context) * 100)) : null
     const rate = payload.rate_limits
+    const observedAt = typeof event.timestamp === 'string' ? Date.parse(event.timestamp) : NaN
     const limits: ReportedLimits | null = rate
-      ? { cli: 'codex', fiveHour: window(rate.primary, 300, true), weekly: window(rate.secondary, 10080, true), plan: typeof rate.plan_type === 'string' ? rate.plan_type : null, updatedAt: now }
+      ? { cli: 'codex', fiveHour: window(rate.primary, 300, true), weekly: window(rate.secondary, 10080, true), plan: typeof rate.plan_type === 'string' ? rate.plan_type : null, updatedAt: Number.isFinite(observedAt) && observedAt <= now + 1000 ? observedAt : now }
       : null
-    return { usage, contextPercent, limits }
+    const observed: UsageReport['observed'] = { input: typeof total?.input_tokens === 'number', output: typeof total?.output_tokens === 'number', cacheRead: typeof total?.cached_input_tokens === 'number', cacheWrite: typeof total?.cache_write_input_tokens === 'number', total: typeof total?.total_tokens === 'number', costUsd: false }
+    return { usage, observed, origin: 'codex-session-total-v1', contextPercent, limits }
   }
   return { usage: null, contextPercent: null, limits: null }
 }
