@@ -1,0 +1,13 @@
+# Claude e Codex: marcas legíveis
+
+Base: origin/main c6f0a26 (release oficial instalada 0.2.17). Branch fix/orbit-provider-logos, worktree Orbit-provider-logos. Apenas assets, ProviderMark e seu CSS foram alterados no runtime. Não altera Home, contas, autenticação, quotas, reset nem providerIdentity.
+
+Causa reproduzida no WKWebView instalado por CUA: Claude aparecia com o monograma corporativo Anthropic; OpenAI preto sobre superfície escura. O SVG OpenAI adaptava a cor com prefers-color-scheme, que no WKWebView não acompanhava o CSS dark da aplicação. Chromium renderizava branco no mesmo preview: não era evidência suficiente para o app nativo.
+
+Correção: Claude starburst oficial de https://claude.ai/favicon.svg, bytes intactos; OpenAI Blossom oficial com geometria intacta e fill preto original resolvido estaticamente, sobre tile branco fixo. Regra com precedência sobre AccountsPanel.css, sem filtros ou distorção. Origem e hash em assets/PROVENANCE.md. Todos os usos passam por ProviderMark: resumo de contas, cards de assinatura/API, home/quotas e identidade de panes; endpoints customizados continuam com fallback neutro.
+
+Validação anterior à publicação: desktop typecheck e 35 testes passaram; 21 checks de UI de contas passaram (fixtures WebSocket, nenhum reset ou login real), inclusive todas as superfícies OpenAI brancas, troca de contas e contratos de reset; larguras 375/768/1024/1440 sem overflow. Revisão visual com componente real a 16/24/32 px em fundos claro e escuro, sob preferências de sistema light/dark. Contraste geométrico mínimo Claude 3.12:1 e OpenAI 21:1. Orbit só oferece tema escuro; os fundos claros são preview isolado de contraste, não declaração de um tema light do produto. Screenshots em 2026-10-16-provider-logos-evidence/; visual-results.json e after-results.json registram as verificações.
+
+Coordenação: pane122 autorizou exclusividade e pane142 concluiu observação de permissões antes da troca. Microfone e Reconhecimento de Fala ativados antes do swap; ditado físico não testado. Root antigo 6f269e2, AGENTS e todas as parciais preservados. agent:begin recusou sobreposição com parciais próprias no root. Não há operação de adoção no script. Registro manual tentado foi removido imediatamente sob lock e registry voltou a []; exceção para estes paths explicitamente autorizada pelo coordenador, usando agent:finish existente e hooks/checks intactos. Não alterado o fluxo/hook.
+
+Build, merge, release e instalação devem ser confirmados pelos recibos finais; este documento registra os checks pré-publicação. Publicação apenas pelo workflow Official release, sem build local concorrente.

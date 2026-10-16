@@ -1,0 +1,42 @@
+{
+  "url": "http://127.0.0.1:5380",
+  "checks": [
+    "Codex selected with two independent accounts",
+    "Provider overview and official marks",
+    "Every OpenAI tile stays white including provider cards",
+    "Catalog model and default visible",
+    "Remaining quotas and renewals visible",
+    "No horizontal accounts overflow 375",
+    "No horizontal accounts overflow 768",
+    "No horizontal accounts overflow 1024",
+    "No horizontal accounts overflow 1440",
+    "Refresh stays busy during initial account checking",
+    "Refresh sends all three read operations",
+    "Cancel sends no reset",
+    "Confirmed synthetic reset binds account and credit",
+    "Claude official alternative retained",
+    "New subscription uses existing multi-account contract",
+    "API account remains opt-in automatic selection",
+    "Login targets second account independently",
+    "Automatic selection preserves account identity",
+    "Stale readings never look like available quota",
+    "Reduced motion disables spinner animation",
+    "No JavaScript errors"
+  ],
+  "errors": [],
+  "transport": "Synthetic WebSocket intercepted in this test; no real reset, key, login, paid call or account mutation",
+  "messages": [
+    "account.check",
+    "account.check",
+    "limits.refresh",
+    "cli.check",
+    "account.reset",
+    "account.save",
+    "account.save",
+    "account.login",
+    "account.save",
+    "account.check",
+    "limits.refresh",
+    "cli.check"
+  ]
+}

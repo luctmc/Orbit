@@ -1,0 +1,12 @@
+/* A fixed approved black mark on white also works in WKWebView, where an SVG
+   image's media query can follow macOS instead of the surrounding app theme. */
+span.provider-mark.provider-mark--openai {
+  background: #fff;
+  border: 1px solid #d6d6d6;
+  border-radius: 8px;
+}
+
+.provider-mark img {
+  display: block;
+  object-fit: contain;
+}
