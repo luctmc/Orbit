@@ -1,7 +1,7 @@
 // Repository workflow shared by Codex and Claude. No provider credentials are read or changed.
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, normalize, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 export function checkBranch(branch) {
@@ -16,8 +16,8 @@ export function normalizeFiles(files) {
     if (!file || isAbsolute(file) || file.split(/[\\/]/).includes('..') || (file === '.git' || file.startsWith('.git/'))) {
       throw new Error(`Caminho inválido: ${file}`)
     }
-    const normalized = file.replace(/^\.\//, '').replace(/\/$/, '')
-    if (!normalized || normalized === '.') throw new Error(`Caminho inválido: ${file}`)
+    const normalized = normalize(file).replace(/\/$/, '')
+    if (!normalized || normalized === '.' || normalized === '.git' || normalized.startsWith('.git/')) throw new Error(`Caminho inválido: ${file}`)
     return normalized
   }))]
 }

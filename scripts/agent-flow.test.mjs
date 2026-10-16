@@ -13,8 +13,8 @@ test('claims detect exact file and parent-directory conflicts', () => {
   assert.ok(!overlaps('scripts/a.mjs', 'scripts/b.mjs'))
 })
 test('normalizes claims and refuses unsafe or empty paths', () => {
-  assert.deepEqual(normalizeFiles(['./scripts/', 'scripts']), ['scripts'])
-  for (const files of [[], ['../other'], ['/tmp/file'], ['.git/config'], ['a/../../b']]) assert.throws(() => normalizeFiles(files))
+  assert.deepEqual(normalizeFiles(['./scripts/', 'scripts', 'scripts//']), ['scripts'])
+  for (const files of [[], [''], ['.'], ['./.git/config'], ['../other'], ['/tmp/file'], ['.git/config'], ['a/../../b']]) assert.throws(() => normalizeFiles(files))
 })
 
 import { execFileSync, spawnSync } from 'node:child_process'
