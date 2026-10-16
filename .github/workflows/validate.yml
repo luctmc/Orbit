@@ -22,6 +22,16 @@ jobs:
       - run: npm ci
       - run: node --test scripts/*.test.mjs
       - run: npm run typecheck
+      - name: Diagnose PTY test failures
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync, writeFileSync } from 'node:fs'
+          const path = 'packages/sidecar/test/mcp.test.ts'
+          const source = readFileSync(path, 'utf8')
+          const original = "await ui.next('pane.data', (m) => m.paneId === lead.id && paneText(lead.id).includes(`[Orbit] Retorno de #${crew.id}`))"
+          if (!source.includes(original)) throw new Error('Diagnostic target changed')
+          writeFileSync(path, source.replace(original, original + ".catch(error => { console.error('PTY_DIAGNOSTIC', JSON.stringify(paneText(lead.id).replace(/TOKEN:[\\w-]+:/g, 'TOKEN:REDACTED:'))); throw error })"))
+          JS
       - run: npm test
       - run: npm run build:all -w @orbit/desktop
       - name: Check native app
