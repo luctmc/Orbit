@@ -333,3 +333,43 @@ assinar versões novas, e os apps já instalados recusam qualquer outra: guarde 
 Para testar uma versão antes de publicar, abra o app com `ORBIT_UPDATE_DIR=dist-release/v0.2.0`.
 
 Próximos passos: assinatura e notarização do `.app` (com a entitlement de microfone do hardened runtime); build para Macs Intel.
+
+### Fluxo oficial de ajustes e atualizações
+
+Qualquer ajuste usa uma branch `feature/orbit-*` ou `fix/orbit-*` baseada na `main` atual.
+As regras para todos os agentes estão em [AGENTS.md](AGENTS.md).
+
+```bash
+npm run agent:setup
+npm run agent:status
+npm run agent:begin -- feature/orbit-resumo_do_ajuste scripts/arquivo.mjs
+# entre na worktree exibida; instale dependências, faça o ajuste e commits específicos
+npm run agent:finish
+```
+
+`agent:begin` reserva arquivos/pastas e recusa sobreposição com outras worktrees do clone.
+As reservas ficam no diretório Git compartilhado, fora do código versionado. Se um trabalho
+for abandonado, coordene com o responsável antes de remover sua entrada de
+`git rev-parse --git-common-dir`/`orbit-agent-claims.json`. Entre clones diferentes, coordene
+pelo PR. `agent:finish` para em qualquer erro e não resolve conflitos nem força pushes.
+Os hooks são proteção local; o check `Validate / validate` também verifica o nome da branch
+no PR. Ative esse check e a exigência de PR nas regras de proteção de `main` quando o plano
+do repositório permitir.
+
+Após merge, [Official release](../../actions/workflows/release.yml) valida o código e publica
+uma nova versão Apple Silicon, com o arquivo `Orbit_<versão>_aarch64.app.tar.gz`, assinatura,
+`latest.json` e `source.json`. A versão passa da maior entre a versão-base do código e tags
+existentes; o commit da `main` não recebe um bump recursivo. Execuções simultâneas não cancelam
+a publicação em andamento; se vários merges chegarem juntos, o GitHub pode agrupar os pendentes
+na versão do commit mais recente. Reexecutar um commit já publicado não gera outra versão.
+
+Configure nos secrets de Actions a **mesma** `TAURI_SIGNING_PRIVATE_KEY` usada pelas instalações
+existentes e, se necessário, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. A chave nunca é versionada.
+Se a publicação falhar, a versão anterior continua oficial; consulte o log antes de reexecutar.
+A release aponta para o commit exato do build e só se torna latest após o upload completo.
+
+O download fica em [Releases](https://github.com/luctmc/Orbit/releases/latest). Como o repositório
+é privado, é necessário ter acesso e autenticar o GitHub CLI (`gh auth login`) para o app buscar
+e baixar atualizações. O Orbit verifica novas versões ao abrir e a cada seis horas; também
+permite buscar e instalar pelo app. As assinaturas do updater são preservadas; assinatura
+Developer ID/notarização Apple e suporte Intel continuam sendo trabalhos separados.

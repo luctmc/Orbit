@@ -23,6 +23,7 @@ const version = args[0]
 const notesAt = args.indexOf('--notes')
 const notes = notesAt === -1 ? '' : args[notesAt + 1] ?? ''
 const publish = args.includes('--publish')
+const source = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim()
 
 const fail = (message) => {
   console.error(`release: ${message}`)
@@ -53,6 +54,14 @@ if (version !== conf.version) {
   console.log(`versão → ${version}`)
 }
 
+// Keep lockfiles consistent with the version embedded in this build.
+const npmLockPath = join(root, 'package-lock.json')
+const npmLock = JSON.parse(readFileSync(npmLockPath, 'utf8'))
+npmLock.packages['apps/desktop'].version = version
+writeFileSync(npmLockPath, `${JSON.stringify(npmLock, null, 2)}\n`)
+const cargoLockPath = join(desktop, 'src-tauri/Cargo.lock')
+writeFileSync(cargoLockPath, readFileSync(cargoLockPath, 'utf8').replace(/(name = "orbit-desktop"\nversion = ")[^"]+"/, `$1${version}"`))
+
 // 2. Signed build with the updater archive (.app.tar.gz + .sig).
 const build = spawnSync('npm', ['run', 'app:build', '--', '--config', JSON.stringify({ bundle: { createUpdaterArtifacts: true } })], {
   cwd: root,
@@ -76,15 +85,24 @@ const manifest = {
   pub_date: new Date().toISOString(),
   platforms: { 'darwin-aarch64': { signature: readFileSync(`${archive}.sig`, 'utf8').trim(), url: name } },
 }
+writeFileSync(join(out, 'source.json'), `${JSON.stringify({ version, commit: source, repository: repo }, null, 2)}\n`)
 writeFileSync(join(out, 'latest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 console.log(`\nArquivos em ${out}:\n  ${name}\n  latest.json`)
 
 // 4. Publish (only when asked).
-const files = [join(out, name), join(out, 'latest.json')]
+const files = [join(out, name), join(out, 'latest.json'), join(out, 'source.json')]
+copyFileSync(`${archive}.sig`, join(out, `${name}.sig`))
+files.push(join(out, `${name}.sig`))
 if (!publish) {
   console.log(`\nPara publicar: gh release create v${version} --repo ${repo} --title "Orbit ${version}" --notes "…" ${files.map((f) => `'${f}'`).join(' ')}`)
   process.exit(0)
 }
-const created = spawnSync('gh', ['release', 'create', `v${version}`, '--repo', repo, '--title', `Orbit ${version}`, '--notes', notes || `Orbit ${version}`, ...files], { stdio: 'inherit' })
-if (created.status !== 0) fail('o gh não criou a release')
-console.log(`\nPublicada: v${version} em ${repo}. Faça commit da troca de versão.`)
+// Create a draft first: updater clients must never see a partially uploaded release.
+const existing = spawnSync('gh', ['release', 'view', `v${version}`, '--repo', repo], { stdio: 'ignore' })
+if (existing.status === 0) fail(`v${version} já existe; não sobrescreva uma release assinada`)
+const created = spawnSync('gh', ['release', 'create', `v${version}`, '--repo', repo, '--target', source,
+  '--draft', '--title', `Orbit ${version}`, '--notes', `${notes || `Orbit ${version}`}\n\nSource: ${source}`, ...files], { stdio: 'inherit' })
+if (created.status !== 0) fail('o gh não criou a release draft; nada foi anunciado como latest')
+const published = spawnSync('gh', ['release', 'edit', `v${version}`, '--repo', repo, '--draft=false', '--latest'], { stdio: 'inherit' })
+if (published.status !== 0) fail('o draft não foi publicado; confira o GitHub antes de tentar novamente')
+console.log(`\nPublicada: v${version} em ${repo}, commit ${source}.`)

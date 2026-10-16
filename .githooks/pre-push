@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main) echo 'Orbit: use uma branch e PR para main.' >&2; exit 1 ;;
+    refs/heads/*) node scripts/agent-flow.mjs check-branch "${remote_ref#refs/heads/}" ;;
+  esac
+done

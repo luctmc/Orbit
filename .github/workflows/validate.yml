@@ -1,0 +1,29 @@
+name: Validate
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate branch name
+        if: github.event_name == 'pull_request'
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: node scripts/agent-flow.mjs check-branch "$BRANCH"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node --test scripts/*.test.mjs
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build:all -w @orbit/desktop
+      - name: Check native app
+        working-directory: apps/desktop/src-tauri
+        run: cargo check --locked
