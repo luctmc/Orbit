@@ -96,6 +96,17 @@ export class OrbitClient {
     return this.identifiedInput(`mission-${input.workspaceId}`, { type: 'mission.create', ...input }, 'mission.created')
   }
 
+  /** Query the immutable operation, never replay it with the current editable draft. */
+  async checkPendingMission(workspaceId: string) {
+    const key = `mission-${workspaceId}`
+    const attempt = this.inputAttempts.get(key)
+    if (!attempt) throw new Error('Não há pedido pendente para conferir.')
+    const result = await this.ask({ type: 'mission.check', workspaceId, requestId: attempt.requestId }, 'mission.checked', m => m.requestId === attempt.requestId)
+    if ((result.state === 'failed' || result.state === 'acked') && this.inputAttempts.get(key)?.requestId === attempt.requestId) this.inputAttempts.delete(key)
+    // The draft may have changed while the receipt was in flight. Preserve it in every state.
+    return result
+  }
+
   /** Consult the exact durable request, including original field normalization and attachment IDs. */
   async checkPendingInput(key: string) {
     const attempt = this.inputAttempts.get(key)
@@ -291,6 +302,10 @@ export class OrbitClient {
   }
 
   private receive(message: ServerMessage): void {
+    if (message.type === 'mission.checked' || message.type === 'workspace.saved' || message.type === 'workspace.error') {
+      for (const answer of [...this.answers]) answer(message)
+      return
+    }
     if (message.type === 'mission.created' || message.type === 'mission.create.error' || message.type.startsWith('account.reset.') || message.type === 'pane.spawned' || message.type === 'pane.spawn.error' || message.type.startsWith('mission.progress') || message.type.startsWith('attachment.') || message.type === 'pane.submitted' || message.type === 'pane.submit.error' || message.type === 'pane.conversation' || message.type.startsWith('files.') || message.type.startsWith('git.') || message.type.startsWith('report') || message.type === 'ledger') {
       for (const answer of [...this.answers]) answer(message)
       return

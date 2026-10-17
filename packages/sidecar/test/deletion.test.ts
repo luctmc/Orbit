@@ -109,6 +109,8 @@ test('deleting an agent, a mission or a workspace leaves nothing behind in Orbit
     await ui.next('mission.updated', (m) => m.mission.title === 'Última')
     ui.send({ type: 'workspace.delete', workspaceId: workspace.id, conversations: true, branches: false })
     await until(() => !store.workspace(workspace.id))
+    const delivered = await ui.next('snapshot', m => !m.snapshot.workspaces.some(w => w.id === workspace.id))
+    assert(!delivered.snapshot.workspaces.some(w => w.id === workspace.id), 'every connected list receives the removal')
     const snapshot = store.snapshot()
     assert.deepEqual([snapshot.missions.length, snapshot.panes.length, snapshot.templates.length, snapshot.schedules.length], [0, 0, 0, 0])
     assert.deepEqual(store.memory(workspace.id), [])

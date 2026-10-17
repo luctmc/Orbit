@@ -920,6 +920,8 @@ export interface SpawnPaneRequest {
 }
 
 export type ClientMessage =
+  /** Read a creation receipt without translating or starting any agent. */
+  | { type: 'mission.check'; workspaceId: string; requestId: string }
   | { type: 'mission.progress'; missionId: string; requestId: string }
   | { type: 'workspace.open'; path: string }
   /** A workspace made of several folders; the first is the main one. */
@@ -1028,6 +1030,7 @@ export interface StartupTask {
 }
 
 export type ServerMessage =
+  | { type: 'mission.checked'; requestId: string; state: 'missing' | 'pending' | 'failed' | 'acked'; message: string; missionId?: string }
   | { type: 'workspace.saved'; requestId: string; workspace: Workspace }
   | { type: 'workspace.error'; requestId: string; message: string }
   | { type: 'engine.startup'; tasks: StartupTask[] }

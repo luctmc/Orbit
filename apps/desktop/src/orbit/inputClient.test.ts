@@ -59,3 +59,32 @@ test('renderer restart recovers drafts, attachment IDs and the exact pending ope
     if (oldStorage) Object.defineProperty(globalThis, 'localStorage', oldStorage); else delete (globalThis as any).localStorage
   }
 })
+
+test('pending mission reconciliation is read-only and preserves an edited draft across terminal receipts', async () => {
+  const real = globalThis.WebSocket
+  const sent: any[] = []
+  class Socket { static OPEN = 1; readyState = 1; send(raw: string) { sent.push(JSON.parse(raw)) } }
+  globalThis.WebSocket = Socket as any
+  try {
+    const client = new OrbitClient(async () => 'ws://synthetic'); await Promise.resolve()
+    const original = { workspaceId: 'qa', title: 'Original', objective: '', mode: 'livre', lead: { cli: 'shell', model: null, title: '' } } as const
+    const ask = client.ask.bind(client)
+    client.ask = (async () => { throw new OrbitRequestTimeout('lost ACK') }) as any
+    await assert.rejects(client.createMission(original), OrbitRequestTimeout)
+    const attempt = structuredClone((client as any).inputAttempts.get('mission-qa'))
+    client.missionDrafts.set('qa', { ...original, title: 'Edited draft' })
+    client.ask = ask
+    const check = client.checkPendingMission('qa')
+    assert.deepEqual(sent[0], { type: 'mission.check', workspaceId: 'qa', requestId: attempt.requestId })
+    assert.deepEqual((client as any).inputAttempts.get('mission-qa'), attempt)
+    ;(client as any).receive({ type: 'mission.checked', requestId: attempt.requestId, state: 'pending', message: 'Uncertain' })
+    await check
+    assert(client.inputPending('mission-qa'))
+    const terminal = client.checkPendingMission('qa')
+    ;(client as any).receive({ type: 'mission.checked', requestId: attempt.requestId, state: 'failed', message: 'No quota; never launched' })
+    await terminal
+    assert(!client.inputPending('mission-qa'))
+    assert.equal(client.missionDrafts.get('qa')?.title, 'Edited draft')
+    assert(sent.every(m => m.type === 'mission.check'))
+  } finally { globalThis.WebSocket = real }
+})

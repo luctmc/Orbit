@@ -85,6 +85,7 @@ export function WorkspaceDialog({ workspace, onClose }: { workspace?: Workspace;
   const suggested = folders.length ? `${baseName(folders[0]!)}${folders.length > 1 ? ` + ${folders.length - 1}` : ''}` : 'meu-projeto'
 
   return (
+    <>
     <Dialog busy={saving} eyebrow="Seu projeto no Orbit" title={editing ? 'Editar workspace' : 'Novo workspace'} submitLabel={saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Criar workspace'} submitDisabled={saving || connection !== 'open'} onClose={() => { if (!saving) onClose() }} onSubmit={() => {
       if (saving || connection !== 'open') return
       if (folders.length === 0) return setError('Inclua pelo menos uma pasta.')
@@ -116,8 +117,11 @@ export function WorkspaceDialog({ workspace, onClose }: { workspace?: Workspace;
           <span className="muted">Tira do Orbit as missões, a memória, os modelos e os agendamentos dele. As pastas no seu Mac ficam.</span>
         </div>
       )}
-      {workspace && deleting && <DeleteWorkspaceDialog workspace={workspace} missions={missions.filter((m) => m.workspaceId === workspace.id).length} onClose={() => setDeleting(false)} onDeleted={onClose} />}
       {error && <p className="form-error" role="alert">{error}</p>}
     </Dialog>
+    {/* Sibling dialogs keep independent form owners in WebKit. A nested form navigates
+        the page instead of dispatching the deletion, leaving the workspace in Orbit. */}
+    {workspace && deleting && <DeleteWorkspaceDialog workspace={workspace} missions={missions.filter((m) => m.workspaceId === workspace.id).length} onClose={() => setDeleting(false)} onDeleted={onClose} />}
+    </>
   )
 }
