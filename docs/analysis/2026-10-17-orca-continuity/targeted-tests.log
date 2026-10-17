@@ -1,0 +1,21 @@
+(node:22320) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:22321) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ a stable activity rejects changed instructions, model and effort instead of silently reusing work (84.20375ms)
+✔ concurrent replays share one launch, but conflicting payloads and retry intentions do not (66.657459ms)
+✔ native resume does not repeat the original task; fresh reopen retains the assignment (123.9255ms)
+✔ new leader gets project instructions once at launch; standalone recovery briefing remains self-contained (58.0055ms)
+✔ the first skill page includes selected task guidance even with a large eligible catalog (69.931125ms)
+✔ request identity survives a sidecar restart and changed requests require a new explicit revision (79.032417ms)
+✔ old attempts without a verifiable request never trigger a blind new execution or silent reuse (29.936917ms)
+✔ Codex-only missions do not call a Claude classifier even for ambiguous work (32.774084ms)
+✔ explicit missing skills fail before creating a process, while exact eligible IDs are served once (81.652083ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 822.056166

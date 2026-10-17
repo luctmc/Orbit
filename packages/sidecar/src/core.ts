@@ -17,6 +17,7 @@ import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { bundledCatalog, codexDisabledMcp, gateTool, missionSkills, readSkill, scanCatalog, type SkillPolicy } from './skills.ts'
 import { SkillSessions } from './skillSessions.ts'
+import { resolveSkillSelectors } from './skillSelection.ts'
 import { projectDesignContext, selectDesignSkills, designSkillDelivery } from './designSkills.ts'
 import { automaticTaskSeat, designWork } from './taskPolicy.ts'
 import { accountRooms, BALANCE_GAP, chooseAccount, classifyTask, assessDifficulty, cliLoad, LIVE_WEIGHT, seatForDifficulty, decisionReceipt, type AccountRoom } from './maestro.ts'
@@ -38,7 +39,7 @@ import type { MissionProgress } from '@orbit/protocol'
 import { CLAUDE_USAGE_COMMAND, parseClaudeUsage, usageText } from './claudeUsage.ts'
 import { LimitRefreshGate, parseCodexAccountLimits } from './accountLimits.ts'
 import { codexHome, findCodexRolloutById, codexSessionId, findCodexRollout, fromCodexRollout, fromClaudeStatus, readTail, type UsageReport } from './usage.ts'
-import { contractHash, normalizedAcceptance } from './activityLedger.ts'
+import { contractHash, helperRequestHash, normalizedAcceptance } from './activityLedger.ts'
 import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
@@ -129,7 +130,7 @@ export class OrbitCore {
   private readonly sendingNotices = new Set<string>()
   private readonly deliveryTimer: NodeJS.Timeout
   private endpoint = ''
-  private readonly delegating = new Map<string, Promise<{ pane: Pane; receipt: string[] }>>()
+  private readonly delegating = new Map<string, { requestHash: string; retryReason: string | null; opening: Promise<{ pane: Pane; receipt: string[] }> }>()
   private readonly run: Run
   /** Models and effort levels per CLI; null until first loaded. */
   private catalog: Catalog | null = null
@@ -819,7 +820,7 @@ export class OrbitCore {
    * helpers and what they owe, handoffs, branches, the previous lead's last words and the flow.
    * Kept under a size the first prompt takes; `mission_briefing` returns it at any time.
    */
-  missionBriefing(missionId: string, previous?: { pane: Pane; turns: Turn[] }): string {
+  missionBriefing(missionId: string, previous?: { pane: Pane; turns: Turn[] }, installedAtLaunch = false): string {
     const mission = this.store.mission(missionId)
     if (!mission) throw new Error('Missão inexistente')
     const panes = this.missionPanes(missionId)
@@ -837,11 +838,11 @@ export class OrbitCore {
     ].filter(Boolean)
     out.push(`## State\n\n${facts.map((f) => `- ${f}`).join('\n')}`)
     const workspace = this.missionWorkspace(missionId)
-    if (workspace?.instructions) out.push(`## User instructions\n\n${workspace.instructions}`)
+    if (!installedAtLaunch && workspace?.instructions) out.push(`## User instructions\n\n${workspace.instructions}`)
     const requiredMemory = this.projectMemory(mission.workspaceId, Infinity, 'required')
-    if (requiredMemory) out.push(`## Required project memory (pinned or written by the user)\n\n${requiredMemory}`)
+    if (!installedAtLaunch && requiredMemory) out.push(`## Required project memory (pinned or written by the user)\n\n${requiredMemory}`)
     const memory = this.projectMemory(mission.workspaceId, Infinity, 'optional')
-    if (memory) out.push(`## Project memory (from earlier missions and the user)\n\n${memory}`)
+    if (!installedAtLaunch && memory) out.push(`## Project memory (from earlier missions and the user)\n\n${memory}`)
     if (mission.notes.length) out.push(`## Decisions the leads wrote down\n\n${mission.notes.map((n) => `- (#${n.paneId}) ${n.text}`).join('\n')}`)
     const cards = this.store.cards(missionId)
     if (cards.length) out.push(`## Board\n\n${cards.map((c) => `- [${c.column}] T${c.number} ${c.title}${c.assignee !== null ? ` (#${c.assignee})` : ''}`).join('\n')}`)
@@ -906,7 +907,9 @@ export class OrbitCore {
       lead = this.store.pane(helper.id) ?? helper
     } else {
       if (!AGENT_CLIS.includes(to.cli)) throw new Error('Agente inválido')
-      const briefing = this.missionBriefing(missionId, previous)
+      // spawn installs these exact instructions and memory sections in the new role context.
+      // The standalone recovery tool remains complete after compaction or native resume.
+      const briefing = this.missionBriefing(missionId, previous, true)
       lead = this.spawn({ missionId, role: 'lead', cli: to.cli, model: to.model, effort: to.effort, accountId: to.accountId, title: 'Líder', task: briefing }, { opened: (id) => `#${id} assumiu a liderança` })
     }
     // Who owed the old lead owes the new one; the old lead's conversation stays in its CLI.
@@ -1022,17 +1025,18 @@ export class OrbitCore {
     this.assertCurrent(caller)
     if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('Limite de catálogo inválido')
     limit = Math.min(limit, 50)
-    const items = this.eligibleSkills(caller)
+    const state = this.skillSessions.get(caller.id, caller.executionEpoch!)
+    const selected = (i: CatalogItem) => state.selectedNames.some(n => n === i.id || n === i.name || i.name.endsWith(`:${n}`))
+    const items = this.eligibleSkills(caller).sort((a, b) => Number(selected(b)) - Number(selected(a)) || a.id.localeCompare(b.id))
     const revision = createHash('sha256').update(JSON.stringify([caller.missionId, caller.id, caller.executionEpoch, items.map(i => [i.id, i.resource!.sha256])])).digest('hex')
     const match = cursor && /^([a-f0-9]{64}):(\d+)$/.exec(cursor)
     if (cursor && (!match || match[1] !== revision)) throw new Error('Cursor de catálogo inválido ou desatualizado; consulte desde o início')
     const offset = match ? Number(match[2]) : 0
     if (!Number.isSafeInteger(offset) || offset > items.length) throw new Error('Cursor de catálogo inválido')
-    const state = this.skillSessions.get(caller.id, caller.executionEpoch!)
     return { revision, limit, maxLimit: 50, nativeVisibilityFilter: null, loadedMeaning: 'text served by Orbit; consumption and compliance unverified',
-      items: items.slice(offset, offset + limit).map(i => ({ id: i.id, name: i.name, description: i.description, source: i.source, sha256: i.resource!.sha256, bytes: i.resource!.bytes, version: i.resource!.version, origin: i.resource!.origin, role: i.resource!.role, compatibility: i.resource!.compatibility, capabilities: ['read-text'], available: true, selected: state.selectedNames.some(n => n === i.name || i.name.endsWith(`:${n}`)), loaded: state.loaded[i.id] ?? null, fulfilled: null })),
+      items: items.slice(offset, offset + limit).map(i => ({ id: i.id, name: i.name, description: i.description, source: i.source, sha256: i.resource!.sha256, bytes: i.resource!.bytes, version: i.resource!.version, origin: i.resource!.origin, role: i.resource!.role, compatibility: i.resource!.compatibility, capabilities: ['read-text'], available: true, selected: state.selectedNames.some(n => n === i.id || n === i.name || i.name.endsWith(`:${n}`)), loaded: state.loaded[i.id] ?? null, fulfilled: null })),
       nextCursor: offset + limit < items.length ? `${revision}:${offset + limit}` : null,
-      unavailableSelectedNames: state.selectedNames.filter(n => !items.some(i => n === i.name || i.name.endsWith(`:${n}`))),
+      unavailableSelectedNames: state.selectedNames.filter(n => !items.some(i => n === i.id || n === i.name || i.name.endsWith(`:${n}`))),
     }
   }
 
@@ -1844,13 +1848,15 @@ export class OrbitCore {
     const identified = input.activityId && this.store.activity(caller.missionId, input.activityId)
     const key = identified ? identified.key : this.delegationKey(input)
     const lock = `${caller.missionId}:${key}`
-    const pending = this.delegating.get(lock)
-    if (pending) {
-      const result = await pending
-      return { pane: result.pane, receipt: [`reutilizado: #${result.pane.id}, delegação já em abertura`] }
-    }
+    const requestHash = helperRequestHash(input)
     const retry = input.retryReason?.trim()
     if (input.retryReason !== undefined && !retry) throw new Error('Explique por que esta tarefa precisa ser executada novamente')
+    const pending = this.delegating.get(lock)
+    if (pending) {
+      if (pending.requestHash !== requestHash || pending.retryReason !== (retry ?? null)) throw new Error('Já há uma abertura para esta atividade com outro pedido ou justificativa; aguarde e confira activity_status. Nenhum trabalho foi duplicado.')
+      const result = await pending.opening
+      return { pane: result.pane, receipt: [`reutilizado: #${result.pane.id}, delegação já em abertura`] }
+    }
     const activity = this.store.activity(caller.missionId, key)
     const dependencies: NonNullable<ActivityRecord['dependencies']> = []
     if (!Array.isArray(input.dependsOn ?? []) || (input.dependsOn?.length ?? 0) > 16 || input.dependsOn?.some(id => typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(id))) throw new Error('Dependências inválidas')
@@ -1865,14 +1871,14 @@ export class OrbitCore {
     if (retry && previous && retry !== previous.retryReason && previous.state !== 'delivered' && this.panes.isAlive(previous.paneId)) {
       throw new Error(`A atividade de #${previous.paneId} ainda está em execução. Interrompa e feche a tentativa antes de substituí-la, para evitar trabalho concorrente duplicado.`)
     }
-    if (retry && previous?.state === 'delivered' && this.panes.isAlive(previous.paneId)) this.closeHelper(caller, previous.paneId, false)
-    const ticket = this.store.reserveActivity({ missionId: caller.missionId, key, title: input.title, contractHash: contractHash(input), acceptance: normalizedAcceptance(input.accept), retryReason: retry ?? null, assignedBy: caller.id, requiresDelivery: input.cli !== 'shell', dependencies })
+    const ticket = this.store.reserveActivity({ missionId: caller.missionId, key, title: input.title, contractHash: contractHash(input), requestHash, acceptance: normalizedAcceptance(input.accept), retryReason: retry ?? null, assignedBy: caller.id, requiresDelivery: input.cli !== 'shell', dependencies })
     if (ticket.reused) {
       const attempt = ticket.attempt
       const pane = attempt.state === 'delivered' ? attempt.pane : this.store.pane(attempt.paneId) ?? attempt.pane
       if (!pane || (attempt.state !== 'delivered' && !this.panes.isAlive(attempt.paneId))) throw new Error(`Tentativa de #${attempt.paneId} já reservada ou parada sem concluir. Confira o histórico e use agent_resume ou retryReason com uma justificativa nova.`)
       return { pane, receipt: [`reutilizado: #${pane.id} (${pane.handoffStatus ?? pane.status}); atividade ${ticket.activity.id}, tentativa ${attempt.id}`] }
     }
+    if (retry && previous?.state === 'delivered' && this.panes.isAlive(previous.paneId)) this.closeHelper(caller, previous.paneId, false)
     const reservedMission = this.store.mission(caller.missionId)
     if (reservedMission) this.broadcast({ type: 'mission.updated', mission: reservedMission })
     const opening = (async () => {
@@ -1888,7 +1894,7 @@ export class OrbitCore {
       this.store.failAttempt(ticket.attempt.id, error)
       throw error
     })
-    this.delegating.set(lock, opening)
+    this.delegating.set(lock, { requestHash, retryReason: retry ?? null, opening })
     try { return await opening } finally { this.delegating.delete(lock) }
   }
 
@@ -1896,7 +1902,7 @@ export class OrbitCore {
     const receipt: string[] = []
     const policyRevision = routingRevision(this.store.routing())
     let decisionSource: DecisionReceipt['source'] = input.cli || input.model || input.effort ? 'explicit' : 'rule'
-    const mission = this.store.mission(caller.missionId)
+    const mission = this.activeMission(caller.missionId)
     if (caller.role === 'crew') {
       const slots = this.childSlots(caller)
       if (slots === 0) throw new Error(this.missionPanes(caller.missionId).some((p) => p.assignedBy === caller.id && this.panes.isAlive(p.id)) ? `Você já tem ${MAX_CHILDREN} sub-ajudantes abertos. Feche um que já entregou (agent_close) antes de abrir outro.` : 'Sub-ajudantes não podem abrir ajudantes.')
@@ -1911,7 +1917,10 @@ export class OrbitCore {
       let { type, via, sure } = classifyTask(text, types, input.title)
       // No keyword, or two types close: a small model reads the activity against the table; the
       // keywords' answer stands if it fails.
-      if (!sure && assessed.difficulty !== 'simples' && this.store.settings().smartClassify) {
+      if (!sure && assessed.difficulty !== 'simples' && this.store.settings().smartClassify && !mission.allowedClis.includes('claude')) {
+        via = `${via}; classificação auxiliar Claude não executada: CLI fora das permitidas nesta missão`
+      }
+      if (!sure && assessed.difficulty !== 'simples' && this.store.settings().smartClassify && mission.allowedClis.includes('claude')) {
         if (this.budgetBlocks(caller.missionId)) throw new Error('O orçamento desta missão acabou antes da classificação')
         const call = this.store.startAuxiliaryCall({ missionId: caller.missionId, attemptId: attempt.id, model: DECIDER_MODEL, promptBytes: Buffer.byteLength(decisionPrompt(text, types)) })
         let observation!: AuxiliaryObservation
@@ -2764,11 +2773,17 @@ export class OrbitCore {
       if (!validModel || !validEffort) throw new Error(`A escolha explícita conflita com a política ${work}: ${work === 'motion' ? 'Opus 5.5 alto' : 'Opus 5.5 ou GPT 6.1 Sol médio/alto'}. Ajuste a escolha; ela não foi substituída.`)
       if (!this.catalog?.[request.cli].models.some(m => m.id === request.model)) throw new Error('Modelo de design indisponível no catálogo local; atualize o catálogo')
     }
-    if (account) this.accountFiles.prepare(account)
-
     const roleSkills = squadRole ?? taskType
     const policy: SkillPolicy | undefined = roleSkills?.onlySkills ? { only: roleSkills.skills } : undefined
 
+    const skillItems = request.cli === 'shell' ? [] : missionSkills([...bundledCatalog(), ...this.catalogItems.filter(i => i.resource?.origin !== 'bundled')], request.cli, workspace.folders, new Set(this.store.disabledCatalog()), policy)
+    const explicitSkills = roleSkills?.skills ?? []
+    const designSelection = request.role === 'crew' && request.cli !== 'shell' && designWork(`${input.title} ${input.task ?? ''}`) ? selectDesignSkills(skillItems, `${input.title} ${input.task ?? ''}`, this.designContexts.get(JSON.stringify(workspace.folders)) ?? '', explicitSkills, !!roleSkills?.onlySkills) : { items: [], missing: [] }
+    const selectedSkills = [...resolveSkillSelectors(skillItems, explicitSkills), ...designSelection.items]
+    const skillDelivery = designSkillDelivery(selectedSkills, explicitSkills, designSelection.missing)
+    if (selectedSkills.length || designSelection.missing.length) receipt.push(`skills de design: ${skillDelivery.delivered.map(i => i.name).join(', ') || designSelection.missing.join('; ')}`)
+
+    if (account) this.accountFiles.prepare(account)
     const id = options.id ?? this.store.allocatePaneId()
     // Worktree missions: the lead on the mission branch, each helper on its own branch cut from it.
     // A helper may start in another folder of the workspace; the worktree is only for the main one.
@@ -2794,12 +2809,6 @@ export class OrbitCore {
     const english = this.store.settings().agentsInEnglish
     const toolProfile = request.cli === 'claude' || request.cli === 'codex' ? this.store.settings().agentToolProfile ?? 'orbit' : 'inherit'
     const lead = this.missionPanes(mission.id).find((p) => p.role === 'lead')
-    const skillItems = request.cli === 'shell' ? [] : missionSkills([...bundledCatalog(), ...this.catalogItems.filter(i => i.resource?.origin !== 'bundled')], request.cli, workspace.folders, new Set(this.store.disabledCatalog()), policy)
-    const explicitSkills = roleSkills?.skills ?? []
-    const designSelection = request.role === 'crew' && request.cli !== 'shell' && designWork(`${input.title} ${input.task ?? ''}`) ? selectDesignSkills(skillItems, `${input.title} ${input.task ?? ''}`, this.designContexts.get(JSON.stringify(workspace.folders)) ?? '', explicitSkills, !!roleSkills?.onlySkills) : { items: [], missing: [] }
-    const selectedSkills = [...skillItems.filter(i => explicitSkills.some(n => i.name === n || i.name.endsWith(`:${n}`))), ...designSelection.items]
-    const skillDelivery = designSkillDelivery(selectedSkills, explicitSkills, designSelection.missing)
-    if (selectedSkills.length || designSelection.missing.length) receipt.push(`skills de design: ${skillDelivery.delivered.map(i => i.name).join(', ') || designSelection.missing.join('; ')}`)
     const roleContext = this.contextPack(mission.id, [
       { id: 'permissions', text: (isReadOnly ? 'This execution is read-only. Do not modify project files.\n\n' : '') + (toolProfile === 'orbit' ? 'External MCP profile: only Orbit coordination is loaded. Native file/terminal tools, project instructions, skills and permission rules still apply. If the task needs an external integration, report the missing capability and ask for the full tool profile on reopen. Do not install or reconfigure integrations to bypass this profile.\n\n' : '') + commandToolsNote(request.cli) + workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy), required: true },
       { id: 'design-skills', text: skillDelivery.text, required: true },
@@ -2893,7 +2902,7 @@ export class OrbitCore {
     }
     this.paneTokens.set(token, id)
     // Enough to open it again later; the account is the one it really ran as (its conversations live there).
-    this.store.setPaneSpec(id, { ...input, task: null, accountId: account?.id ?? null, requireReadOnlySandbox: requiresSandbox })
+    this.store.setPaneSpec(id, { ...input, accountId: account?.id ?? null, requireReadOnlySandbox: requiresSandbox })
     if (policy) this.skillPolicies.set(id, policy)
     if (isReadOnly) this.readOnly.add(id)
     if (request.cli === 'codex' || request.cli === 'claude') this.watchCodex()
@@ -2936,13 +2945,15 @@ export class OrbitCore {
       if (!stopped || stopped.executionEpoch !== pane.executionEpoch) throw new Error('A retomada foi cancelada porque este agente foi fechado ou substituído')
       if (this.stopping) throw new Error('Orbit está encerrando; a retomada foi preservada para a próxima abertura')
       this.closePane(paneId)
-      const opened = this.spawn({ ...spec, title: pane.title, ...(message ? { task: message } : {}) }, {
+      const opened = this.spawn({ ...spec, title: pane.title, task: resume ? message ?? null : message ?? spec.task }, {
         keep: pane.cli === 'shell' ? undefined : { cli: pane.cli, model: pane.model, effort: pane.effort },
         id: paneId,
         worktree,
         resume: resume ? sessionId! : undefined,
         opened: (id) => (resume ? `#${id} retomou a conversa` : `#${id} reaberto numa conversa nova`),
       })
+      // The next turn is a delta, not a replacement for the durable original assignment.
+      this.store.setPaneSpec(paneId, { ...spec, title: pane.title })
       if (accept) this.acceptance.set(opened.id, accept)
       // Same conversation: known now, not only when the CLI reports it again.
       if (resume && sessionId) {

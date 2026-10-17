@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import type { ActivityAttempt, ActivityRecord, ActivityResult, Pane } from '@orbit/protocol'
+import type { ActivityAttempt, ActivityRecord, ActivityResult, Pane, Difficulty, Effort } from '@orbit/protocol'
 
 export interface ActivityLedger {
   version: 1
@@ -11,6 +11,10 @@ export const emptyActivityLedger = (): ActivityLedger => ({ version: 1, activiti
 export const contractHash = (input: { accept?: string[]; folder?: string | null; squadRoleId?: string | null; taskTypeId?: string | null; dependsOn?: string[]; requireReadOnlySandbox?: boolean; readOnly?: boolean }): string =>
   createHash('sha256').update(JSON.stringify({ acceptance: normalizedAcceptance(input.accept), folder: input.folder ?? null, role: input.squadRoleId ?? null, kind: input.taskTypeId ?? null, ...(input.dependsOn?.length ? { dependsOn: [...new Set(input.dependsOn)].sort() } : {}), ...(input.requireReadOnlySandbox ? { requireReadOnlySandbox: true } : {}), ...(input.readOnly ? { readOnly: true } : {}) })).digest('hex')
 export const normalizedAcceptance = (accept?: string[]): string[] => (accept ?? []).map(c => c.trim()).filter(Boolean).slice(0, 8)
+/** A work identity is not permission to reuse a different task or model choice. Titles are cosmetic. */
+export function helperRequestHash(input: Parameters<typeof contractHash>[0] & { task: string; cli?: Pane['cli']; model: string | null; effort?: Effort | null; difficulty?: Difficulty | null }): string {
+  return createHash('sha256').update(JSON.stringify(['helper-request:v1', input.task.trim().replaceAll('\r\n', '\n'), contractHash(input), input.cli ?? null, input.model, input.effort ?? null, input.difficulty ?? null])).digest('hex')
+}
 export const resultDigest = (input: Omit<ActivityResult, 'id' | 'createdAt' | 'state' | 'digest'>): string =>
   createHash('sha256').update(JSON.stringify(['result:v1', input.activityId, input.attemptId, input.activityRevision, input.status, input.summary, input.evidence, input.details, input.deliveredTo, ...(input.source ? [input.source.digest] : [])])).digest('hex')
 
