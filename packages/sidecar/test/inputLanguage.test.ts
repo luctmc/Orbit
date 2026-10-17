@@ -84,9 +84,11 @@ test('initial mission translates before launch, reports correlated ACK and dedup
   let calls = 0
   const f = await fixture(async () => { calls++; return 'Fix authentication' })
   try {
-    const message = { type: 'mission.create' as const, requestId: 'new-mission', workspaceId: f.workspace.id, title: 'Login', objective: 'Corrija a autenticação', mode: 'agentica' as const, translationAccountId: 'codex', adaptiveLead: false, lead: { cli: 'codex' as const, model: null, title: '' } }
+    const message = { type: 'mission.create' as const, requestId: 'new-mission', workspaceId: f.workspace.id, title: 'Login', objective: 'Corrija a autenticação', mode: 'agentica' as const, translationAccountId: 'codex', adaptiveLead: false, lead: { cli: 'codex' as const, model: 'gpt-6.1-sol', effort: 'medium' as const, accountId: 'codex', title: '' } }
     const first = await f.send(message)
     assert.equal(first.type, 'mission.created', JSON.stringify(first)); assert.equal(first.mission.objective, 'Fix authentication')
+    const executor = f.core.store.snapshot().panes.find(pane => pane.missionId === first.mission.id)!
+    assert.equal(executor.model, 'gpt-6.1-sol'); assert.equal(executor.effort, 'medium'); assert.equal(executor.accountId, 'codex')
     assert.match(readFileSync(f.launches.at(-1).taskPath, 'utf8'), /Fix authentication/)
     assert(!readFileSync(f.launches.at(-1).taskPath, 'utf8').includes(message.objective))
     const count = f.core.store.snapshot().panes.length
@@ -129,7 +131,7 @@ test('legacy clients receive actionable error instead of a silent drop', async (
   } finally { await f.close() }
 })
 
-test('isolated Codex invocation pins model/medium, disables retries and inherits only selected login', async () => {
+test('isolated Codex invocation pins lightweight model/low, disables retries and inherits only selected login', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'orbit-translator-command-'))
   const oldPath = process.env.PATH
   const executable = join(dir, 'codex'), authFile = join(dir, 'chosen-auth.json')
@@ -137,7 +139,7 @@ test('isolated Codex invocation pins model/medium, disables retries and inherits
   writeFileSync(executable, `#!/usr/bin/env node
 const fs = require('node:fs'); const path = require('node:path'); const a = process.argv.slice(2);
 const has = v => a.includes(v);
-if (!has('--ignore-user-config') || !has('--ignore-rules') || !has('--ephemeral') || !has('gpt-6.1-sol') || !has('model_reasoning_effort="medium"') || !has('features.shell_tool=false') || !has('model_providers.orbit-translation.request_max_retries=0') || !has('model_providers.orbit-translation.stream_max_retries=0')) process.exit(41);
+if (!has('--ignore-user-config') || !has('--ignore-rules') || !has('--ephemeral') || !has('gpt-6-luna') || !has('model_reasoning_effort="low"') || !has('features.shell_tool=false') || !has('model_providers.orbit-translation.request_max_retries=0') || !has('model_providers.orbit-translation.stream_max_retries=0')) process.exit(41);
 if (process.env.OPENAI_API_KEY || process.env.ORBIT_ENDPOINT || process.env.CLAUDE_CONFIG_DIR) process.exit(42);
 if (fs.readFileSync(path.join(process.env.CODEX_HOME, 'auth.json'), 'utf8') !== '{"fixture":"chosen-only"}') process.exit(43);
 if (fs.existsSync(path.join(process.env.CODEX_HOME, 'config.toml'))) process.exit(44);

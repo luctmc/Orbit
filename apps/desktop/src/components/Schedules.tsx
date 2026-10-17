@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SCHEDULE_LIMITS, type Mission, type Schedule, type ScheduleWhen } from '@orbit/protocol'
+import { TRANSLATION_LABEL, SCHEDULE_LIMITS, type Mission, type Schedule, type ScheduleWhen } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { relativeTime, untilTime } from '../orbit/time.ts'
 import { Dialog } from './Dialog.tsx'
@@ -127,7 +127,7 @@ function ScheduleDialog({ schedule, onClose }: { schedule: Schedule | null; onCl
         </select>
       </div>
       {settings?.agentsInEnglish && template?.lead.cli !== 'shell' && <div className="field">
-        <label htmlFor="sch-translator">Traduzir objetivo em cada execução · Codex / gpt-6.1-sol / medium</label>
+        <label htmlFor="sch-translator">Traduzir objetivo em cada execução · {TRANSLATION_LABEL}</label>
         <select id="sch-translator" value={translationAccountId} disabled={allowOriginal} onChange={e => setTranslationAccountId(e.target.value)}>
           <option value="">Escolha a conta Codex</option>
           {accounts.filter(a => a.cli === 'codex' && a.kind === 'assinatura').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}

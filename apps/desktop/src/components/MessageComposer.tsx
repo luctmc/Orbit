@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
-import { ATTACHMENT_LIMITS, type Attachment, type Pane } from '@orbit/protocol'
+import { TRANSLATION_LABEL, ATTACHMENT_LIMITS, type Attachment, type Pane } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { dictationAvailable, joinText, useDictation } from '../orbit/dictation.ts'
 import { CloseIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
@@ -166,7 +166,7 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
         <button type="button" className="icon-btn" aria-label="Dispensar sugestão" onClick={() => { setDismissed(text); inputRef.current?.focus() }}><CloseIcon size={14} /></button>
       </div>}
       {pane.cli !== 'shell' && settings?.agentsInEnglish && <div className="field">
-        <label htmlFor={`translator-${pane.id}`}>Traduzir prompt para inglês · Codex / gpt-6.1-sol / medium</label>
+        <label htmlFor={`translator-${pane.id}`}>Traduzir prompt para inglês · {TRANSLATION_LABEL}</label>
         <select id={`translator-${pane.id}`} disabled={editingDisabled || allowOriginal} value={translationAccountId} onChange={e => setTranslationAccountId(e.target.value)}>
           <option value="">Escolha a conta Codex</option>
           {accounts.filter(a => a.cli === 'codex' && a.kind === 'assinatura').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
