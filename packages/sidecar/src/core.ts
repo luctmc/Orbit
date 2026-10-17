@@ -2933,6 +2933,13 @@ export class OrbitCore {
       const spec = this.store.paneSpec(paneId)
       if (!spec || (pane.cli === 'shell' && resume)) throw new Error(resume ? 'Não há conversa para retomar neste agente' : `#${paneId} foi aberto antes desta versão do Orbit; abra um novo`)
       if (resume && !pane.sessionId) throw new Error(`O ${CLI_LABEL[pane.cli]} ainda não informou a conversa de #${paneId}`)
+      // Only the original, still-pending assignment is recoverable from this spec. Completed
+      // work and later agent_send assignments must not be relabelled as the original task.
+      const attempt = this.store.currentPaneAttempt(paneId)
+      const originalPending = !!attempt?.requestHash && this.pendingDeliveries(pane.missionId).some(d => d.paneId === paneId)
+      const task = resume ? message ?? null : message ?? (pane.role === 'lead'
+        ? this.missionBriefing(pane.missionId, undefined, true)
+        : originalPending ? spec.task : null)
       const sessionId = pane.sessionId
       const git = this.store.mission(pane.missionId)?.git
       const worktree = git && pane.branch ? { path: this.worktreeOf(pane, git), branch: pane.branch } : undefined
@@ -2945,7 +2952,7 @@ export class OrbitCore {
       if (!stopped || stopped.executionEpoch !== pane.executionEpoch) throw new Error('A retomada foi cancelada porque este agente foi fechado ou substituído')
       if (this.stopping) throw new Error('Orbit está encerrando; a retomada foi preservada para a próxima abertura')
       this.closePane(paneId)
-      const opened = this.spawn({ ...spec, title: pane.title, task: resume ? message ?? null : message ?? spec.task }, {
+      const opened = this.spawn({ ...spec, title: pane.title, task }, {
         keep: pane.cli === 'shell' ? undefined : { cli: pane.cli, model: pane.model, effort: pane.effort },
         id: paneId,
         worktree,

@@ -160,3 +160,30 @@ test('explicit missing skills fail before creating a process, while exact eligib
     assert.equal(f.launches.at(-1)!.role.split('Skill orbit-verify (sha256').length - 1, 1)
   } finally { await f.core.shutdown() }
 })
+
+test('fresh conversations never replay a completed or subsequently reassigned task', async () => {
+  const f = await fixture()
+  try {
+    const { pane } = await f.core.spawnHelper(f.lead, f.input)
+    f.core.handoff(pane, { summary: 'Complete', evidence: 'offline check' })
+    await f.core.handle({ type: 'pane.restart', paneId: pane.id, resume: false })
+    assert.equal(f.launches.at(-1)!.task.includes(f.input.task), false, 'completion must not be turned into another execution')
+    const reopened = f.core.store.pane(pane.id)!
+    f.core.handoff(reopened, { summary: 'Still complete', evidence: 'offline check' })
+    f.core.sendTo(f.lead, pane.id, 'A distinct follow-up assignment')
+    assert.equal(f.core.store.currentPaneAttempt(pane.id)?.requestHash, undefined)
+    await f.core.handle({ type: 'pane.restart', paneId: pane.id, resume: false })
+    assert.equal(f.launches.at(-1)!.task.includes(f.input.task), false, 'a new assignment cannot recover the old one as current')
+  } finally { await f.core.shutdown() }
+})
+
+test('fresh leaders receive current mission state rather than a saved obsolete objective', async () => {
+  const f = await fixture()
+  try {
+    const lead = await f.core.changeLead(f.lead.missionId, { kind: 'new', cli: 'claude', model: null, effort: null, accountId: null })
+    f.core.store.updateMission(lead.missionId, { objective: 'CURRENT_OBJECTIVE_WITH_UPDATED_SCOPE' })
+    await f.core.handle({ type: 'pane.restart', paneId: lead.id, resume: false })
+    assert.ok(f.launches.at(-1)!.task.includes('CURRENT_OBJECTIVE_WITH_UPDATED_SCOPE'))
+    assert.equal(f.launches.at(-1)!.task.includes('Preserve all requested work'), false)
+  } finally { await f.core.shutdown() }
+})

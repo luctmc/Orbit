@@ -28,7 +28,7 @@ Os caminhos Orca abaixo são relativos ao commit fixado; os caminhos Orbit refer
 ## Implementado e reutilizado
 
 1. Identidade completa e persistida de pedidos de ajudantes, com conflito explícito antes de reuso/fechamento. Título continua cosmético; task normaliza apenas bordas/CRLF, não resume conteúdo. Alterações de tarefa, modelo, esforço, dificuldade, critérios, dependências ou restrições não são tratadas como mesmo replay.
-2. Continuidade da atribuição em conversa nova e retomada nativa sem repetir a tarefa. O texto original fica no mesmo estado privado que já mantém objetivos, especificações e histórico; não vai para telemetria.
+2. Continuidade da atribuição original ainda pendente e identificada em conversa nova, e retomada nativa sem repetir a tarefa. O texto original fica no mesmo estado privado que já mantém objetivos, especificações e histórico; não vai para telemetria.
 3. Troca de líder instala instruções e memória uma vez; recuperação após compactação mantém o briefing independente completo.
 4. Seleção exata de skills explícitas com recusa de ambiguidades/ausências; entrega deduplicada por ID e pacote íntegro. Corpo grande preservado, com id+hash para leitura integral. Lista `missing` não é mais mutada durante entrega.
 5. Paginação de skills com selecionadas primeiro, cursor revisado pela ordem de IDs/hashes; conteúdo restante continua acessível. Texto servido continua diferente de cumprimento comprovado.
@@ -101,3 +101,9 @@ A symlink de node_modules é para resolver as mesmas dependências já instalada
 O browser integrado da suíte local ficou preso no lançamento de Brave em uma repetição; somente os processos daquela execução de teste foram encerrados. A suíte completa passou usando `ORBIT_BROWSER` apontado explicitamente ao Chromium headless já instalado, incluindo o teste do browser. Isso não foi tratado como bug corrigido no Brave nem como teste dispensado. CI usa sua própria disponibilidade de browser.
 
 Logs de validação local ficam neste diretório. Publicação e verificação da instalação/runtime são posteriores ao commit revisado; o recibo final aponta para o run/release e para o relatório privado local em `.research/orca-continuity-installation/`, para não introduzir dados do usuário no Git.
+
+## Revisão final: fronteira de restauração
+
+Na revisão posterior ao PR56, dois testes adicionais reproduziram um limite da nova restauração: uma conversa nova poderia reenviar atribuição já concluída/substituída, ou um líder poderia receber o objetivo antigo salvo. A correção restringe a restauração de ajudantes à tentativa original identificada por requestHash e ainda pendente. Atribuições concluídas ou posteriores feitas por agent_send não recuperam o texto original como tarefa corrente; a conversa nativa deve ser retomada para conservar seus deltas. Líderes em conversa nova recebem o briefing atual, com objetivo e estado presentes, sem duplicar as instruções instaladas no papel.
+
+Os 11 testes de `taskContinuity.test.ts` passaram após a correção (antes, os dois novos casos falharam). Essa revisão não muda a fixture pareada de bytes/paginação, que trata atribuição original pendente e troca de líder. Não se afirma reconstrução integral de uma atribuição substituída a partir apenas do spec original.
