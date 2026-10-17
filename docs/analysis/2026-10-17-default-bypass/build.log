@@ -59,4 +59,3 @@ Signing /Users/lucas/Documents/GitHub/Orbit-default-bypass/apps/desktop/src-taur
         Warn skipping app notarization, no APPLE_ID & APPLE_PASSWORD & APPLE_TEAM_ID or APPLE_API_KEY & APPLE_API_ISSUER & APPLE_API_KEY_PATH environment variables found
     Finished 1 bundle at:
         /Users/lucas/Documents/GitHub/Orbit-default-bypass/apps/desktop/src-tauri/target/release/bundle/macos/Orbit.app (134.82 MiB)
-
