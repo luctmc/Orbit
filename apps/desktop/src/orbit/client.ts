@@ -1,6 +1,8 @@
 import type { Account, AccountLimits, AccountStatus, Card, Catalog, CatalogItem, MissionTemplate, Schedule, UpdateStatus, MissionBrowser, ClientMessage, CliStatus, Mission, MissionEvent, OrbitSettings, Pane, Routing, RoutingProposal, ServerMessage, Squad, UsageDay, Workspace } from '@orbit/protocol'
 
 export interface OrbitState {
+  /** Transport open alone does not make an empty inventory authoritative. */
+  snapshotReady?: boolean
   startup?: import('@orbit/protocol').StartupTask[]
   connection: 'connecting' | 'open' | 'closed'
   workspaces: Workspace[]
@@ -82,6 +84,8 @@ class DurableMap<V> extends Map<string, V> {
 }
 
 export class OrbitClient {
+  readonly inputReceipts = new DurableMap<Extract<ServerMessage, { type: 'pane.submitted' }>>('orbit.input.receipts.v1')
+  private readonly inputFlights = new Map<string, Promise<unknown>>()
   readonly inputAttachments = new DurableMap<Array<import('@orbit/protocol').Attachment & { preview: string | null }>>('orbit.input.attachments.v1', files => files.map(file => ({ ...file, preview: null })))
   readonly missionDrafts = new DurableMap<Omit<Extract<ClientMessage, { type: 'mission.create' }>, 'type' | 'requestId'>>('orbit.input.missions.v1')
   readonly inputDrafts = new DurableMap<{ text: string; accountId: string; allowOriginal: boolean }>('orbit.input.drafts.v1')
@@ -116,7 +120,18 @@ export class OrbitClient {
     return this.identifiedInput(key, message, message.type === 'pane.submit' ? 'pane.submitted' : 'mission.created')
   }
 
-  private async identifiedInput<T extends 'pane.submitted' | 'mission.created'>(key: string, message: ClientMessage, type: T) {
+  private identifiedInput<T extends 'pane.submitted' | 'mission.created'>(key: string, message: ClientMessage, type: T): Promise<Extract<ServerMessage, { type: T }>> {
+    const prior = this.inputAttempts.get(key)
+    if (prior && prior.fingerprint !== JSON.stringify(message)) return Promise.reject(new OrbitPendingInput('Há um pedido pendente com outros dados. Confira o mesmo pedido antes de editar ou enviar outro.'))
+    const flight = this.inputFlights.get(key)
+    if (flight) return flight as Promise<Extract<ServerMessage, { type: T }>>
+    const promise = this.performIdentifiedInput(key, message, type)
+    this.inputFlights.set(key, promise)
+    void promise.finally(() => { if (this.inputFlights.get(key) === promise) this.inputFlights.delete(key) }).catch(() => {})
+    return promise
+  }
+
+  private async performIdentifiedInput<T extends 'pane.submitted' | 'mission.created'>(key: string, message: ClientMessage, type: T) {
     const fingerprint = JSON.stringify(message)
     const prior = this.inputAttempts.get(key)
     if (prior && prior.fingerprint !== fingerprint) throw new OrbitPendingInput('Há um pedido pendente com outros dados. Confira o mesmo pedido antes de editar ou enviar outro.')
@@ -127,6 +142,8 @@ export class OrbitClient {
       // Clear the draft before the receipt: a restart in between still queries this same ID.
       if (message.type === 'pane.submit') { this.inputDrafts.delete(key); this.inputAttachments.delete(key) }
       if (message.type === 'mission.create') this.missionDrafts.delete(message.workspaceId)
+      const receipt = result as Extract<ServerMessage, { type: 'pane.submitted' | 'mission.created' }>
+      if (receipt.type === 'pane.submitted') this.inputReceipts.set(key, receipt)
       this.inputAttempts.delete(key)
       return result
     } catch (error) {
@@ -136,7 +153,7 @@ export class OrbitClient {
   }
 
   private readonly spawnAttempts = new Map<string, { requestId: string; expiresAt: number }>()
-  private state: OrbitState = { connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, settings: null, proposals: [], catalog: null, clis: [], usageDays: [], limits: [], accounts: [], accountStatuses: [], browserEngine: undefined, browsers: [], skillCatalog: { items: [], disabled: [], scannedAt: null }, updateStatus: null, cards: [], templates: [], schedules: [], lastError: null }
+  private state: OrbitState = { snapshotReady: false, connection: 'connecting', workspaces: [], missions: [], panes: [], events: [], squads: [], routing: null, settings: null, proposals: [], catalog: null, clis: [], usageDays: [], limits: [], accounts: [], accountStatuses: [], browserEngine: undefined, browsers: [], skillCatalog: { items: [], disabled: [], scannedAt: null }, updateStatus: null, cards: [], templates: [], schedules: [], lastError: null }
   private readonly listeners = new Set<() => void>()
   /** Views per pane; `ready` once the view applied its snapshot and can take live output. */
   private readonly views = new Map<number, Map<PaneView, { ready: boolean }>>()
@@ -316,7 +333,7 @@ export class OrbitClient {
         return
       case 'snapshot':
         // Open pages follow as browser.state messages.
-        this.update({ ...message.snapshot, browsers: [] })
+        this.update({ ...message.snapshot, snapshotReady: true, browsers: [] })
         // (Re)connected: every mounted view starts over from a fresh snapshot.
         this.attaching.clear()
         for (const [paneId, views] of this.views) {

@@ -88,3 +88,25 @@ test('pending mission reconciliation is read-only and preserves an edited draft 
     assert(sent.every(m => m.type === 'mission.check'))
   } finally { globalThis.WebSocket = real }
 })
+
+test('concurrent submit and receipt check share one wire operation and persist the exact PTY receipt', async () => {
+  const real = globalThis.WebSocket, sent: any[] = []
+  class Socket { static OPEN = 1; readyState = 1; send(raw: string) { sent.push(JSON.parse(raw)) } }
+  globalThis.WebSocket = Socket as any
+  try {
+    const client = new OrbitClient(async () => 'ws://synthetic'); await Promise.resolve()
+    const input = { paneId: 77, text: 'Uma única entrega', allowOriginal: true }
+    const first = client.submitInput(input)
+    const second = client.submitInput(input)
+    const check = client.checkPendingInput('pane-77')
+    assert.equal(sent.length, 1)
+    await assert.rejects(client.submitInput({ ...input, text: 'Outro texto' }), OrbitPendingInput)
+    const receipt = { type: 'pane.submitted', paneId: 77, requestId: sent[0].requestId, executionEpoch: 'original-process', acceptedAt: 12345 }
+    ;(client as any).receive(receipt)
+    assert.deepEqual(await first, receipt)
+    assert.deepEqual(await second, receipt)
+    assert.deepEqual(await check, receipt)
+    assert.deepEqual(client.inputReceipts.get('pane-77'), receipt)
+    assert.equal(sent.length, 1)
+  } finally { globalThis.WebSocket = real }
+})

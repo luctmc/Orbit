@@ -26,9 +26,9 @@ import { ActionMenu } from './ActionMenu.tsx'
 
 const COLUMNS: Columns[] = ['auto', '1', '2', '3']
 
-function rememberedColumns(): Columns {
+function rememberedColumns(missionId: string): Columns {
   try {
-    const saved = localStorage.getItem('orbit.columns') as Columns | null
+    const saved = (localStorage.getItem(`orbit.columns.${missionId}`) ?? localStorage.getItem('orbit.columns')) as Columns | null
     return saved && COLUMNS.includes(saved) ? saved : 'auto'
   } catch {
     return 'auto'
@@ -66,7 +66,7 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
   const browserOpen = side === 'navegador'
   const toggleSide = (panel: Side) => setSide((open) => (open === panel ? null : panel))
   const commandInput = useRef<HTMLTextAreaElement>(null)
-  const [columns, setColumns] = useState<Columns>(rememberedColumns)
+  const [columns, setColumns] = useState<Columns>(() => rememberedColumns(mission.id))
   const [suggestionsOn, setSuggestionsOn] = useState(() => {
     try { return localStorage.getItem('orbit.inputSuggestions') !== 'false' } catch { return true }
   })
@@ -77,11 +77,11 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
   }
   useEffect(() => {
     try {
-      localStorage.setItem('orbit.columns', columns)
+      localStorage.setItem(`orbit.columns.${mission.id}`, columns)
     } catch {
       // private window
     }
-  }, [columns])
+  }, [columns, mission.id])
   const archived = mission.status === 'archived'
   const selected = panes.find((p) => p.id === selectedPaneId) ?? panes[0] ?? null
   const leader = panes.find(p => p.role === 'lead')
@@ -113,7 +113,6 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [active])
-  const alive = panes.filter((p) => p.status !== 'exited').length
 
   return (
     <main className="mission">
@@ -125,7 +124,7 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
             {archived && <span className="badge">Arquivada</span>}
           </div>
           <p className="muted">
-            {mission.objective || 'Sem objetivo descrito.'} · {alive} {alive === 1 ? 'agente vivo' : 'agentes vivos'}
+            {mission.objective || 'Converse com o líder para definir o próximo passo.'}
             {mission.usage.total > 0 && <span title={costText(mission.usage.costUsd) ? `${costText(mission.usage.costUsd)} em preço de API (Claude)` : undefined}> · {tokensText(mission.usage.total)} tokens</span>}
           </p>
         </div>
@@ -179,7 +178,7 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
       </div>
 
       <details className="mission-status" data-state={signal.state}>
-        <summary><strong>{signal.title}</strong><span>Detalhes da missão</span></summary>
+        <summary><strong>{signal.title}</strong><span>{panes.filter(p => p.status === 'waiting').length ? `${panes.filter(p => p.status === 'waiting').length} pedindo atenção · ` : ''}Detalhes</span></summary>
         <div><p>{signal.detail}</p><button type="button" className="btn btn--ghost btn--sm" disabled={progress.connection !== 'open' || progress.loading} onClick={progress.refresh}>{progress.loading ? 'Conferindo…' : 'Conferir agora'}</button></div>
         {progress.error && <p className="composer__error" role="alert">{progress.error}</p>}
       </details>
@@ -204,7 +203,7 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
         {side === 'arquivos' && workspace && <FilesPanel workspace={workspace} missionId={mission.id} onClose={() => setSide(null)} />}
       </div>
 
-      {!archived && panes.filter((p) => p.status !== 'exited').map((p) => <MessageComposer key={p.id} pane={p} active={p.id === selected?.id} inputRef={commandInput} suggestions={p.role === 'lead' ? suggestions : []} suggestionsOn={suggestionsOn} onToggleSuggestions={toggleSuggestions} />)}
+      {!archived && panes.filter((p) => p.status !== 'exited').map((p) => <MessageComposer key={p.id} pane={p} active={active && p.id === selected?.id} leader={leader} recipients={panes.filter(p => p.status !== 'exited')} onSelectPane={onSelectPane} inputRef={commandInput} suggestions={p.role === 'lead' ? suggestions : []} suggestionsOn={suggestionsOn} onToggleSuggestions={toggleSuggestions} />)}
       {budgetOpen && <BudgetDialog mission={mission} onClose={() => setBudgetOpen(false)} />}
       {leadOpen && <LeadChangeDialog mission={mission} onClose={() => setLeadOpen(false)} />}
       {deletingMission && <DeleteMissionDialog mission={mission} onClose={() => setDeletingMission(false)} />}

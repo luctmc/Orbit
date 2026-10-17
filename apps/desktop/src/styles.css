@@ -1368,3 +1368,33 @@ button:disabled { cursor: not-allowed; }
 @media (max-width: 520px) { .composer__language > summary { padding-inline: 4px; font-size: 11px; } }
 .pane-menu { width: min(360px, calc(100vw - 16px)); max-height: min(520px, 65vh); overflow-y: auto; z-index: 30; }
 .pane-menu button { min-height: 44px; }
+
+/* Mission context → agents → attention. Existing Orbit surfaces and type remain authoritative. */
+.mission__title > p { max-width: 75ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crew__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crew__name small { font: 11px var(--mono); color: var(--muted); }
+.crew__row[data-attention='true'] { background: color-mix(in srgb, var(--wait) 8%, transparent); }
+.crew__row[data-attention='true'] .crew__status { color: var(--wait); }
+.composer__head .composer__leader { min-height: 44px; font-size: 12px; }
+.composer__receipt { font-size: 11px; line-height: 1.5; color: var(--text-3); padding: 4px 0 8px; overflow-wrap: anywhere; }
+.composer__receipt span { color: var(--muted); }
+.execution-config { font-size: 12px; line-height: 1.5; width: 100%; }
+.execution-config summary { min-height: 44px; display: flex; align-items: center; color: var(--text); cursor: pointer; }
+.execution-config dl { margin: 0; }
+.execution-config dl > div { display: grid; gap: 4px; padding: 8px 0; border-top: 1px solid var(--line); }
+.execution-config dt { color: var(--muted); }
+.execution-config dd { margin: 0; overflow-wrap: anywhere; color: var(--text-2); }
+.execution-config p, .execution-config li { overflow-wrap: anywhere; }
+.execution-config ul { padding-left: 16px; }
+@media (max-width: 520px) { .composer__receipt span { display: none; } .composer__head .composer__leader { font-size: 11px; padding-inline: 4px; } }
+.composer__target { display: flex; align-items: center; flex: 1; min-width: 0; gap: 8px; font-size: 12px; }
+.composer__target > strong { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer__target > select { min-width: 0; width: auto; max-width: 320px; min-height: 44px; padding: 4px 24px 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-deep); color: var(--text-2); cursor: pointer; }
+.composer__target .composer__recipient { flex: none; }
+.composer__send { margin-left: auto; }
+@media (max-width: 520px) {
+  .composer__target { gap: 4px; }
+  .composer__target > select { max-width: 145px; font-size: 12px; }
+  .composer__target .composer__recipient { font-size: 10px; }
+  .composer__leader { display: none; }
+}

@@ -34,6 +34,10 @@ test('Portuguese is translated before PTY, scoped login is explicit, lost ACK/co
     const message = { type: 'pane.submit' as const, paneId: f.pane.id, text: 'Corrija o botão', requestId: 'same-request', translationAccountId: 'codex' }
     const replies = await Promise.all([f.send(message), f.send(message)])
     assert(replies.every(r => r.type === 'pane.submitted'))
+    assert.equal(replies[0].executionEpoch, f.pane.executionEpoch)
+    assert.equal(replies[0].paneId, f.pane.id)
+    assert.equal(typeof replies[0].acceptedAt, 'number')
+    assert.deepEqual(replies[1], replies[0], 'concurrent receipt names the same acceptance')
     assert.equal(calls, 1); assert.equal(f.sent.length, 1)
     assert.match(f.sent[0]!, /^Fix the button\n\nRespond to the user in Brazilian Portuguese/)
     assert(!f.sent[0]!.includes(message.text))
@@ -43,6 +47,8 @@ test('Portuguese is translated before PTY, scoped login is explicit, lost ACK/co
     const file = join(f.root, 'input-journal', f.pane.missionId, 'same-request.json')
     const record = JSON.parse(readFileSync(file, 'utf8'))
     assert.equal(record.original, message.text); assert.equal(record.state, 'acked')
+    assert.equal(record.acceptedAt, replies[0].acceptedAt)
+    assert.equal(record.executionEpoch, f.pane.executionEpoch)
     assert.equal(statSync(file).mode & 0o777, 0o600)
     assert.equal(statSync(join(f.root, 'input-journal', f.pane.missionId)).mode & 0o777, 0o700)
     assert(!JSON.stringify(f.core.store.snapshot()).includes('same-request'))
@@ -88,6 +94,8 @@ test('initial mission translates before launch, reports correlated ACK and dedup
     const first = await f.send(message)
     assert.equal(first.type, 'mission.created', JSON.stringify(first)); assert.equal(first.mission.objective, 'Fix authentication')
     const executor = f.core.store.snapshot().panes.find(pane => pane.missionId === first.mission.id)!
+    assert.equal(executor.executionConfig?.decision.requested.cli, 'codex')
+    assert.deepEqual(executor.executionConfig?.applied, { model: 'gpt-6.1-sol', effort: 'medium' })
     assert.equal(executor.model, 'gpt-6.1-sol'); assert.equal(executor.effort, 'medium'); assert.equal(executor.accountId, 'codex')
     assert.match(readFileSync(f.launches.at(-1).taskPath, 'utf8'), /Fix authentication/)
     assert(!readFileSync(f.launches.at(-1).taskPath, 'utf8').includes(message.objective))
@@ -300,5 +308,21 @@ test('a quota admission rejection is terminal, preserves original, and never rep
     assert.equal((await f.send(message)).pending, false)
     assert.equal((await f.send({ type: 'mission.check', workspaceId: f.workspace.id, requestId: message.requestId })).state, 'failed')
     assert.equal(f.launches.length, launches); assert.equal(translations, 0)
+  } finally { await f.close() }
+})
+
+test('a translation prepared for an old execution is never submitted into a replacement terminal', async () => {
+  let translated!: (value: string) => void
+  const f = await fixture(() => new Promise(resolve => { translated = resolve }))
+  try {
+    const sending = f.send({ type: 'pane.submit', paneId: f.pane.id, text: 'Mensagem para o processo original', requestId: 'epoch-race', translationAccountId: 'codex' })
+    // Same stable pane, different process while the translator is in flight.
+    await f.core.handle({ type: 'pane.restart', paneId: f.pane.id, resume: false })
+    translated('Message for the original process')
+    const result = await sending
+    assert.equal(result.type, 'pane.submit.error')
+    assert.match(result.message, /execução.*mudou/)
+    assert.equal(f.sent.length, 0)
+    assert.notEqual(f.core.store.pane(f.pane.id)?.executionEpoch, f.pane.executionEpoch)
   } finally { await f.close() }
 })

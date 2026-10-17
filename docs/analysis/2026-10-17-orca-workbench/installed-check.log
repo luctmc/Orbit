@@ -1,0 +1,64 @@
+(node:57810) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{
+  "time": "2026-10-17T22:20:35.171Z",
+  "version": "0.2.24",
+  "bundle": "/Users/lucas/Documents/GitHub/Orbit-default-bypass/apps/desktop/src-tauri/target/release/bundle/macos/Orbit.app",
+  "installed": "/Applications/Orbit.app",
+  "nativePid": 53016,
+  "sidecarPid": 53032,
+  "mappedInstalledInode": 4853067,
+  "fileCount": 64,
+  "identicalBundle": true,
+  "bundleManifestSha256": "5ec413ef6a4e6d8b21fb35b61e3164b5ac8d6fe707a3931f56ebf5f80e784c89",
+  "binarySha256": "afd11d918ff1397cc09ff4220a63e09d128a061f60cf9ab30b2d93191a014826",
+  "sidecarSha256": "a4bad424433d2bf2314d0a1d1e127ac6f43b01c8e3b890a31379c87806ddef3d",
+  "accounts": [
+    {
+      "id": "claude",
+      "cli": "claude",
+      "builtin": true,
+      "loggedIn": true,
+      "checking": null
+    },
+    {
+      "id": "codex",
+      "cli": "codex",
+      "builtin": true,
+      "loggedIn": true,
+      "checking": null
+    },
+    {
+      "id": "gemini",
+      "cli": "gemini",
+      "builtin": true,
+      "loggedIn": null,
+      "checking": null
+    },
+    {
+      "id": "antigravity",
+      "cli": "antigravity",
+      "builtin": true,
+      "loggedIn": false,
+      "checking": null
+    },
+    {
+      "id": "codex-2",
+      "cli": "codex",
+      "builtin": false,
+      "loggedIn": true,
+      "checking": null
+    }
+  ],
+  "counts": {
+    "workspaces": 1,
+    "missions": 0,
+    "panes": 0,
+    "accounts": 5,
+    "templates": 0,
+    "schedules": 0
+  },
+  "unauthenticatedMcpStatus": 401,
+  "mutationsSent": [],
+  "visualNative": "native pixels not automated in this run; DOM/screenshots verified in Chromium/WebKit; installed executable mapping, sidecar, authenticated state and real Codex flow verified separately"
+}

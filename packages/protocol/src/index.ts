@@ -399,6 +399,14 @@ export interface VerificationRecord extends VerificationInput {
 }
 
 export interface Pane {
+  /** Launch facts only; provider observations are independent and may arrive later. */
+  executionConfig?: {
+    decision: DecisionReceipt
+    applied: { model: string | null; effort: Effort | null }
+  }
+  reportedEfforts?: Effort[]
+  identityObservedAt?: number
+  identityEvidence?: 'execution-context' | 'response' | 'unknown'
   /** Model IDs observed in the current provider session, not inferred from launch defaults. */
   reportedModels?: string[]
   /** Effective external MCP profile for this process; legacy panes inherited their CLI config. */
@@ -1042,7 +1050,7 @@ export type ServerMessage =
   | { type: 'account.reset.error'; requestId: string; message: string }
   | { type: 'pane.spawned'; requestId: string; pane: Pane }
   | { type: 'pane.spawn.error'; requestId: string; message: string }
-  | { type: 'pane.submitted'; requestId: string; paneId: number }
+  | { type: 'pane.submitted'; requestId: string; paneId: number; executionEpoch?: string; acceptedAt?: number }
   | { type: 'pane.submit.error'; requestId: string; message: string; pending?: boolean }
   | { type: 'mission.created'; requestId: string; mission: Mission }
   | { type: 'mission.create.error'; requestId: string; message: string; pending?: boolean }

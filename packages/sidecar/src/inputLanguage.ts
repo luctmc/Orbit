@@ -46,6 +46,8 @@ export interface InputRecord {
   state: 'translating' | 'prepared' | 'submitting' | 'acked' | 'failed'
   error?: string
   paneId?: number
+  executionEpoch?: string
+  acceptedAt?: number
   missionId?: string
 }
 /** Private operational journal. Not included in snapshots, mission briefing or model context. */

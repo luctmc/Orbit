@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { restoreMissionSelection } from './orbit/missionSelection.ts'
 import { hasNewPanes, selectedAfterRemoval } from './orbit/paneLayout.ts'
 import type { Mission } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from './orbit/context.tsx'
@@ -48,7 +49,7 @@ export function App() {
   }, [client, state.connection])
   const [workspaceId, setWorkspaceId] = useState<string | null>(() => remembered('workspace', null))
   const [missionId, setMissionId] = useState<string | null>(() => remembered('mission', null))
-  const [paneId, setPaneId] = useState<number | null>(null)
+  const [selections, setSelections] = useState<Record<string, number | null>>(() => remembered('missionSelections', {}))
   const [layouts, setLayouts] = useState<Record<string, Layout>>(() => remembered('missionLayouts', {}))
   const [visited, setVisited] = useState<string[]>([])
   const previousPanes = useRef<Map<string, number[]>>(new Map())
@@ -60,30 +61,38 @@ export function App() {
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? workspaces[0] ?? null
   const missions = state.missions.filter((m) => m.workspaceId === workspace?.id)
   const mission = missions.find((m) => m.id === missionId) ?? missions.filter((m) => m.status === 'active').sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null
+  const paneId = mission ? selections[mission.id] ?? null : null
+  const setPaneId = (id: number | null) => { if (mission) setSelections(current => ({ ...current, [mission.id]: id })) }
   const liveAgents = state.panes.filter((p) => p.status !== 'exited').length
 
   useEffect(() => remember('workspace', workspace?.id ?? null), [workspace?.id])
   useEffect(() => remember('mission', mission?.id ?? null), [mission?.id])
   useEffect(() => remember('missionLayouts', layouts), [layouts])
+  useEffect(() => remember('missionSelections', selections), [selections])
   useEffect(() => {
     if (mission && view === 'mission') setVisited(current => current.includes(mission.id) ? current : [...current, mission.id])
   }, [mission?.id, view])
   useEffect(() => {
     if (state.connection !== 'open') return
+    if (!state.snapshotReady) return
+    setSelections(current => {
+      const next = restoreMissionSelection(current, state.missions.map(m => m.id), state.panes)
+      return JSON.stringify(next) === JSON.stringify(current) ? current : next
+    })
     const next = new Map<string, number[]>()
     const reveal: string[] = []
     for (const item of state.missions) {
       const ids = state.panes.filter(p => p.missionId === item.id).sort((a, b) => a.role === b.role ? a.id - b.id : a.role === 'lead' ? -1 : 1).map(p => p.id)
       const previous = previousPanes.current.get(item.id)
       if (previous && hasNewPanes(previous, ids)) reveal.push(item.id)
-      if (item.id === mission?.id) {
-        setPaneId(current => selectedAfterRemoval(previous ?? [], ids, current))
+      if (previous && previous.some(id => !ids.includes(id))) {
+        setSelections(current => ({ ...current, [item.id]: selectedAfterRemoval(previous, ids, current[item.id] ?? null) }))
       }
       next.set(item.id, ids)
     }
     previousPanes.current = next
     if (reveal.length) setLayouts(current => ({ ...current, ...Object.fromEntries(reveal.map(id => [id, 'grade'])) }))
-  }, [state.panes, state.missions, state.connection, mission?.id])
+  }, [state.panes, state.missions, state.connection, state.snapshotReady, mission?.id])
 
   // A mission created while the app is open becomes the active one (not the ones a schedule starts).
   const followed = useRef<string | null>(null)
@@ -93,7 +102,6 @@ export function App() {
     followed.current = newest.id
     setWorkspaceId(newest.workspaceId)
     setMissionId(newest.id)
-    setPaneId(null)
     setView('mission')
   }, [newest])
 
@@ -111,7 +119,6 @@ export function App() {
   const openMission = (target: Mission) => {
     setWorkspaceId(target.workspaceId)
     setMissionId(target.id)
-    setPaneId(null)
     setView('mission')
   }
 
@@ -120,7 +127,7 @@ export function App() {
     const found = state.missions.find((m) => m.id === targetMission)
     if (!found) return
     openMission(found)
-    setPaneId(targetPane)
+    setSelections(current => ({ ...current, [targetMission]: targetPane }))
   })
 
   return (
@@ -168,7 +175,7 @@ export function App() {
             panes={state.panes}
             activeMissionId={mission?.id ?? null}
             selectedPaneId={paneId}
-            onSelectMission={(id) => { setMissionId(id); setPaneId(null) }}
+            onSelectMission={setMissionId}
             onSelectPane={setPaneId}
             onNewMission={() => setDialog('mission')}
           />
@@ -179,7 +186,7 @@ export function App() {
                 mission={item}
                 active={active}
                 panes={state.panes.filter(p => p.missionId === item.id).sort((a, b) => a.role === b.role ? a.id - b.id : a.role === 'lead' ? -1 : 1)}
-                selectedPaneId={active ? paneId : null}
+                selectedPaneId={selections[item.id] ?? null}
                 layout={layouts[item.id] === 'foco' ? 'foco' : 'grade'}
                 onLayout={next => setLayouts(current => ({ ...current, [item.id]: next }))}
                 onSelectPane={setPaneId}
