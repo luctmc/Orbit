@@ -54,6 +54,7 @@ export interface PaneManagerEvents {
 export interface SpawnInput {
   id: number
   executionEpoch?: string
+  decision?: import('@orbit/protocol').DecisionReceipt
   request: SpawnPaneRequest
   squadRole: string | null
   taskType: string | null
@@ -82,12 +83,13 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     this.command = command
   }
 
-  spawn({ id, executionEpoch, request, squadRole, taskType, cwd, launch, env, hookDriven, accountId, branch }: SpawnInput, cols = 100, rows = 30): Pane {
+  spawn({ id, executionEpoch, decision, request, squadRole, taskType, cwd, launch, env, hookDriven, accountId, branch }: SpawnInput, cols = 100, rows = 30): Pane {
     const { file, args } = this.command(launch, this.shell)
     const proc = pty.spawn(file, args, { name: 'xterm-256color', cols, rows, cwd, env: paneEnv(process.env, env) })
     const pane: Pane = {
       id,
       executionEpoch: executionEpoch ?? randomUUID(),
+      ...(decision ? { executionConfig: { decision, applied: { model: launch.model, effort: launch.cli === 'gemini' || launch.cli === 'shell' ? null : launch.effort ?? null } } } : {}),
       missionId: request.missionId,
       role: request.role,
       squadRole,
@@ -342,12 +344,18 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     this.emit('status', { ...pane }, previous)
   }
 
-  setReportedModels(id: number, models: string[]): void {
+  setReportedIdentity(id: number, identity: { models: string[]; efforts: import('@orbit/protocol').Effort[]; level: 'execution-context' | 'response' | 'unknown' }): void {
     const pane = this.panes.get(id)
     if (!pane) return
-    const clean = [...new Set(models.filter(m => /^[a-zA-Z0-9._:/-]{1,200}$/.test(m)))].slice(0, 32)
-    if (!clean.length || JSON.stringify(clean) === JSON.stringify(pane.reportedModels)) return
-    pane.reportedModels = clean
+    const models = [...new Set(identity.models.filter(m => /^[a-zA-Z0-9._:/-]{1,200}$/.test(m)))].slice(0, 32)
+    const efforts = [...new Set(identity.efforts)]
+    if (!models.length && !efforts.length) return
+    if (JSON.stringify(models) === JSON.stringify(pane.reportedModels ?? []) && JSON.stringify(efforts) === JSON.stringify(pane.reportedEfforts ?? []) && pane.identityEvidence === identity.level) return
+    // The observation is one source's frame: never combine new models with a stale effort.
+    pane.reportedModels = models
+    pane.reportedEfforts = efforts
+    pane.identityEvidence = identity.level
+    pane.identityObservedAt = Date.now()
     this.emit('status', { ...pane }, pane.status)
   }
 

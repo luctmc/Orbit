@@ -46,7 +46,8 @@
     ],
     "resources": {
       "../build/sidecar/": "sidecar/",
-      "../build/node/": "node/"
+      "../build/node/": "node/",
+      "../../../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
     }
   },
   "plugins": {

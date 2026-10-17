@@ -1,0 +1,29 @@
+(node:34343) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:34344) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Portuguese is translated before PTY, scoped login is explicit, lost ACK/concurrent retry sends once [90m(59.981333ms)[39m[39m
+[32m✔ no silent provider/account fallback; original requires explicit authorization; failed translation never repeats [90m(50.722ms)[39m[39m
+[32m✔ durable uncertain translation or PTY state is reported pending after restart without retry [90m(47.024ms)[39m[39m
+[32m✔ initial mission translates before launch, reports correlated ACK and deduplicates creation [90m(74.500667ms)[39m[39m
+[32m✔ missing initial translator returns correlated failure and does not launch a mission [90m(44.359ms)[39m[39m
+[32m✔ uncertain provider failure remains pending and cannot be retried under the same ID [90m(49.016167ms)[39m[39m
+[32m✔ legacy clients receive actionable error instead of a silent drop [90m(46.59425ms)[39m[39m
+[32m✔ isolated Codex invocation pins lightweight model/low, disables retries and inherits only selected login [90m(191.3825ms)[39m[39m
+[32m✔ explicit account2 is independent of target pane account and uses its own auth path [90m(45.389ms)[39m[39m
+[32m✔ normal Portuguese input crosses authenticated WebSocket and a real stand-in PTY only as English [90m(289.166083ms)[39m[39m
+[32m✔ private journal rejects traversal and deletes original creation receipts with mission data [90m(1.757042ms)[39m[39m
+[32m✔ scheduled objectives require an explicit translator and launch only the English objective with pt-BR response instruction [90m(84.138833ms)[39m[39m
+[32m✔ uncertain scheduled translation pauses automatic execution and a deleted schedule is not resurrected [90m(47.342417ms)[39m[39m
+[32m✔ an expanded translation is never silently truncated before initial mission launch [90m(44.938209ms)[39m[39m
+[32m✔ mission receipt queries never translate or launch and recover only proven terminal admission failures [90m(46.107458ms)[39m[39m
+[32m✔ a quota admission rejection is terminal, preserves original, and never repeats the failed launch [90m(45.930375ms)[39m[39m
+[32m✔ a translation prepared for an old execution is never submitted into a replacement terminal [90m(77.815292ms)[39m[39m
+[34mℹ tests 17[39m
+[34mℹ suites 0[39m
+[34mℹ pass 17[39m
+[34mℹ fail 0[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 1475.448084[39m

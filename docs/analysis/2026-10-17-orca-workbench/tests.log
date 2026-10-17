@@ -1,0 +1,602 @@
+npm notice run test
+npm notice run npm run test --workspaces --if-present
+npm notice run @orbit/sidecar@0.1.0 test
+npm notice run node --test "test/**/*.test.ts"
+(node:34910) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:34911) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ current Codex quota prefers its own bucket, preserves zero and rejects invalid windows [90m(1.006334ms)[39m[39m
+[32m✔ quota reads deduplicate per account, throttle success and back off failures independently [90m(0.54075ms)[39m[39m
+[32m✔ Codex quota transport only initializes and reads limits, strips unrelated fields and terminates [90m(818.672792ms)[39m[39m
+[32m✔ promotional resets preserve unknown versus zero and expose only available typed benefits [90m(0.522083ms)[39m[39m
+[32m✔ free reset transport calls only the official consume method with the original idempotency key [90m(373.75375ms)[39m[39m
+(node:34912) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ free reset routes through the selected account only and refuses unconfirmed, unknown, expired and non-Codex benefits [90m(56.636542ms)[39m[39m
+(node:34913) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Orbit picks the subscription with the most room, and API keys only when they are all used up [90m(1.291834ms)[39m[39m
+[32m✔ accounts are validated before anything is stored [90m(0.823ms)[39m[39m
+[32m✔ accounts: each runs in its own folder, keys stay in the sidecar, logins open a terminal [90m(722.737042ms)[39m[39m
+(node:34914) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the durable reservation and pane identity exist before the process command is constructed [90m(221.906291ms)[39m[39m
+[32m✔ a launch failure leaves a durable attempt and blocks an unreasoned duplicate [90m(201.912542ms)[39m[39m
+[32m✔ result commit rolls back on disk failure and the retry persists one complete result [90m(278.40425ms)[39m[39m
+[32m✔ a persisted progress checkpoint does not mark the terminal as delivered before its mirror updates [90m(196.79425ms)[39m[39m
+[32m✔ SIGKILL after reservation preserves identity and prevents an automatic second attempt [90m(341.108ms)[39m[39m
+[32m✔ SIGKILL after result persistence preserves its receipt and every completion projection [90m(459.878916ms)[39m[39m
+[32m✔ legacy migration creates activity identities and results exactly once without recharging usage [90m(258.284708ms)[39m[39m
+[32m✔ results survive event eviction and duplicate submission has a stable receipt [90m(241.200209ms)[39m[39m
+[32m✔ retries preserve all attempts and results; changed criteria require an explicit revision [90m(342.736333ms)[39m[39m
+(node:34915) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Claude adapter validates known payloads and preserves permission inputs without inventing events [90m(0.838917ms)[39m[39m
+[32m✔ Codex adapter recognizes known events and rejects stale, duplicated or undated turn transitions [90m(1.529375ms)[39m[39m
+[32m✔ Gemini adapter keeps its dialect and the capability report distinguishes fixtures from provider guarantees [90m(0.422625ms)[39m[39m
+(node:34916) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ delegations are idempotent across concurrent calls, completion, close and restart [90m(559.64725ms)[39m[39m
+[32m✔ automatic leader, inferred helper seats, explicit overrides and attachment acknowledgements cross the real WebSocket [90m(572.262ms)[39m[39m
+(node:34917) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ explicit squad CLI/model/effort reaches the launch and its durable decision receipt [90m(336.013541ms)[39m[39m
+[32m✔ required native read-only sandbox chooses a capable adapter and refuses incompatible explicit choices [90m(418.503417ms)[39m[39m
+[32m✔ a table edit during asynchronous classification cannot launch a stale decision [90m(266.373583ms)[39m[39m
+[32m✔ routing edits and proposals reject stale bases; accepting a proposal rolls back on disk failure [90m(147.465875ms)[39m[39m
+(node:34918) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Gemini and Antigravity commands: model, folders, first prompt, resume, and the orbit command first on the PATH [90m(2.538791ms)[39m[39m
+[32m✔ a Gemini agent gets Orbit as a trusted MCP server and hooks in its own settings file; every agent gets the orbit command [90m(3.519708ms)[39m[39m
+[32m✔ Gemini's hooks are read as Claude Code's and answered in Gemini's terms [90m(0.1185ms)[39m[39m
+[32m✔ Antigravity models come from `agy models`, whatever the decoration [90m(0.23675ms)[39m[39m
+[32m✔ Gemini agents run with a known conversation and Orbit rules through their hooks; the orbit command works as the agent [90m(1086.815292ms)[39m[39m
+(node:34919) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ attachments preserve binary content, stay private and are scoped to a mission after restart [90m(30.266083ms)[39m[39m
+(node:34952) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ autonomous acceptance requires actual delegation, cross-CLI review, oracle and receipt identities [90m(1.61375ms)[39m[39m
+(node:34954) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the load of a CLI is its freest subscription, counting the agents on it; used-up ones do not count [90m(0.401583ms)[39m[39m
+[32m✔ difficulty moves the seat inside the CLI: cheaper model for simple work, stronger model or more effort for hard work [90m(0.437333ms)[39m[39m
+[32m✔ the maestro shares work across CLIs by load, uses the table's equivalent, and tiers by difficulty [90m(2285.235166ms)[39m[39m
+(node:35004) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ usage without a reported USD amount stays unknown in the ledger [90m(291.877209ms)[39m[39m
+[32m✔ classification usage is charged even when its JSON cannot classify the task [90m(344.024208ms)[39m[39m
+[32m✔ later unpriced usage preserves the known subtotal and marks it partial [90m(180.989708ms)[39m[39m
+[32m✔ classifier usage trips the mission budget before launching the next helper [90m(199.747875ms)[39m[39m
+(node:35005) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the versioned corpus has four tasks per category and rejects every seeded bug/feature [90m(5384.473875ms)[39m[39m
+[32m✔ changing an oracle or an undeclared file cannot obtain benchmark acceptance [90m(6.115125ms)[39m[39m
+(node:35511) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ failed work remains in totals and cannot create a token-savings claim through survivor bias [90m(1.624416ms)[39m[39m
+[32m✔ incompatible, duplicate, unpaired or offline runs cannot pass the savings gate [90m(0.259542ms)[39m[39m
+[32m✔ a comparable pilot reports an observation but cannot satisfy the full corpus target [90m(0.112083ms)[39m[39m
+[32m✔ model variance without an exercised context treatment is not a measured optimization [90m(0.10625ms)[39m[39m
+[32m✔ unknown auxiliary calls and native usage keep totals unknown instead of zero [90m(0.104792ms)[39m[39m
+[32m✔ headless usage preserves unknown fields, cache components and zero-cost error placeholders [90m(0.117542ms)[39m[39m
+[32m✔ measurement separates bytes, epochs, PTY output and report coverage without storing text [90m(0.123959ms)[39m[39m
+(node:35596) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ offline matrix validates the complete path but cannot produce live promotion evidence [90m(1.055708ms)[39m[39m
+[32m✔ missing runs, duplicated IDs and calibration/holdout leakage block the entire matrix [90m(0.414ms)[39m[39m
+[32m✔ live failures remain in spend and denominator, while missing identity prevents promotion [90m(0.210208ms)[39m[39m
+(node:35617) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the person and the agents share one board per mission [90m(379.632542ms)[39m[39m
+(node:35722) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ addresses: http(s) only, with the scheme filled in [90m(0.546542ms)[39m[39m
+[32m✔ the browser is found by path, or not at all [90m(0.086875ms)[39m[39m
+[32m✔ agents and the person share the mission browser [90m(1160.251667ms)[39m[39m
+(node:35723) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a mission budget warns at 80%, stops the agents at 100% and frees them when raised; usage goes to the ledger [90m(257.955083ms)[39m[39m
+(node:35744) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Claude Code's /usage gives a subscription's session and weekly windows, in its own time zone [90m(20.988291ms)[39m[39m
+[32m✔ resets read 12am/12pm right and roll into next year when the date already passed [90m(0.913417ms)[39m[39m
+[32m✔ the command output is JSON with the text in result [90m(0.126083ms)[39m[39m
+[32m✔ with no Claude agent open, Orbit still knows each subscription's room from /usage [90m(307.862209ms)[39m[39m
+(node:35806) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ current context-window counts are not cumulative session consumption [90m(0.387916ms)[39m[39m
+[32m✔ distinct responses count separately even with identical context; repeated frames count once [90m(6.547541ms)[39m[39m
+[32m✔ missing counters and native subagent requests keep consumption coverage incomplete [90m(2.919667ms)[39m[39m
+[32m✔ the live adapter resolves only its own session transcript and ignores current-context counters for charging [90m(250.833458ms)[39m[39m
+[32m✔ Claude effort comes from the live status, never the requested seat or transcript model alone [90m(210.368208ms)[39m[39m
+(node:35893) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ versions and install methods are read from what the shell reports [90m(1.023625ms)[39m[39m
+[32m✔ Codex's catalog keeps the listed models with their own effort levels [90m(0.46075ms)[39m[39m
+[32m✔ each install method updates its own way [90m(0.1675ms)[39m[39m
+[32m✔ the UI checks and updates the CLIs, and efforts are held to what each model accepts [90m(97.802542ms)[39m[39m
+[32m✔ Codex defaults report configured effort without confusing nested model settings [90m(6.424ms)[39m[39m
+(node:36101) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Codex permissions match the activity on launch and restart, independent of CLI defaults [90m(493.428833ms)[39m[39m
+(node:36103) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the owned full rollout confirms CLI turn configuration, never provider serving identity [90m(2.175041ms)[39m[39m
+[32m✔ partial writes recover; replaced/truncated files and missing contexts cannot certify identity [90m(5.442916ms)[39m[39m
+[32m✔ model/effort changes and native subagents remain visible and prevent a single-seat certificate [90m(7.836416ms)[39m[39m
+[32m✔ malformed or decreasing counters never regain consumption certification silently [90m(7.751958ms)[39m[39m
+[32m✔ the core resolves its owned rollout and persists configured identity without promoting it to served identity [90m(495.237917ms)[39m[39m
+(node:36167) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ shell panes start a login shell [90m(1.79875ms)[39m[39m
+[32m✔ read-only Codex sessions do not request additional writable roots [90m(0.268583ms)[39m[39m
+[32m✔ a failed CLI preserves its exit status instead of masquerading as a live shell [90m(106.15975ms)[39m[39m
+[32m✔ agent panes run the CLI with the model and preserve its lifecycle [90m(0.61425ms)[39m[39m
+[32m✔ model ids that could inject shell syntax are rejected [90m(0.274667ms)[39m[39m
+[32m✔ shellQuote survives single quotes [90m(0.048542ms)[39m[39m
+[32m✔ claude agents get MCP, hooks, role and task from private files [90m(7.877917ms)[39m[39m
+[32m✔ codex agents reach the MCP through a token env var [90m(7.497542ms)[39m[39m
+[32m✔ pane env drops Orbit secrets and adds pane identity [90m(0.144375ms)[39m[39m
+[32m✔ bypass defaults survive fresh/resumed panes and both MCP profiles without touching login or other providers [90m(0.331584ms)[39m[39m
+(node:36209) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ complexity is inferred even with a known kind, bounded by scope and risk [90m(2.312708ms)[39m[39m
+[32m✔ Codex tiers use advertised models and their effort levels without inventing ids [90m(3.450292ms)[39m[39m
+[32m✔ cost gate: hard work is capped at high effort and a stray risk word is not a hard task [90m(0.6ms)[39m[39m
+[32m✔ default table starts cheap: lead and kinds are not Opus/high; saved untouched old defaults migrate, edits stay [90m(48.279667ms)[39m[39m
+[32m✔ migration compares the whole row, preserves null alternate and explicit automatic=false, and is idempotent [90m(62.117791ms)[39m[39m
+(node:36345) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ briefing cannot silently discard pending acceptance and continuation rules behind long notes [90m(151.434958ms)[39m[39m
+[32m✔ large optional memory is retrievable while task acceptance and user instructions remain complete [90m(285.919792ms)[39m[39m
+(node:36400) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ budget keeps the full contract and exposes omitted context by immutable reference [90m(9.73725ms)[39m[39m
+[32m✔ mandatory overflow and duplicate sections fail explicitly without producing a partial contract [90m(0.127ms)[39m[39m
+(node:36528) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ deleting an agent, a mission or a workspace leaves nothing behind in Orbit, and only what was chosen outside it [90m(1065.403917ms)[39m[39m
+(node:36590) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a Codex turn ends at task_complete, with its last message [90m(0.72275ms)[39m[39m
+[32m✔ helpers always report back: forced handoff, structured status, interrupt, resume and a ready mission [90m(5564.42525ms)[39m[39m
+(node:36651) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ an explicit ACK context supplies the delivery contract without accepting code or repeating lookups [90m(464.757458ms)[39m[39m
+[32m✔ ACK context is bounded, identifies superseded results and preserves recipient/epoch authorization [90m(542.230542ms)[39m[39m
+(node:36712) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ progress stays pending after natural process exit and sidecar reload [90m(270.107792ms)[39m[39m
+[32m✔ closing a terminal does not cancel the required activity [90m(221.677291ms)[39m[39m
+[32m✔ automatic last words and blocked reports are not accepted completion [90m(363.073667ms)[39m[39m
+[32m✔ an agent cannot waive unfinished work by claiming that the user removed the requirement [90m(165.607375ms)[39m[39m
+[32m✔ resume restores the progress obligation and its owner [90m(265.82925ms)[39m[39m
+[32m✔ retry replaces one stopped obligation and preserves its history [90m(486.09625ms)[39m[39m
+[32m✔ legacy state migrates closed required work once and keeps accepted history [90m(211.724ms)[39m[39m
+[32m✔ new work in a completed terminal creates a separate required delivery [90m(189.122ms)[39m[39m
+(node:36713) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ receipt advances only after Enter and only its recipient can acknowledge consumption [90m(636.517375ms)[39m[39m
+[32m✔ restart before Enter cancels the old receipt and delivers the same notice to the new epoch [90m(409.471459ms)[39m[39m
+[32m✔ sidecar recovery replays an unacknowledged result without executing the activity again [90m(449.802584ms)[39m[39m
+[32m✔ a new lead receives the unacknowledged notice addressed to the lead role [90m(1973.950916ms)[39m[39m
+[32m✔ a failed result commit leaves neither a result nor a notification; retry commits both once [90m(262.913959ms)[39m[39m
+[32m✔ handing a result to a completed reviewer persists its new obligation in the result commit [90m(213.978042ms)[39m[39m
+[32m✔ an explicit reviewer that exited keeps its notice pending until its replacement process opens [90m(1870.681458ms)[39m[39m
+[32m✔ R1 migration imports pending receipt identities once without claiming historical consumption [90m(165.974ms)[39m[39m
+[32m✔ SIGKILL after result commit retains the pending outbox in the same snapshot [90m(357.961042ms)[39m[39m
+(node:36737) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a native delivery stays durable during startup and a permission prompt, then sends once ready [90m(2106.633583ms)[39m[39m
+(node:36776) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ dependencies require acceptance, pin an exact result and become invalid when that prerequisite is retried [90m(1049.396334ms)[39m[39m
+[32m✔ a newer done result invalidates an inspection even when source bytes did not change [90m(242.540208ms)[39m[39m
+[32m✔ review persistence fails closed and rolls back acceptance when disk commit fails [90m(402.887167ms)[39m[39m
+(node:36843) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ design choice follows stack, task, project scope, explicit lists and disabled resources [90m(31.248791ms)[39m[39m
+[32m✔ Codex under a Codex lead receives real design skill bodies and a writable implementation sandbox [90m(492.212833ms)[39m[39m
+(node:38509) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ equivalents reach the command builder with the task policy intact on either Codex account [90m(1091.57825ms)[39m[39m
+[32m✔ parallel admission distributes live processes across two Codex accounts and Claude with isolated account data [90m(1106.482917ms)[39m[39m
+[34mℹ {"simultaneous":[{"cli":"claude","accountId":"claude","pid":41324,"cwd":"/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-three-accounts-diHh1I/data/worktrees/6335d934-8d64-401b-80bb-07390ff9069c/2","profile":"/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/claude-home-XfPCvN","model":"claude-sonnet-5-5","effort":"medium"},{"cli":"codex","accountId":"codex","pid":41753,"cwd":"/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-three-accounts-diHh1I/data/worktrees/6335d934-8d64-401b-80bb-07390ff9069c/3","profile":"/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/codex-home-wOfryx","model":"gpt-6.1-sol","effort":"medium"},{"cli":"codex","accountId":"codex-2","pid":42230,"cwd":"/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-three-accounts-diHh1I/data/worktrees/6335d934-8d64-401b-80bb-07390ff9069c/4","profile":"/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-three-accounts-diHh1I/data/accounts/codex-2/codex","model":"gpt-6.1-sol","effort":"medium"}],"adapters":"simulated; real local PTYs, no provider model calls"}[39m
+(node:38615) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ every factory primary and equivalent has an explicit model and task-appropriate effort [90m(0.385333ms)[39m[39m
+[32m✔ quota fallback respects pinned equivalent, including a deliberate CLI default, and rejects incompatible efforts [90m(0.853167ms)[39m[39m
+[32m✔ visual quota fallback never lowers its policy to a cheap or pinned incompatible equivalent [90m(0.126917ms)[39m[39m
+[32m✔ legacy factory rows migrate as a whole; human default and custom alternate remain intact across restart [90m(91.981125ms)[39m[39m
+[32m✔ an inherited null equivalent resolves both model and effort instead of inheriting an expensive personal effort [90m(0.192209ms)[39m[39m
+(node:38751) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ launch audit separates requested, resolved, applied and observed identities across process restarts [90m(9.959542ms)[39m[39m
+(node:38914) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a replaced execution cannot submit its old result into the current attempt [90m(277.791584ms)[39m[39m
+[32m✔ late hooks and usage from an old execution are refused after restart [90m(230.088208ms)[39m[39m
+[32m✔ a captured caller from a completed assignment cannot finish new work in the same process [90m(178.992708ms)[39m[39m
+[32m✔ a result without a live leader commits a pending notification with its result [90m(110.632625ms)[39m[39m
+[32m✔ a late progress report cannot reopen a delivered attempt [90m(89.869791ms)[39m[39m
+[32m✔ HTTP revalidates hooks, status and MCP authenticated before a slow body when execution changes [90m(470.663917ms)[39m[39m
+(node:39367) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ closing metadata does not release a writer before confirmed process termination [90m(47.224ms)[39m[39m
+[32m✔ recovery does not presume that an inherited live process or unknown reservation stopped [90m(72.939ms)[39m[39m
+[32m✔ an observed termination can retry its failed durable release on the next admission [90m(26.607375ms)[39m[39m
+(node:40016) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ porcelain v2 and numstat are read as git writes them [90m(0.781875ms)[39m[39m
+[32m✔ a folder: changes with line counts, diffs, the tree and file contents [90m(405.332459ms)[39m[39m
+[32m✔ nothing outside the folder can be read [90m(93.2025ms)[39m[39m
+[32m✔ the UI asks about a workspace and only the asking window gets the answer [90m(469.932458ms)[39m[39m
+(node:40174) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ final review and mission completion commit together and replay keeps the same receipt and event [90m(546.627917ms)[39m[39m
+[32m✔ combined completion refuses helper, result scope, non-accepted verdict and incomplete evidence without mutations [90m(314.761875ms)[39m[39m
+[32m✔ source changes, new work and stale caller cannot finalize an old inspection [90m(530.606208ms)[39m[39m
+[32m✔ disk failure rolls back final verdict, ready state and ready event in one transaction [90m(569.088625ms)[39m[39m
+[32m✔ retry repairs a failed memory projection without repeating the committed completion [90m(524.360667ms)[39m[39m
+(node:40436) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a cold task receives a composed strategy without a fabricated winner [90m(1.030125ms)[39m[39m
+[32m✔ qualified current evidence chooses a model/effort pair using measured tokens and latency [90m(0.940459ms)[39m[39m
+[32m✔ simulation, missing identities, repeated tasks and changed versions cannot qualify a model [90m(2.346292ms)[39m[39m
+[32m✔ failures and contradictory duplicate attempts cannot be hidden behind accepted samples [90m(0.484333ms)[39m[39m
+[32m✔ high-risk work requires a stronger confidence bound and explicit choices never auto-route [90m(0.147625ms)[39m[39m
+[32m✔ different benchmark revisions and unmatched holdout tasks never share a ranking [90m(1.027625ms)[39m[39m
+[32m✔ a malformed or contradictory failure cannot disappear from an otherwise qualifying cohort [90m(0.245083ms)[39m[39m
+(node:40477) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ adaptive admission rejects stale, failed, incomplete and saturated quota, unknown auth and API seats [90m(0.463666ms)[39m[39m
+[32m✔ candidates enumerate native model/effort availability and preserve mission/sandbox restrictions [90m(0.9585ms)[39m[39m
+(node:41002) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ durable evidence includes failure and missing identity; a handoff cannot certify its own quality [90m(127.026583ms)[39m[39m
+[32m✔ a rejected result cannot be laundered by another acceptance; disk failure leaves review and evidence unchanged [90m(377.223792ms)[39m[39m
+[32m✔ attempt usage is atomic, cumulative reports do not duplicate tokens, and absent effort stays uncertified [90m(229.946583ms)[39m[39m
+[32m✔ a legacy later acceptance cannot hide an earlier rejection in dependency readiness [90m(345.057042ms)[39m[39m
+[32m✔ a later complete native snapshot repairs an initial cost-only observation without double charging [90m(116.675625ms)[39m[39m
+(node:41053) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a real helper spawn persists its strategy and delivers bounded instructions without replacing explicit choices [90m(161.005375ms)[39m[39m
+[32m✔ a qualified seat reaches the launch unchanged by the legacy tier or balancing rules [90m(135.869292ms)[39m[39m
+(node:42524) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ reservations survive as missing work; replay is idempotent and contradictory results are refused [90m(1.599125ms)[39m[39m
+[32m✔ only a complete live qualified matrix can promote; source mismatch and simulation remain fallback [90m(5.1145ms)[39m[39m
+[32m✔ configured identity alone and self-declared success without an oracle cannot qualify [90m(1.860541ms)[39m[39m
+[32m✔ rollback is audited, survives serialization and never resurrects a retired matrix [90m(3.691291ms)[39m[39m
+[32m✔ Store persists journal and rolls back a failed promotion without exposing policy through snapshot [90m(1092.616667ms)[39m[39m
+[32m✔ manifest cannot lower invariant quality/review constraints or request an oversized matrix [90m(0.218709ms)[39m[39m
+[32m✔ rollback restores the previous qualified policy; mutated promoted evidence becomes inactive [90m(3.7195ms)[39m[39m
+(node:42601) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ coordinator reserves before dispatch, retains thrown failures and never imports simulation as live evidence [90m(76.49825ms)[39m[39m
+[32m✔ restart never redispatches an already reserved cell with ambiguous effects [90m(86.660917ms)[39m[39m
+(node:42891) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ runtime fingerprint covers complete contents, file identity and Node version [90m(12.709875ms)[39m[39m
+(node:43065) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ tool and prompt events mean the agent is working [90m(0.769208ms)[39m[39m
+[32m✔ a permission notification asks for the human [90m(0.065667ms)[39m[39m
+[32m✔ the idle reminder and Stop only end the turn [90m(0.049792ms)[39m[39m
+[32m✔ unknown events are ignored [90m(0.050333ms)[39m[39m
+(node:43241) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Portuguese is translated before PTY, scoped login is explicit, lost ACK/concurrent retry sends once [90m(256.38ms)[39m[39m
+[32m✔ no silent provider/account fallback; original requires explicit authorization; failed translation never repeats [90m(78.917666ms)[39m[39m
+[32m✔ durable uncertain translation or PTY state is reported pending after restart without retry [90m(65.925875ms)[39m[39m
+[32m✔ initial mission translates before launch, reports correlated ACK and deduplicates creation [90m(158.056375ms)[39m[39m
+[32m✔ missing initial translator returns correlated failure and does not launch a mission [90m(178.612459ms)[39m[39m
+[32m✔ uncertain provider failure remains pending and cannot be retried under the same ID [90m(92.114083ms)[39m[39m
+[32m✔ legacy clients receive actionable error instead of a silent drop [90m(97.63725ms)[39m[39m
+[32m✔ isolated Codex invocation pins lightweight model/low, disables retries and inherits only selected login [90m(161.994583ms)[39m[39m
+[32m✔ explicit account2 is independent of target pane account and uses its own auth path [90m(152.096916ms)[39m[39m
+[32m✔ normal Portuguese input crosses authenticated WebSocket and a real stand-in PTY only as English [90m(337.640125ms)[39m[39m
+[32m✔ private journal rejects traversal and deletes original creation receipts with mission data [90m(17.038042ms)[39m[39m
+[32m✔ scheduled objectives require an explicit translator and launch only the English objective with pt-BR response instruction [90m(173.887708ms)[39m[39m
+[32m✔ uncertain scheduled translation pauses automatic execution and a deleted schedule is not resurrected [90m(102.1805ms)[39m[39m
+[32m✔ an expanded translation is never silently truncated before initial mission launch [90m(119.544417ms)[39m[39m
+[32m✔ mission receipt queries never translate or launch and recover only proven terminal admission failures [90m(125.1445ms)[39m[39m
+[32m✔ a quota admission rejection is terminal, preserves original, and never repeats the failed launch [90m(119.870291ms)[39m[39m
+[32m✔ a translation prepared for an old execution is never submitted into a replacement terminal [90m(183.58ms)[39m[39m
+(node:43261) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ 95% weekly use is available; windows and accounts never borrow another account quota [90m(0.497958ms)[39m[39m
+[32m✔ leader CLI, model and account persist and reach the real launcher; adaptation never replaces CLI/account [90m(296.168042ms)[39m[39m
+(node:43322) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a Codex lead runs in the read-only sandbox [90m(0.483375ms)[39m[39m
+[32m✔ an agent's last words are read from its CLI's own files [90m(0.848625ms)[39m[39m
+[32m✔ the lead changes hands without losing anything: briefing, notes, helpers and the old lead's last words [90m(607.273125ms)[39m[39m
+(node:43359) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ an older session observation cannot replace newer account limits [90m(21.230125ms)[39m[39m
+[32m✔ rollout limits retain the event observation time rather than the file read time [90m(1.093833ms)[39m[39m
+[32m✔ Claude text with an unrecognized reset does not invent a new quota window [90m(0.387ms)[39m[39m
+[32m✔ Codex account check reads current provider limits instead of an old rollout [90m(74.930542ms)[39m[39m
+[32m✔ a failed live read preserves the last observation and exposes the failed attempt [90m(42.318833ms)[39m[39m
+[32m✔ current quota queries keep account profiles and percentages separate [90m(69.922958ms)[39m[39m
+(node:43933) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the maestro classifies activities the lead did not label [90m(1.975ms)[39m[39m
+[32m✔ agents spread across accounts, API keys come last, and a used-up CLI says when it frees up [90m(0.183375ms)[39m[39m
+[32m✔ the maestro picks CLI and account by itself, falls back when one is used up, and the lead only orchestrates [90m(1377.511375ms)[39m[39m
+(node:44029) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ lead and helper coordinate through MCP, handoffs and hooks [90m(521.523708ms)[39m[39m
+[34mℹ {"measurement":"same-delivery-context","baselineReads":4,"compactReads":1,"baselineReplyBytes":2979,"compactReplyBytes":1512,"unit":"UTF-8 bytes; not provider tokens"}[39m
+[32m✔ an agent reads a packaged skill through authenticated MCP without executing its content [90m(130.539209ms)[39m[39m
+[32m✔ authenticated finalization accepts only the lead final integration review and returns its durable completion [90m(390.038375ms)[39m[39m
+(node:44071) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a workspace remembers across missions: leads write to it, finished missions add to it, new leads start with it [90m(474.344958ms)[39m[39m
+(node:44388) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ mission progress retains delivery and review identity and observes stale final source without changing historical acceptance [90m(567.495083ms)[39m[39m
+[32m✔ progress replies correlate failures and success to the requesting UI without broadcasting or mutating the ledger [90m(144.545792ms)[39m[39m
+[32m✔ authenticated WebSocket progress replies only to its requester and correlates missing-mission errors [90m(75.781875ms)[39m[39m
+(node:44428) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a worker declaration cannot make new work ready without independent review [90m(207.288917ms)[39m[39m
+[32m✔ managed writers cannot overlap in the same physical checkout [90m(174.788875ms)[39m[39m
+[32m✔ review is independent, source-bound, current and retained after restart [90m(494.062292ms)[39m[39m
+[32m✔ closing a live writer holds its lease through the forgotten process exit [90m(245.093917ms)[39m[39m
+[32m✔ promotion cannot relabel a running writer into a read-only maestro [90m(148.875375ms)[39m[39m
+[32m✔ a termination timeout preserves pane settings for an explicit retry and revokes old authority [90m(232.829833ms)[39m[39m
+(node:45251) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ closing escalates an uncooperative PTY and releases its epoch only after actual exit [90m(1766.398208ms)[39m[39m
+(node:45293) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ default role budgets preserve independent review, recovery and user language [90m(0.640583ms)[39m[39m
+(node:45668) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ each kind of work carries its method to any CLI, and reading kinds are read-only [90m(0.9115ms)[39m[39m
+[32m✔ helpers answer acceptance criteria, open sub-helpers within a cap, and the lead asks the person [90m(2402.696167ms)[39m[39m
+(node:46878) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the report puts the whole mission in Markdown [90m(12.629416ms)[39m[39m
+[32m✔ the UI gets the report and saves it as a .md file [90m(160.951542ms)[39m[39m
+(node:47039) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the report shows a reported zero cost without claiming full coverage [90m(13.011541ms)[39m[39m
+[32m✔ the report marks unknown USD explicitly instead of implying free execution [90m(0.195208ms)[39m[39m
+[32m✔ the report labels a positive known amount as a subtotal [90m(0.146792ms)[39m[39m
+(node:47180) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ resuming continues the CLI conversation; the role is not sent again, only a new message [90m(0.710667ms)[39m[39m
+[32m✔ agents are renamed, duplicated, reopened, and resumed even after Orbit restarts [90m(498.697042ms)[39m[39m
+(node:47243) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the default table is valid [90m(0.955209ms)[39m[39m
+[32m✔ table validation rejects what would break a spawn [90m(0.39775ms)[39m[39m
+[32m✔ an agentic lead routes helpers through the table; the table is saved and reset from the UI [90m(330.781167ms)[39m[39m
+(node:47407) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ expired and stale quota never becomes an observed zero, nor clears saturated capacity [90m(0.743792ms)[39m[39m
+[32m✔ all saturated windows must reset before reporting account recovery [90m(0.151125ms)[39m[39m
+[32m✔ hard tasks never select the lowest effort because medium is absent [90m(0.093625ms)[39m[39m
+(node:47408) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ aliases and subfolders share a lease; distinct worktrees have distinct physical roots [90m(443.940292ms)[39m[39m
+[32m✔ dependency admission rejects direct and transitive cycles [90m(0.25775ms)[39m[39m
+(node:47552) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the next run follows the chosen time, days and interval [90m(1.628959ms)[39m[39m
+[32m✔ due schedules start missions from their template, skip while the last one works, and move on [90m(129.751458ms)[39m[39m
+(node:47574) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ rejects a connection without the token or from another origin [90m(47.70825ms)[39m[39m
+[32m✔ creates a mission whose lead pane runs a real shell [90m(225.322542ms)[39m[39m
+(node:47670) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ same-session resume adds only the new cumulative delta [90m(214.189875ms)[39m[39m
+[32m✔ persisted baseline survives a core reload and resume [90m(162.978792ms)[39m[39m
+[32m✔ a fresh conversation counts its new usage [90m(137.217416ms)[39m[39m
+[32m✔ the final Codex report remains the resume baseline after process exit [90m(249.8975ms)[39m[39m
+[32m✔ out-of-order cumulative reports never lower the charged watermark [90m(129.891333ms)[39m[39m
+[32m✔ the same CLI/account/session is charged once across separate panes [90m(221.753625ms)[39m[39m
+[32m✔ a different session id in the same process establishes a fresh counter [90m(121.844166ms)[39m[39m
+[32m✔ accounting commits the watermark and all totals before acknowledgement, or rolls them back [90m(153.886375ms)[39m[39m
+[32m✔ a report with unknown cost cannot erase a known cost watermark [90m(176.840333ms)[39m[39m
+[32m✔ the status payload identifies a session even when SessionStart was not received [90m(340.552916ms)[39m[39m
+(node:47949) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ an incomplete agent request cannot keep the sidecar alive during shutdown [90m(70.530458ms)[39m[39m
+(node:48091) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ bundled packages have verified hashes; discovery is metadata and hash reads detect edits [90m(29.761583ms)[39m[39m
+[32m✔ served skill identity survives a restart and is not inherited by a new execution [90m(2.891416ms)[39m[39m
+[32m✔ skill selection, text serving, policy and cursors are scoped to the current execution [90m(117.6715ms)[39m[39m
+(node:48115) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ front matter: quoted, folded and missing [90m(0.759542ms)[39m[39m
+[32m✔ the catalog lists skills, subagents and MCP servers without their secrets [90m(39.739417ms)[39m[39m
+[32m✔ Claude's hook refuses what is switched off and what is outside the role's skills [90m(0.913917ms)[39m[39m
+[32m✔ Codex agents start with switched-off MCP servers disabled [90m(0.497667ms)[39m[39m
+[32m✔ switching items off reaches running Claude agents through their hook, and new Codex agents [90m(1275.418666ms)[39m[39m
+(node:48125) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a view rebuilt from the snapshot matches the PTY screen; a raw replay at another width does not [90m(302.918458ms)[39m[39m
+[32m✔ a closed pane has no snapshot; an exited one keeps its last screen [90m(275.474583ms)[39m[39m
+(node:48140) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ shell spawn never opens project package.json (FIFO cannot stall the motor) [90m(148.238375ms)[39m[39m
+[32m✔ design metadata skips FIFOs, bounds huge manifests and never blocks the event loop [90m(20.647958ms)[39m[39m
+(node:48190) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ UI spawn reports correlated failure without a pane and acknowledges successful creation [90m(146.439709ms)[39m[39m
+(node:48191) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ builtin squads are valid and have unique role ids [90m(2.533875ms)[39m[39m
+[32m✔ squad validation rejects what would break a mission [90m(0.650958ms)[39m[39m
+[32m✔ saving keeps the id of an existing custom squad; duplicating a builtin gets a new one [90m(0.391625ms)[39m[39m
+[32m✔ a squad mission briefs the lead with the script and opens helpers by role [90m(367.713667ms)[39m[39m
+(node:48193) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ transport and snapshot are ready while crew recovery is still pending [90m(65.590125ms)[39m[39m
+(node:48261) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ unknown state versions fail closed and preserve the original bytes [90m(10.498458ms)[39m[39m
+(node:48398) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ simultaneous returns cannot interleave their paste and Enter; queued returns share one wakeup [90m(433.237708ms)[39m[39m
+[32m✔ a deferred Enter never reaches a replacement process or a process that was killed [90m(304.089459ms)[39m[39m
+[32m✔ a failed deferred Enter never acknowledges delivery or escapes as an uncaught timer error [90m(182.516833ms)[39m[39m
+(node:48402) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the decider asks for one of the table ids and reads only a valid answer [90m(0.798875ms)[39m[39m
+[32m✔ an unclear activity goes to the decider, and the lead proposes table changes the person decides [90m(1077.829166ms)[39m[39m
+(node:48431) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ two Codex accounts are independent: weekly constraints, stale/error/mismatched quota and live load [90m(0.912625ms)[39m[39m
+[32m✔ simple work stays cheap; frontend and motion obey exact catalog identities and efforts [90m(0.630625ms)[39m[39m
+[32m✔ real helper launch uses second Codex quota, refuses unknown automatic capacity and preserves explicit seats [90m(657.329958ms)[39m[39m
+(node:48513) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ workspace instructions reach every agent, and templates start missions with their cards [90m(230.422ms)[39m[39m
+(node:48516) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a native TUI receives terminal cursor replies even when no desktop terminal is attached [90m(154.757625ms)[39m[39m
+(node:48610) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ focused Claude uses only the explicit MCP config and preserves hook settings with default bypass [90m(0.659833ms)[39m[39m
+[32m✔ focused Codex keeps native read-only sandbox and the Orbit endpoint through its startup helper [90m(0.153ms)[39m[39m
+[32m✔ tool profile defaults to Orbit, persists inheritance and preserves old-client settings updates [90m(49.839584ms)[39m[39m
+[32m✔ Codex preflight refuses ambiguous metadata, preserves caller args/env and replaces its own PID [90m(1218.904458ms)[39m[39m
+[32m✔ profile changes affect the next native opening, retain sandbox restrictions and leave other adapters inherited [90m(146.848958ms)[39m[39m
+(node:48611) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ trial accounting includes failed/reviewer phases and never hides missing usage [90m(0.785041ms)[39m[39m
+(node:48698) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the updater plugin gets Orbit's releases through the sidecar, with the UI token only [90m(109.759375ms)[39m[39m
+[32m✔ a release folder can stand in for GitHub, to try an update before publishing [90m(6.917833ms)[39m[39m
+(node:48699) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Claude's status line gives session totals, cost, context and the account limits [90m(1.141166ms)[39m[39m
+[32m✔ Codex's session file gives the latest totals and limits [90m(0.193834ms)[39m[39m
+[32m✔ usage deltas count only what is new and never go negative [90m(0.095541ms)[39m[39m
+[32m✔ a Codex agent's session file is the one started in its folder after it [90m(14.741208ms)[39m[39m
+[32m✔ agents report usage: missions and days add up, account limits reach the UI [90m(5143.308917ms)[39m[39m
+(node:48823) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Codex output already includes reasoning (1024) [90m(1.066125ms)[39m[39m
+[32m✔ Codex output already includes reasoning (0) [90m(0.190541ms)[39m[39m
+[32m✔ Codex output already includes reasoning (absent) [90m(0.132333ms)[39m[39m
+[32m✔ normalized reasoning output is charged once across replay and a new cumulative report [90m(0.60525ms)[39m[39m
+(node:48863) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a worktree nested inside Orbit data still fingerprints its actual source files [90m(43.5345ms)[39m[39m
+[32m✔ source fingerprint changes with HEAD, index, working files, untracked files and deletion [90m(613.9755ms)[39m[39m
+[32m✔ acceptance refuses missing criteria, duplicated answers and reported failed checks [90m(0.361667ms)[39m[39m
+(node:48869) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a workspace can hold several folders and every agent gets all of them [90m(128.406334ms)[39m[39m
+[32m✔ state files from before multi-folder workspaces still load [90m(21.083333ms)[39m[39m
+(node:48896) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ workspace saves reply only after durable persistence and keep failed edits out of memory [90m(19.985667ms)[39m[39m
+(node:48898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ PR checks are read from gh [90m(1.322625ms)[39m[39m
+[32m✔ each agent works in its own worktree and branch, and the mission becomes a PR [90m(984.777708ms)[39m[39m
+[34mℹ tests 313[39m
+[34mℹ suites 0[39m
+[34mℹ pass 313[39m
+[34mℹ fail 0[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 16575.533084[39m
+npm notice run @orbit/desktop@0.2.15 test
+npm notice run node --test "src/**/*.test.ts"
+(node:50935) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:50936) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ missing cost, reported zero and partial known subtotals remain distinguishable [90m(1.689167ms)[39m[39m
+(node:50937) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:50937) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+[32m✔ lost input ACK retains request identity, blocks changed input, and pending never starts a fresh operation [90m(34.235167ms)[39m[39m
+[32m✔ renderer restart recovers drafts, attachment IDs and the exact pending operation without duplicate submission [90m(0.894375ms)[39m[39m
+[32m✔ pending mission reconciliation is read-only and preserves an edited draft across terminal receipts [90m(1.55925ms)[39m[39m
+[32m✔ concurrent submit and receipt check share one wire operation and persist the exact PTY receipt [90m(1.042334ms)[39m[39m
+(node:50938) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ suggestions follow real activity state and do not certify readiness from readyAt [90m(0.776542ms)[39m[39m
+[32m✔ unknown, stale and other-mission context cannot produce an old action [90m(0.1805ms)[39m[39m
+[32m✔ predictions stay out of shell, helpers, permission prompts, exhausted budgets and disconnected missions [90m(0.715417ms)[39m[39m
+[32m✔ prefix completion preserves spelling/case and never substitutes unrelated or multiline input [90m(1.670667ms)[39m[39m
+[32m✔ Tab accepts only without modifiers or composition [90m(0.269458ms)[39m[39m
+(node:50939) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ quota is explicitly remaining and genuine zero usage means 100% remaining [90m(0.750459ms)[39m[39m
+[32m✔ expired, stale, future or invalid data never claims a renewed/unused quota [90m(1.919209ms)[39m[39m
+[32m✔ Claude matches the official used meter while Codex keeps the official remaining meter [90m(0.221958ms)[39m[39m
+(node:50940) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ leader responses retain headings, numbered steps, code and unfinished streaming fences [90m(7.058ms)[39m[39m
+[32m✔ untrusted responses never produce executable links or raw HTML nodes [90m(2.575333ms)[39m[39m
+(node:50941) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ per-mission focus survives switching; foreign, removed and corrupt identities fall back to their own leader [90m(1.43175ms)[39m[39m
+(node:50942) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ a historical ready declaration never overrides disconnected, unknown, stale or waived verification [90m(0.394375ms)[39m[39m
+[32m✔ permission, budget and unresolved work take precedence over a ready declaration [90m(0.153958ms)[39m[39m
+(node:50943) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ waiting, handoffs and exits become notices as the person chose [90m(0.688ms)[39m[39m
+[32m✔ a Claude agent finishing a long turn is a notice; quick answers and Codex are not [90m(0.160209ms)[39m[39m
+(node:50944) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ single, batch and same-count replacements reveal panes; status updates/removals do not [90m(0.432708ms)[39m[39m
+[32m✔ selection stays on the writer during spawn and moves to the nearest surviving neighbour on removal [90m(0.308959ms)[39m[39m
+[32m✔ container width limits even manual column counts without horizontal scroll [90m(0.164459ms)[39m[39m
+[32m✔ stored ratios are validated and topology changes safely rebalance [90m(0.898334ms)[39m[39m
+[32m✔ resize preserves neighbours total, unrelated tracks and physical minimum at both extremes [90m(0.317ms)[39m[39m
+[32m✔ remembered wide-window ratios fit a smaller container without shrinking a neighbour below minimum [90m(0.319417ms)[39m[39m
+(node:50950) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:50950) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+[32m✔ progress requests ignore unrelated errors and match the response request id [90m(14.098625ms)[39m[39m
+(node:50951) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ pane identity separates observed models from configured/default models and custom endpoints [90m(0.382791ms)[39m[39m
+(node:50952) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:50952) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+[32m✔ retry after lost spawn ACK keeps operation identity and deadline, then a new explicit spawn gets a new ID [90m(23.050666ms)[39m[39m
+(node:50953) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ rendered terminals leave device replies to the engine and preserve real input [90m(0.375584ms)[39m[39m
+(node:50954) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Codex native focus/cursor replies and its empty placeholder do not consume the first draft [90m(1.641541ms)[39m[39m
+[32m✔ Claude native Try placeholder anchors typing without accepting existing text or a permission choice [90m(0.310125ms)[39m[39m
+[32m✔ an empty recognized prompt offers a visual next step without owning or changing the buffer [90m(0.143542ms)[39m[39m
+[32m✔ an echoed draft may mark Codex running; starting, permission and exited panes remain excluded [90m(0.063417ms)[39m[39m
+[32m✔ native prediction appears only after the exact draft echo and returns only a suffix [90m(0.605459ms)[39m[39m
+[32m✔ unknown prompt, existing native draft and shell menus are never owned by the predictor [90m(0.091208ms)[39m[39m
+[32m✔ cursor controls, multiline and bracketed paste suspend until a new line [90m(0.112167ms)[39m[39m
+[32m✔ dismissal, backspace and execution reset never insert or submit text [90m(0.058292ms)[39m[39m
+(node:50955) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:50955) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+[32m✔ workspace save and rejection settle only the matching operation; deletion snapshot removes the displayed list [90m(12.674208ms)[39m[39m
+[34mℹ tests 39[39m
+[34mℹ suites 0[39m
+[34mℹ pass 39[39m
+[34mℹ fail 0[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 425.460459[39m

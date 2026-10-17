@@ -29,6 +29,23 @@ export function MissionRail({ workspace, onEditWorkspace, missions, panes, activ
           <span className="mission-card__meta">{MODE_LABEL[m.mode]} · {countFor(m.id)} {countFor(m.id) === 1 ? 'agente' : 'agentes'}</span>
         </span>
       </button>
+      {m.id === activeMissionId && crew.length > 0 && (
+        <div className="crew">
+          <div className="eyebrow">Agentes desta missão</div>
+          <ul className="plain-list">
+            {crew.map((p) => (
+              <li key={p.id}>
+                <button className="crew__row" title={p.attention ?? p.title} data-attention={p.status === 'waiting'} aria-current={p.id === selectedPaneId} onClick={() => onSelectPane(p.id)}>
+                  <span className={`dot dot--${STATUS[p.status].tone}`} />
+                  <span className={p.role === 'lead' ? 'crew__name crew__name--lead' : 'crew__name'}>{p.role === 'lead' ? 'Líder' : p.title} <small>#{p.id}</small></span>
+                  <span className={`crew__status tone--${STATUS[p.status].tone}`}>{STATUS[p.status].label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
     </li>
   )
 
@@ -49,22 +66,6 @@ export function MissionRail({ workspace, onEditWorkspace, missions, panes, activ
       </div>
       {active.length === 0 ? <p className="muted rail__empty">Nenhuma missão ativa neste workspace.</p> : <ul className="plain-list">{active.map(missionButton)}</ul>}
 
-      {crew.length > 0 && (
-        <div className="crew">
-          <div className="eyebrow">Tripulação</div>
-          <ul className="plain-list">
-            {crew.map((p) => (
-              <li key={p.id}>
-                <button className="crew__row" aria-current={p.id === selectedPaneId} onClick={() => onSelectPane(p.id)}>
-                  <span className={`dot dot--${STATUS[p.status].tone}`} />
-                  <span className={p.role === 'lead' ? 'crew__name crew__name--lead' : 'crew__name'}>{p.role === 'lead' ? 'Líder' : p.squadRole ?? p.taskType ?? 'Ajudante'} · #{p.id}</span>
-                  <span className={`crew__status tone--${STATUS[p.status].tone}`}>{STATUS[p.status].label}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       <div className="rail__spacer" />
       {archived.length > 0 && (

@@ -6,6 +6,7 @@ import { CLI_LABEL, costText, EFFORT_LABEL, pathText, STATUS, tokensText } from 
 import { CloseIcon, MoreIcon } from './icons.tsx'
 import { providerIdentity } from '../orbit/providerIdentity.ts'
 import { ProviderMark } from './ProviderMark.tsx'
+import { ExecutionConfig } from './ExecutionConfig.tsx'
 import { Conversation } from './Conversation.tsx'
 import { Terminal } from './LazyTerminal.tsx'
 import { DeleteAgentDialog } from './deletions.tsx'
@@ -60,6 +61,7 @@ function PaneMenu({ pane, onRename, onDelete, onClose, onSelect, onToggleView, c
         <span title={pane.cwd}>{pathText(pane.cwd)}</span>
         {pane.exitCode !== null && <span>código {pane.exitCode}</span>}
         <PaneUsage pane={pane} />
+        <ExecutionConfig pane={pane} />
       </div>
       {pane.status === 'waiting' && <>
         <p className="pane__request">{pane.attention ?? 'O agente está esperando sua resposta.'}</p>
@@ -106,7 +108,8 @@ export function PaneView({ pane, selected, onSelect, suggestions = [], suggestio
   const status = STATUS[pane.status]
   const alive = pane.status !== 'exited'
   const paneRef = useRef<HTMLElement>(null)
-  const [chat, setChat] = useState(false)
+  const [chat, setChat] = useState(() => { try { return localStorage.getItem(`orbit.paneView.${pane.id}`) === 'chat' } catch { return false } })
+  useEffect(() => { try { localStorage.setItem(`orbit.paneView.${pane.id}`, chat ? 'chat' : 'terminal') } catch { /* storage unavailable */ } }, [pane.id, chat])
   const [menu, setMenu] = useState(false)
   const menuButton = useRef<HTMLButtonElement>(null)
   const closeMenu = useCallback(() => { setMenu(false); menuButton.current?.focus() }, [])
@@ -121,7 +124,7 @@ export function PaneView({ pane, selected, onSelect, suggestions = [], suggestio
         <span className="pane__id">#{pane.id}</span>
         <PaneTitle pane={pane} editing={renaming} onEditing={setRenaming} onSelect={onSelect} />
         {pane.handoffStatus && <span className={`chip ${HANDOFF_CHIP[pane.handoffStatus].tone}`} title={HANDOFF_CHIP[pane.handoffStatus].title}>{HANDOFF_CHIP[pane.handoffStatus].label}</span>}
-        <span className="pane__session" title={[identity.provider, identity.model, account?.name, pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}>{pane.reportedModels?.at(-1) ?? pane.model ?? CLI_LABEL[pane.cli]}</span>
+        <span className="pane__session" title={[identity.provider, identity.model, account?.name, pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}>{pane.model ?? CLI_LABEL[pane.cli]}{pane.effort ? ` · ${EFFORT_LABEL[pane.effort]}` : ''}</span>
         <button type="button" className={`pane__state tone--${status.tone}`} aria-label={`Estado de #${pane.id}: ${status.label}. Ver detalhes`} onClick={() => setMenu(!menu)} aria-expanded={menu}><span className={`dot dot--${status.tone}`} />{status.label}</button>
         <div className="menu-anchor">
           <button ref={menuButton} type="button" className="icon-btn" aria-label={`Ações de #${pane.id}`} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>

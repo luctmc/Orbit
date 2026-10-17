@@ -1337,12 +1337,15 @@ export class OrbitCore {
         record.english = pane.cli === 'shell' ? message.text : await this.englishInput(message.text, message.translationAccountId, message.allowOriginal)
         record.state = 'prepared'; this.inputJournal.save(pane.missionId, message.requestId!, record)
         const text = record.english + (files.length ? `\n\nUser attachments (local files; inspect using your file/image tools):\n${files.map(f => JSON.stringify({ name: f.name, path: f.path, mime: f.mime })).join('\n')}` : '') + (pane.cli === 'shell' ? '' : `\n\n${RESPONSE_LANGUAGE}`)
+        if (this.store.pane(pane.id)?.executionEpoch !== pane.executionEpoch) throw new Error('A execução do agente mudou durante a preparação. O texto foi preservado; confira o destinatário antes de um novo envio.')
+        record.paneId = pane.id
+        record.executionEpoch = pane.executionEpoch
         record.state = 'submitting'; this.inputJournal.save(pane.missionId, message.requestId!, record)
         this.panes.answered(pane.id)
         await new Promise<void>((resolve, reject) => {
           const timer = setTimeout(() => reject(new Error('ACK do terminal pendente. Confira o mesmo pedido; não reenvie o texto.')), 5000)
           const queued = this.panes.submitWithReceipt(pane.id, text, () => {
-            clearTimeout(timer); record.state = 'acked'; record.error = undefined
+            clearTimeout(timer); record.state = 'acked'; record.error = undefined; record.acceptedAt = Date.now()
             this.inputJournal.save(pane.missionId, message.requestId!, record)
             if (pane.executionEpoch) this.measurements?.wakeup(pane.executionEpoch)
             resolve()
@@ -1352,7 +1355,7 @@ export class OrbitCore {
         })
       })
       if (record.state !== 'acked') { pending = record.state !== 'failed'; throw new Error(record.error ?? 'Envio pendente após interrupção. Nenhuma chamada será repetida; confira o terminal.') }
-      reply({ type: 'pane.submitted', requestId: message.requestId, paneId: pane.id })
+      reply({ type: 'pane.submitted', requestId: message.requestId, paneId: record.paneId ?? pane.id, executionEpoch: record.executionEpoch, acceptedAt: record.acceptedAt })
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
       if (!message.requestId) { reply({ type: 'error', message: detail }); return }
@@ -2403,7 +2406,7 @@ export class OrbitCore {
     const pane = this.store.pane(paneId)
     if (!pane) return
     if (report.limits) this.broadcast({ type: 'limits', limits: this.store.setLimits({ ...report.limits, accountId: pane.accountId ?? report.limits.cli }) })
-    if (identity?.models.length) this.panes.setReportedModels(paneId, identity.models)
+    if (identity) this.panes.setReportedIdentity(paneId, identity)
     if (!report.usage && report.contextPercent === null) return
     let usage = report.usage
     if (usage && pane.cli !== 'shell') {
@@ -2840,8 +2843,8 @@ export class OrbitCore {
       this.skillSessions.start(id, executionEpoch, request.cli === 'shell' ? [] : [...(roleSkills?.skills ?? []), ...designSelection.items.map(i => i.name), ...(!policy?.only || policy.only.includes(suggested) ? [suggested] : [])])
       for (const item of skillDelivery.delivered) this.skillSessions.loaded(id, executionEpoch, item.id, item.name, item.resource!.sha256)
       const decision = decisionReceipt({
-        source: harness?.selected && !automatic ? 'benchmark' : fallbackUsed ? 'fallback' : options.decisionSource ?? (options.explicitCli || input.model || input.effort ? 'explicit' : 'rule'),
-        requested: { cli: options.explicitCli ?? null, model: input.model ?? null, effort: input.effort ?? null },
+        source: harness?.selected && !automatic ? 'benchmark' : fallbackUsed ? 'fallback' : options.decisionSource ?? (options.explicitCli || input.model || input.effort || (input.role === 'lead' && !options.tier) ? 'explicit' : 'rule'),
+        requested: { cli: options.explicitCli ?? (input.role === 'lead' || options.keep ? input.cli : null), model: input.model ?? null, effort: input.effort ?? null },
         effective: { cli: request.cli, model: request.model, effort: request.effort ?? null, accountId: account?.id ?? null },
         reasons: [...receipt],
         catalogRevision,
@@ -2858,6 +2861,7 @@ export class OrbitCore {
       pane = this.panes.spawn({
         id,
         executionEpoch,
+        decision,
         request: { ...request, title },
         squadRole: squadRole?.name ?? null,
         taskType: taskType?.name ?? null,

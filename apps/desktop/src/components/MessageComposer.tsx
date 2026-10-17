@@ -14,7 +14,7 @@ const encodedFile = (file: File): Promise<string> => new Promise((resolve, rejec
 })
 
 /** One focused message, with context visible before sending it to the selected agent. */
-export function MessageComposer({ pane, inputRef, active = true, suggestions = [], suggestionsOn = true, onToggleSuggestions }: { pane: Pane; inputRef: RefObject<HTMLTextAreaElement | null>; active?: boolean; suggestions?: InputSuggestion[]; suggestionsOn?: boolean; onToggleSuggestions?: () => void }) {
+export function MessageComposer({ pane, inputRef, active = true, suggestions = [], suggestionsOn = true, onToggleSuggestions, leader, onSelectPane, recipients = [] }: { recipients?: Pane[]; leader?: Pane; onSelectPane?: (id: number) => void; pane: Pane; inputRef: RefObject<HTMLTextAreaElement | null>; active?: boolean; suggestions?: InputSuggestion[]; suggestionsOn?: boolean; onToggleSuggestions?: () => void }) {
   const client = useOrbitClient()
   const { connection, accounts, settings } = useOrbit()
   const draftKey = `pane-${pane.id}`
@@ -28,7 +28,8 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
   useEffect(() => { client.inputAttachments.set(draftKey, files) }, [client, draftKey, files])
   const [uploading, setUploading] = useState(false)
   const [sending, setSending] = useState(false)
-  const [sent, setSent] = useState(false)
+  const [receipt, setReceipt] = useState(client.inputReceipts.get(draftKey))
+  const sendLock = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const [focused, setFocused] = useState(false)
@@ -123,7 +124,8 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
     finally { if (mounted.current) setUploading(false) }
   }
   const send = async () => {
-    if (disabled || (!text.trim() && !files.length)) return
+    if (sendLock.current || disabled || (!pending && !text.trim() && !files.length)) return
+    sendLock.current = true
     acceptingSpeech.current = false
     dictation.stop(true)
     setSending(true)
@@ -137,11 +139,11 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
       if (!mounted.current) return
       setPending(false)
       setText(''); dictated.current = ''; setSelection({ start: 0, end: 0 }); setDismissed(null)
-      setSent(true)
+      setReceipt(client.inputReceipts.get(draftKey))
       setFiles([])
       requestAnimationFrame(() => localInput.current?.focus())
     } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause)) }
-    finally { if (mounted.current) { setSending(false); setPending(client.inputPending(draftKey)); acceptingSpeech.current = true } }
+    finally { sendLock.current = false; if (mounted.current) { setSending(false); setPending(client.inputPending(draftKey)); acceptingSpeech.current = true } }
   }
   if (!active) return null
   return (
@@ -150,7 +152,15 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false) }}
       onDrop={(e) => { e.preventDefault(); setDragging(false); void addFiles(Array.from(e.dataTransfer.files)) }}>
       <div className="composer__head">
-        <label htmlFor={`message-${pane.id}`} title={`Mensagem para ${pane.title} · #${pane.id}`}><span className="composer__to" aria-hidden="true">Para</span><span className="sr-only">Mensagem para </span><strong>{pane.role === 'lead' ? 'o líder' : pane.title}</strong><span className="composer__recipient">#{pane.id}</span></label>
+        <div className="composer__target">
+          <label className="sr-only" htmlFor={`message-${pane.id}`}>Mensagem para {pane.role === 'lead' ? 'o líder' : pane.title} · #{pane.id}</label>
+          <span className="composer__to" aria-hidden="true">Para</span>
+          {onSelectPane && recipients.length > 1 ? <><label className="sr-only" htmlFor={`recipient-${pane.id}`}>Destinatário da mensagem</label><select id={`recipient-${pane.id}`} value={pane.id} onChange={e => onSelectPane(Number(e.target.value))}>
+            {recipients.map(target => <option key={target.id} value={target.id}>{target.role === 'lead' ? 'Líder' : target.title} · #{target.id}</option>)}
+          </select></> : <strong>{pane.role === 'lead' ? 'o líder' : pane.title}</strong>}
+          <span className="composer__recipient">#{pane.id} · {pane.cli}</span>
+        </div>
+        {pane.role !== 'lead' && leader && leader.status !== 'exited' && onSelectPane && <button type="button" className="btn btn--ghost btn--sm composer__leader" onClick={() => onSelectPane(leader.id)}>Conversar com líder</button>}
         <span className="composer__status" role="status">{connection !== 'open' ? 'Reconectando…' : uploading ? 'Preparando anexos…' : dictation.listening ? `Ouvindo${dictation.mode === 'apple' ? ' · Apple' : dictation.mode === 'local' ? ' · no Mac' : ''}…` : ''}</span>
       </div>
       <div className="composer__content">
@@ -173,7 +183,7 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
         onBlur={(e) => { if (!e.currentTarget.closest('form')?.contains(e.relatedTarget as Node)) setFocused(false) }}
         onSelect={(e) => syncSelection(e.currentTarget)}
         onCompositionStart={() => setComposing(true)} onCompositionEnd={(e) => { setComposing(false); syncSelection(e.currentTarget) }}
-        onChange={(e) => { setText(e.target.value); dictated.current = e.target.value; syncSelection(e.currentTarget); setDismissed(null); setSent(false) }}
+        onChange={(e) => { setText(e.target.value); dictated.current = e.target.value; syncSelection(e.currentTarget); setDismissed(null) }}
         onPaste={(e) => { const incoming = Array.from(e.clipboardData.files); if (incoming.length) { e.preventDefault(); void addFiles(incoming) } }}
         onKeyDown={(e) => {
           if (prediction && acceptsSuggestionKey({ key: e.key, shiftKey: e.shiftKey, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, isComposing: e.nativeEvent.isComposing }) && e.currentTarget.selectionStart === text.length && e.currentTarget.selectionEnd === text.length) { e.preventDefault(); acceptPrediction(); return }
@@ -187,6 +197,7 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
         <button type="button" className="btn btn--ghost btn--sm" disabled={disabled} onClick={acceptPrediction}>Inserir <kbd>Tab</kbd></button>
         <button type="button" className="icon-btn" aria-label="Dispensar sugestão" onClick={() => { setDismissed(text); localInput.current?.focus() }}><CloseIcon size={14} /></button>
       </div>}
+      {receipt && <p className="composer__receipt" role="status" title={`Pedido ${receipt.requestId}${receipt.executionEpoch ? ` · execução ${receipt.executionEpoch}` : ''}`}>Terminal de #{receipt.paneId} confirmou{receipt.acceptedAt ? ` às ${new Date(receipt.acceptedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''} · pedido {receipt.requestId.slice(0, 8)}<span> A resposta do agente aparece acima.</span></p>}
       {pending && <p role="status">Confirmação pendente. Rascunho preservado; conferir consulta o mesmo pedido sem reenviar.</p>}
       </div>
       <div className="composer__actions">
@@ -207,10 +218,10 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
         <label><input type="checkbox" disabled={editingDisabled} checked={allowOriginal} onChange={e => setAllowOriginal(e.target.checked)} /> Autorizar envio do original sem tradução</label>
         <p className="note">O texto digitado diretamente no terminal segue no idioma original.</p>
       </div></details>}
-        <span className="composer__hint" role="status">{files.length ? `${files.length}/8 anexos` : sent && !text ? 'Mensagem encaminhada ao agente' : ''}</span>
+        <span className="composer__hint" role="status">{files.length ? `${files.length}/8 anexos` : ''}</span>
         {pane.role === 'lead' && ['claude', 'codex'].includes(pane.cli) && onToggleSuggestions && <button type="button" className="btn btn--ghost btn--sm composer__toggle" aria-pressed={suggestionsOn} title={suggestionsOn ? 'Desativar sugestões no campo e no terminal' : 'Ativar sugestões no campo e no terminal'} onClick={onToggleSuggestions}>Sugestões<span className="sr-only"> {suggestionsOn ? 'ligadas' : 'desligadas'}</span></button>}
         <span className="composer__shortcuts" id={`message-help-${pane.id}`}>Enter envia <span>· Shift+Enter nova linha</span><span className="sr-only">. ⌘J foca a mensagem.</span></span>
-        <button className="btn btn--primary composer__send" type="submit" disabled={disabled || (!text.trim() && !files.length)}><SendIcon size={16} />{sending ? 'Enviando…' : pending ? 'Conferir pedido' : 'Enviar'}</button>
+        <button className="btn btn--primary composer__send" type="submit" disabled={disabled || (!pending && !text.trim() && !files.length)}><SendIcon size={16} />{sending ? 'Enviando…' : pending ? 'Conferir pedido' : 'Enviar'}</button>
       </div>
       {(error || dictation.error) && <div className="composer__error" role="alert">{error ?? dictation.error}</div>}
     </form>
