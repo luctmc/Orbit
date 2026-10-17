@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { AGENT_CLIS, MODEL_ID, type AgentCli, type AgentCliForRole, type Effort, type MissionMode, type Squad } from '@orbit/protocol'
+import { TRANSLATION_LABEL, AGENT_CLIS, MODEL_ID, type AgentCli, type AgentCliForRole, type Effort, type MissionMode, type Squad } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, EFFORT_LABEL, MODE_LABEL } from '../orbit/labels.ts'
 import { AccountSelect, AgentChooser, EffortChoice, ModelSelect, useAgentReadiness } from './agentPickers.tsx'
@@ -134,7 +134,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
     }}>
       <fieldset disabled={launching || pending} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       {settings?.agentsInEnglish && <div className="field">
-        <label htmlFor="mission-translator">Traduzir objetivo para inglês · Codex / gpt-6.1-sol / medium</label>
+        <label htmlFor="mission-translator">Traduzir objetivo para inglês · {TRANSLATION_LABEL}</label>
         <select id="mission-translator" disabled={allowOriginal} value={translationAccountId} onChange={e => setTranslationAccountId(e.target.value)}>
           <option value="">Escolha a conta Codex</option>
           {accounts.filter(a => a.cli === 'codex' && a.kind === 'assinatura').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}

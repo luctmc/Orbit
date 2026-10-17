@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
+import { TRANSLATION_MODEL, TRANSLATION_EFFORT } from '@orbit/protocol'
 
-export const TRANSLATION_MODEL = 'gpt-6.1-sol'
 export const RESPONSE_LANGUAGE = 'Respond to the user in Brazilian Portuguese (pt-BR).'
 export type TranslationInput = { text: string; authFile: string }
 export class UncertainTranslation extends Error {}
@@ -22,7 +22,7 @@ export const translateCodex: Translate = async ({ text, authFile }) => {
     const schema = join(dir, 'schema.json')
     writeFileSync(schema, JSON.stringify({ type: 'object', additionalProperties: false, properties: { english: { type: 'string' } }, required: ['english'] }), { mode: 0o600 })
     const out = join(dir, 'answer.json')
-    const args = ['exec', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', '--sandbox', 'read-only', '--model', TRANSLATION_MODEL, '-c', 'model_reasoning_effort="medium"', '-c', 'features.shell_tool=false', '-c', 'features.unified_exec=false', '-c', 'features.unbounded_connection_retries=false', '-c', 'model_provider="orbit-translation"', '-c', 'model_providers.orbit-translation.name="OpenAI"', '-c', 'model_providers.orbit-translation.wire_api="responses"', '-c', 'model_providers.orbit-translation.requires_openai_auth=true', '-c', 'model_providers.orbit-translation.request_max_retries=0', '-c', 'model_providers.orbit-translation.stream_max_retries=0', '--output-schema', schema, '--output-last-message', out, '-']
+    const args = ['exec', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', '--sandbox', 'read-only', '--model', TRANSLATION_MODEL, '-c', `model_reasoning_effort="${TRANSLATION_EFFORT}"`, '-c', 'features.shell_tool=false', '-c', 'features.unified_exec=false', '-c', 'features.unbounded_connection_retries=false', '-c', 'model_provider="orbit-translation"', '-c', 'model_providers.orbit-translation.name="OpenAI"', '-c', 'model_providers.orbit-translation.wire_api="responses"', '-c', 'model_providers.orbit-translation.requires_openai_auth=true', '-c', 'model_providers.orbit-translation.request_max_retries=0', '-c', 'model_providers.orbit-translation.stream_max_retries=0', '--output-schema', schema, '--output-last-message', out, '-']
     await new Promise<void>((resolve, reject) => {
       // Never inherit API keys, MCP configuration or the orchestrating pane's environment.
       const child = spawn('codex', args, { cwd: dir, env: { PATH: process.env.PATH, HOME: dir, CODEX_HOME: home, TMPDIR: dir, LANG: 'en_US.UTF-8' }, stdio: ['pipe', 'ignore', 'ignore'] })

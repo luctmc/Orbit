@@ -1,5 +1,10 @@
 // Wire contract between the Orbit UI and the sidecar (JSON over one WebSocket).
 
+/** Isolated input translation; independent of agent routing and execution settings. */
+export const TRANSLATION_MODEL = 'gpt-6-luna'
+export const TRANSLATION_EFFORT = 'low'
+export const TRANSLATION_LABEL = `Codex / ${TRANSLATION_MODEL} / ${TRANSLATION_EFFORT}`
+
 export type MissionMode = 'livre' | 'squad' | 'agentica'
 export type MissionStatus = 'active' | 'archived'
 
