@@ -82,7 +82,7 @@ export async function runNativeHarnessPilot(options: { cli: 'codex' | 'claude'; 
     let error: TrialObservation['error'] = null
     try {
       await server.initialized
-      if (!harnessAccounts(core.store.accounts(), (core.welcome().find(m => m.type === 'account.status') as { statuses: import('@orbit/protocol').AccountStatus[] }).statuses, core.store.limits()).some(a => a.cli === options.cli)) throw new Error('Piloto bloqueado: login/limites atuais não confirmam assinatura abaixo de 85% nas duas janelas')
+      if (!harnessAccounts(core.store.accounts(), (core.welcome().find(m => m.type === 'account.status') as { statuses: import('@orbit/protocol').AccountStatus[] }).statuses, core.store.limits()).some(a => a.cli === options.cli)) throw new Error('Piloto bloqueado: login/limites atuais não confirmam assinatura com saldo nas janelas informadas')
       if (options.signal?.aborted) throw new Error('Piloto cancelado antes do lançamento')
       core.handle({ type: 'workspace.open', path: workspace })
       const w = core.store.snapshot().workspaces[0]!

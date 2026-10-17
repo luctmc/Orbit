@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { AGENT_CLIS, type Account, type AccountLimits, type AccountStatus, type Catalog, type CliStatus, type HarnessCandidate } from '@orbit/protocol'
+import { ACCOUNT_FULL_PERCENT, AGENT_CLIS, type Account, type AccountLimits, type AccountStatus, type Catalog, type CliStatus, type HarnessCandidate } from '@orbit/protocol'
 import { adapterCapabilities } from './adapters/types.ts'
 
 /** A measured seat may only use a freshly observed subscription; unknown is not spare capacity. */
@@ -10,7 +10,7 @@ export function harnessAccounts(accounts: Account[], statuses: AccountStatus[], 
     if (!a.auto || a.kind !== 'assinatura' || status?.loggedIn !== true || status.busy || !status.checkedAt || status.checkedAt > now || now - status.checkedAt > 300000) return false
     if (!limit || limit.source !== 'provider' || limit.refreshError || limit.updatedAt > now || now - limit.updatedAt > 90000) return false
     const windows = [limit.fiveHour, limit.weekly].filter(w => w !== null)
-    return windows.length > 0 && windows.every(w => w && Number.isFinite(w.usedPercent) && w.usedPercent >= 0 && w.usedPercent < 85 && Number.isFinite(w.resetsAt) && w.resetsAt > now)
+    return windows.length > 0 && windows.every(w => w && Number.isFinite(w.usedPercent) && w.usedPercent >= 0 && w.usedPercent < ACCOUNT_FULL_PERCENT && Number.isFinite(w.resetsAt) && w.resetsAt > now)
   })
 }
 export function harnessCandidates(catalog: Catalog | null, clis: CliStatus[], accounts: Account[], allowed: readonly string[], sandbox: boolean): HarnessCandidate[] {

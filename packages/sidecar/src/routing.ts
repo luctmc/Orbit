@@ -117,7 +117,7 @@ export function normalizeRouting(input: Routing): Routing {
   })
 
   return {
-    lead: { cli: cli(input.lead?.cli, 'líder'), model: model(input.lead?.model, 'líder'), effort: effort(input.lead?.effort, 'líder') },
+    lead: { cli: cli(input.lead?.cli, 'líder'), model: model(input.lead?.model, 'líder'), effort: effort(input.lead?.effort, 'líder'), ...(input.lead?.accountId !== undefined ? { accountId: typeof input.lead.accountId === 'string' && input.lead.accountId ? input.lead.accountId : null } : {}) },
     taskTypes,
   }
 }

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { AGENT_CLIS, AGENT_INFO, CLI_NAME, effortsFor, type AgentCli, type AgentCliForRole, type Effort } from '@orbit/protocol'
 import { useOrbit } from '../orbit/context.tsx'
+import { limitWindowView } from '../orbit/limitPresentation.ts'
+import { useLimitClock } from '../orbit/useLimitClock.ts'
 import { accountLabel, CLI_LABEL, EFFORT_LABEL, modelOptions } from '../orbit/labels.ts'
 
 /** Whether an agent CLI is ready on this Mac: installed, and with an account signed in. */
@@ -175,23 +177,22 @@ export function EffortCycle({ cli, model, value, onChange, label }: { cli: Agent
 export function AccountSelect({ id, cli, value, onChange }: { id: string; cli: AgentCliForRole; value: string | null; onChange: (accountId: string | null) => void }) {
   const { accounts, accountStatuses, limits } = useOrbit()
   const mine = accounts.filter((a) => a.cli === cli)
-  useEffect(() => {
-    if (value && !mine.some((a) => a.id === value)) onChange(null)
-  }, [value, mine, onChange])
-  if (mine.length < 2) return null
+  const now = useLimitClock()
   const describe = (accountId: string) => {
     const status = accountStatuses.find((s) => s.accountId === accountId)
-    const l = limits.find((x) => x.accountId === accountId)
-    const now = Date.now()
-    const used = l ? Math.max(0, ...[l.fiveHour, l.weekly].filter((w) => w && w.resetsAt > now).map((w) => Math.round(w!.usedPercent))) : null
+    const l = limits.find((x) => x.accountId === accountId && x.cli === cli)
+    const windows = l ? [l.fiveHour, l.weekly].map(w => limitWindowView(w, l, now)) : []
+    const known = windows.filter(w => w.used !== null)
+    const used = known.length ? Math.max(...known.map(w => w.used!)) : null
     if (status?.loggedIn === false) return ' — não logada'
-    return used === null ? '' : ` — ${used}% usado`
+    return used === null ? ' — limite não confirmado' : ` — ${Math.round(used)}% usado${l?.refreshError ? ' (falha ao atualizar)' : ''}`
   }
   return (
     <div className="field">
       <label htmlFor={id}>Conta</label>
       <select id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}>
         <option value="">Automática (a com mais folga)</option>
+        {value && !mine.some(a => a.id === value) && <option value={value}>Conta removida ou indisponível — escolha outra</option>}
         {mine.map((a) => <option key={a.id} value={a.id}>{accountLabel(a, a.cli)}{a.builtin ? ' (deste Mac)' : a.kind === 'api' ? ' (chave de API)' : ''}{describe(a.id)}</option>)}
       </select>
     </div>

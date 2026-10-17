@@ -825,6 +825,10 @@ export class Store {
   saveRouting(routing: Routing | null): void {
     this.transaction(() => {
       if (routing?.revision !== undefined && routing.revision !== this.routing().revision) throw new Error('A tabela mudou em outra edição; recarregue e reconcilie as alterações')
+      if (routing?.lead.accountId) {
+        const account = this.account(routing.lead.accountId)
+        if (!account || account.cli !== routing.lead.cli) throw new Error('Escolha uma conta existente do agente do líder')
+      }
       this.state.routing = routing ? { lead: routing.lead, taskTypes: routing.taskTypes } : null
     })
   }

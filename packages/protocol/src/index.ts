@@ -660,7 +660,8 @@ export interface AgentSeat {
 export interface Routing {
   /** Optimistic edit token supplied by the engine; absent on factory/legacy inputs. */
   revision?: string
-  lead: { cli: AgentCliForRole; model: string | null; effort: Effort | null }
+  /** Explicit account; null/absent chooses automatically within the selected CLI. */
+  lead: { cli: AgentCliForRole; model: string | null; effort: Effort | null; accountId?: string | null }
   taskTypes: TaskType[]
 }
 
@@ -718,8 +719,8 @@ export interface AccountInput {
 }
 
 export const ACCOUNT_LIMITS = { accounts: 12, name: 40, key: 512, url: 300 } as const
-/** Above this, a window counts as used up when Orbit picks an account. */
-export const ACCOUNT_FULL_PERCENT = 85
+/** Only an exhausted provider window blocks the account; headroom is not exhaustion. */
+export const ACCOUNT_FULL_PERCENT = 100
 
 /** The mission's browser: one page agents and the person look at together. */
 export interface MissionBrowser {

@@ -404,7 +404,8 @@ export class OrbitCore {
     const task = mission.mode !== 'livre' && mission.objective ? `${objectiveTask(mission)}\n\n${RESPONSE_LANGUAGE}` : null
     const assessment = assessDifficulty(mission.title, mission.objective)
     const automatic = message.adaptiveLead === true && mission.mode === 'agentica'
-    const lead = automatic ? { ...message.lead, ...this.store.routing().lead, accountId: null } : message.lead
+    // Adapt resources within the requested provider; never replace the person's leader/account.
+    const lead = message.lead
     this.spawn({ ...lead, missionId: mission.id, role: 'lead', task }, automatic ? { tier: { difficulty: assessment.difficulty, by: assessment.why } } : {})
     return mission
   }
