@@ -1292,3 +1292,79 @@ button:disabled { cursor: not-allowed; }
 .quota-access__details[open] > summary::before { content: '−'; }
 .quota-access__details > div { display: grid; gap: 12px; padding-top: 4px; }
 .pane__model-detail { white-space: normal; overflow: visible; font-size: 12px; line-height: 1.5; }
+
+/* Terminal workbench: one toolbar, full-height output, details on demand.
+   Existing graphite/Geist tokens keep the shell consistent with the rest of Orbit. */
+.mission { min-height: 0; }
+.mission__head { padding: 8px 16px; gap: 8px 12px; }
+.mission__title h1 { font-size: 16px; }
+.mission__title p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60ch; font-size: 12px; }
+.mission-status { flex: none; border-bottom: 1px solid var(--line); color: var(--text-3); }
+.mission-status > summary { min-height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; font-size: 12px; }
+.mission-status > summary strong { flex: 1; font-weight: 500; }
+.mission-status > summary span { color: var(--muted); }
+.mission-status > div { display: flex; align-items: center; gap: 12px; padding: 0 16px 8px; font-size: 12px; }
+.mission-status > div p { flex: 1; }
+.mission-status[data-state='waiting'] strong, .mission-status[data-state='blocked'] strong { color: var(--wait); }
+.pane-workbench { padding: 8px; }
+.pane { overflow: visible; container-type: inline-size; border-radius: 6px; }
+.pane--waiting { border-color: var(--line-strong); box-shadow: none; }
+.pane--selected { border-color: var(--accent-line); box-shadow: none; }
+.pane .pane__head { min-height: 48px; padding: 0 4px 0 8px; gap: 6px; flex-wrap: nowrap; border-radius: 6px 6px 0 0; }
+.pane .pane__head .pane__title { flex: 1 1 100px; min-width: 24px; height: 44px; }
+.pane__head > .provider-mark { width: 24px; height: 24px; flex: none; }
+.pane__head > .provider-mark img { width: 20px; height: 20px; }
+.pane__head > .role { display: inline; flex: none; font-size: 10px; }
+.pane__head > .chip { max-width: 100px; }
+.pane__session { max-width: 26%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 11px var(--mono); color: var(--text-3); }
+.pane__state { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 8px; background: transparent; border: 0; border-radius: var(--radius-control); font-size: 11px; }
+.pane__state:hover { background: var(--surface-3); }
+.pane__body { border-radius: 0 0 6px 6px; overflow: hidden; }
+.pane__details { display: grid; gap: 6px; padding: 8px 12px; color: var(--text-3); font: 11px/1.5 var(--mono); overflow-wrap: anywhere; }
+.pane__details strong { color: var(--text); font-weight: 500; }
+.pane__details .pane__usage { margin: 0; flex-wrap: wrap; }
+.pane__request { color: var(--wait); padding: 8px 12px; font-size: 12px; line-height: 1.5; }
+.pane__head .menu { width: min(360px, calc(100vw - 32px)); max-height: min(600px, 65vh); overflow-y: auto; z-index: 30; }
+.pane__head .menu button { min-height: 44px; }
+.composer { flex: 0 1 auto; display: flex; flex-direction: column; min-height: 0; max-height: 42%; margin: 0 8px 8px; width: calc(100% - 16px); max-width: none; padding: 4px 12px; border-radius: 8px; background: var(--surface); }
+.composer__head { flex: none; min-height: 20px; }
+.composer__content { min-height: 0; overflow-y: auto; }
+.composer textarea { min-height: 44px; max-height: 120px; padding: 8px 0; }
+.composer__ghost { padding: 8px 0; }
+.composer__actions { flex: none; min-height: 44px; padding-top: 0; }
+.composer__language > summary { cursor: pointer; display: flex; align-items: center; min-height: 44px; font-size: 11px; color: var(--text-3); }
+.composer__language > .field { padding: 4px 0 8px; }
+.composer__language input[type='checkbox'] { width: 18px; height: 18px; min-height: 18px; flex: none; }
+.composer__language label:has(input[type='checkbox']) { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+@container (max-width: 620px) {
+  .pane__session { display: none; }
+  .pane__head > .chip { display: none; }
+}
+@container (max-width: 420px) {
+  .pane__head > .role { display: none; }
+  .pane__state { max-width: 100px; font-size: 10px; padding-inline: 4px; }
+}
+@media (max-width: 1000px) {
+  .mission { overflow-y: auto; }
+  .mission__head, .mission-status { flex: none; }
+  .mission__body { flex: 1 1 240px; min-height: 180px; overflow: auto; }
+  .mission__body > .pane-workbench { flex: 1 1 auto; height: 100%; min-height: 180px; }
+  .composer { max-height: 45%; }
+  .composer__shortcuts { display: none; }
+}
+@media (max-width: 520px) {
+  .composer__actions { flex-wrap: nowrap; }
+  .composer__toggle { max-width: 100px; font-size: 10px; padding-inline: 4px; }
+  .composer textarea, .composer__ghost { font-size: 16px; }
+  .mission__title { flex-basis: 100%; }
+  .mission__title p { max-width: 80vw; }
+}
+.composer { position: relative; }
+.composer__language { flex: none; }
+.composer__language > summary { padding: 0 8px; border-radius: var(--radius-control); font-size: 12px; }
+.composer__language > summary:hover, .composer__language[open] > summary { color: var(--text); background: var(--surface-3); }
+.composer__language > .field { position: absolute; z-index: 30; bottom: 52px; left: 8px; right: 8px; max-height: min(320px, 50vh); overflow-y: auto; padding: 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-3); }
+.composer textarea { min-height: 44px; }
+@media (max-width: 520px) { .composer__language > summary { padding-inline: 4px; font-size: 11px; } }
+.pane-menu { width: min(360px, calc(100vw - 16px)); max-height: min(520px, 65vh); overflow-y: auto; z-index: 30; }
+.pane-menu button { min-height: 44px; }

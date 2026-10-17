@@ -17,7 +17,6 @@ import { PaneView } from './PaneView.tsx'
 import { PaneGrid } from './PaneGrid.tsx'
 import type { Layout, Columns } from '../orbit/paneLayout.ts'
 export type { Layout } from '../orbit/paneLayout.ts'
-import { OrbitCompanion } from './OrbitCompanion.tsx'
 import { MissionProgress } from './MissionProgress.tsx'
 import { useMissionProgress } from '../orbit/useMissionProgress.ts'
 import { missionSignal } from '../orbit/missionStatus.ts'
@@ -148,12 +147,6 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
           <button type="button" aria-pressed={side === 'fluxo'} onClick={() => toggleSide('fluxo')}>Histórico</button>
           <button type="button" aria-pressed={side === 'quadro'} onClick={() => toggleSide('quadro')}><BoardIcon size={14} />Quadro{missionCards.length > 0 && <span> {cardsDone}/{missionCards.length}</span>}</button>
           <button type="button" aria-pressed={browserOpen} onClick={() => toggleSide('navegador')}><GlobeIcon size={14} />Navegador{page && !browserOpen && <span className="dot dot--live" aria-label="página aberta" />}</button>
-          </ActionMenu>
-          {mission.git && (
-            <button className="btn btn--ghost btn--sm" onClick={() => setPrOpen(true)} title={`Branch ${mission.git.branch} (a partir de ${mission.git.base})`}>
-              <BranchIcon size={14} />{mission.git.pr ? `PR #${mission.git.pr.number}` : 'Abrir PR'}
-            </button>
-          )}
           <button type="button" className="btn btn--ghost btn--sm" aria-pressed={side === 'atividades'} onClick={() => toggleSide('atividades')}>Atividades</button>
           {workspace && (
             <button className="btn btn--ghost btn--sm" aria-pressed={side === 'arquivos'} onClick={() => toggleSide('arquivos')} title="O que os agentes mudaram e os arquivos do workspace">
@@ -161,6 +154,12 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
             </button>
           )}
           {!archived && <BudgetChip mission={mission} onEdit={() => setBudgetOpen(true)} />}
+          </ActionMenu>
+          {mission.git && (
+            <button className="btn btn--ghost btn--sm" onClick={() => setPrOpen(true)} title={`Branch ${mission.git.branch} (a partir de ${mission.git.base})`}>
+              <BranchIcon size={14} />{mission.git.pr ? `PR #${mission.git.pr.number}` : 'Abrir PR'}
+            </button>
+          )}
           {!archived && <button className="btn btn--ghost btn--sm" onClick={onAddAgent}><PlusIcon size={14} />Agente</button>}
           <ActionMenu label="Missão">
           <span className="eyebrow">Gerenciar missão</span>
@@ -179,16 +178,11 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
         </div>
       </div>
 
-      <section className="mission-signal" data-state={signal.state} aria-label="Próximo passo da missão">
-        <OrbitCompanion state={signal.state} />
-        <div className="mission-signal__text">
-          <span className="eyebrow">Próximo passo</span>
-          <strong role="status">{signal.title}</strong>
-          <p>{signal.detail}</p>
-          {progress.error && <p className="composer__error" role="alert">{progress.error}</p>}
-        </div>
-        <button type="button" className="btn btn--ghost btn--sm" disabled={progress.connection !== 'open' || progress.loading} onClick={progress.refresh}>{progress.loading ? 'Conferindo…' : 'Conferir agora'}</button>
-      </section>
+      <details className="mission-status" data-state={signal.state}>
+        <summary><strong>{signal.title}</strong><span>Detalhes da missão</span></summary>
+        <div><p>{signal.detail}</p><button type="button" className="btn btn--ghost btn--sm" disabled={progress.connection !== 'open' || progress.loading} onClick={progress.refresh}>{progress.loading ? 'Conferindo…' : 'Conferir agora'}</button></div>
+        {progress.error && <p className="composer__error" role="alert">{progress.error}</p>}
+      </details>
 
       <div className="mission__body">
         {panes.length === 0 ? (

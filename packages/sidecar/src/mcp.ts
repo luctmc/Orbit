@@ -104,8 +104,8 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
   }, guarded(({ sha256, offset, limit }: { sha256: string; offset?: number; limit?: number }) => core.readContext(caller, sha256, offset, limit)))
 
   server.registerTool('skill_catalog', {
-    description: 'Eligible skills for this execution: source, version, content hash and available/selected/loaded states. Metadata only. No skill compliance or native provider visibility guarantee. Cursor is invalidated by catalog/policy changes.',
-    inputSchema: { cursor: z.string().max(100).optional(), limit: z.number().int().min(1).max(50).optional() },
+    description: 'Eligible skills for this execution: source, version, content hash and available/selected/loaded states. Metadata only. No skill compliance or native provider visibility guarantee. Pages default to 15 items; requests above 50 are capped at 50. Follow nextCursor for more. Cursor is invalidated by catalog/policy changes.',
+    inputSchema: { cursor: z.string().max(100).optional(), limit: z.number().int().min(1).optional() },
   }, guarded(({ cursor, limit }: { cursor?: string; limit?: number }) => core.skillCatalog(caller, cursor, limit)))
 
   server.registerTool('skill_load', {

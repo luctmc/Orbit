@@ -1,0 +1,30 @@
+(node:69158) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:69159) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[31m✖ an agent reads a packaged skill through authenticated MCP without executing its content [90m(313.665667ms)[39m[39m
+[34mℹ tests 1[39m
+[34mℹ suites 0[39m
+[34mℹ pass 0[39m
+[34mℹ fail 1[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 654.356792[39m
+
+[31m✖ failing tests:[39m
+
+test at packages/sidecar/test/mcp.test.ts:156:1
+[31m✖ an agent reads a packaged skill through authenticated MCP without executing its content [90m(313.665667ms)[39m[39m
+  AssertionError [ERR_ASSERTION]: oversized requests must be paginated instead of breaking discovery
+      at TestContext.<anonymous> [90m(file:///Users/lucas/Documents/GitHub/Orbit-terminal-parity/[39mpackages/sidecar/test/mcp.test.ts:175:12[90m)[39m
+  [90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
+  [90m    at async Test.run (node:internal/test_runner/test:1409:7)[39m
+  [90m    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)[39m {
+    generatedMessage: [33mfalse[39m,
+    code: [32m'ERR_ASSERTION'[39m,
+    actual: [33mtrue[39m,
+    expected: [33mtrue[39m,
+    operator: [32m'notStrictEqual'[39m,
+    diff: [32m'simple'[39m
+  }
