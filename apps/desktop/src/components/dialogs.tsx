@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { TRANSLATION_LABEL, AGENT_CLIS, MODEL_ID, type AgentCli, type AgentCliForRole, type Effort, type MissionMode, type Squad } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, EFFORT_LABEL, MODE_LABEL } from '../orbit/labels.ts'
-import { AccountSelect, AgentChooser, EffortChoice, ModelSelect, useAgentReadiness } from './agentPickers.tsx'
+import { AccountSelect, AgentChooser, CliSelect, EffortChoice, ModelSelect, useAgentReadiness } from './agentPickers.tsx'
 import { Dialog } from './Dialog.tsx'
 import { BudgetFields, budgetFrom } from './Budget.tsx'
 
@@ -38,8 +38,12 @@ function AgentFields({ value, onChange, label = 'Agente', shell = true }: { valu
       <fieldset className="field">
         <legend>{label}</legend>
         {/* A different agent starts from its own default model, effort and account. */}
-        <AgentChooser label={label} shell={shell} value={value.cli} onChange={(cli) => onChange(cli === value.cli ? value : { cli, model: '', effort: null, accountId: null })} />
+        {label === 'Líder' && value.cli !== 'shell'
+          ? <CliSelect id={`${id}-cli`} label="Agente do líder" value={value.cli} onChange={(cli) => onChange(cli === value.cli ? value : { cli, model: '', effort: null, accountId: null })} />
+          : <AgentChooser label={label} shell={shell} value={value.cli} onChange={(cli) => onChange(cli === value.cli ? value : { cli, model: '', effort: null, accountId: null })} />}
+
       </fieldset>
+      {value.cli !== 'shell' && <AccountSelect id={`${id}-account`} cli={value.cli} value={value.accountId} onChange={setAccount} />}
       {value.cli !== 'shell' && (
         <div className="field">
           <label htmlFor={`${id}-model`}>Modelo</label>
@@ -52,7 +56,7 @@ function AgentFields({ value, onChange, label = 'Agente', shell = true }: { valu
           <EffortChoice cli={value.cli} model={value.model || null} value={value.effort} onChange={setEffort} />
         </fieldset>
       )}
-      {value.cli !== 'shell' && <AccountSelect id={`${id}-account`} cli={value.cli} value={value.accountId} onChange={setAccount} />}
+
     </>
   )
 }
@@ -81,8 +85,8 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   const [objective, setObjective] = useState(savedDraft?.objective ?? '')
   const [mode, setMode] = useState<MissionMode>(savedDraft?.mode ?? 'livre')
   const [squadId, setSquadId] = useState<string | null>(savedDraft?.squadId ?? null)
-  const [lead, setLead] = useState<AgentChoice>(savedDraft ? { cli: savedDraft.lead.cli, model: savedDraft.lead.model ?? '', effort: savedDraft.lead.effort ?? null, accountId: savedDraft.lead.accountId ?? null } : DEFAULT_AGENT)
-  const [adaptiveLead, setAdaptiveLead] = useState(savedDraft?.adaptiveLead ?? true)
+  const [lead, setLead] = useState<AgentChoice>(savedDraft ? { cli: savedDraft.lead.cli, model: savedDraft.lead.model ?? '', effort: savedDraft.lead.effort ?? null, accountId: savedDraft.lead.accountId ?? null } : routing ? { cli: routing.lead.cli, model: routing.lead.model ?? '', effort: routing.lead.effort, accountId: routing.lead.accountId ?? null } : DEFAULT_AGENT)
+  const [adaptiveLead, setAdaptiveLead] = useState(savedDraft?.adaptiveLead ?? false)
   const [worktrees, setWorktrees] = useState(savedDraft?.isolation === 'worktrees')
   const [clis, setClis] = useState<AgentCliForRole[]>(savedDraft?.allowedClis ?? ['claude', 'codex'])
   const readiness = useAgentReadiness()
@@ -109,11 +113,8 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
     setBudgetCost(t.budget?.costUsd ? String(t.budget.costUsd) : '')
   }
 
-  // Each mode suggests its own lead: the squad's, or the task table's for agentic missions.
-  const pickMode = (next: MissionMode) => {
-    setMode(next)
-    if (next === 'agentica' && routing) setLead({ cli: routing.lead.cli, model: routing.lead.model ?? '', effort: routing.lead.effort, accountId: null })
-  }
+  // Changing execution mode must not replace the leader the person just chose.
+  const pickMode = (next: MissionMode) => setMode(next)
   const pickSquad = (squad: Squad) => {
     setSquadId(squad.id)
     setLead({ cli: squad.lead.cli, model: squad.lead.model ?? '', effort: null, accountId: null })
@@ -199,7 +200,8 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
         <input type="checkbox" checked={adaptiveLead} onChange={(e) => setAdaptiveLead(e.target.checked)} />
         <span>Escolher modelo e esforço do líder pelo objetivo</span>
       </label>}
-      {mode === 'agentica' && adaptiveLead ? <p className="note">O Orbit usa a configuração da tabela e reduz os recursos para operações simples. Para fixar modelo, esforço e conta, desligue a escolha automática.</p> : <AgentFields value={lead} onChange={setLead} label={mode === 'livre' ? 'Agente' : 'Líder'} />}
+      <AgentFields value={lead} onChange={(next) => { setLead(next); setAdaptiveLead(false) }} label={mode === 'livre' ? 'Agente' : 'Líder'} />
+      {mode === 'agentica' && <p className="note">Você escolhe o agente, o modelo e a conta do líder. {adaptiveLead ? 'A adaptação pode ajustar modelo e esforço pelo objetivo, mantendo agente e conta. Alterar os campos desliga a adaptação.' : 'O modelo e a conta escolhidos serão usados na execução.'} O padrão de novas missões pode ser salvo em Configurações → Quem faz cada tarefa.</p>}
       {mode === 'agentica' && (
         <fieldset className="field">
           <legend>O maestro pode usar</legend>

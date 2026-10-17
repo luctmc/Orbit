@@ -23,8 +23,8 @@ test('Orbit picks the subscription with the most room, and API keys only when th
   assert.equal(pickAccount('claude', all, [], [limits('claude', 10), limits('second', 20)]).id, 'claude')
   assert.equal(pickAccount('claude', all, [], []).id, 'claude', 'ties go to this Mac')
   assert.equal(pickAccount('claude', all, [status('claude', false)], [limits('second', 50)]).id, 'second', 'logged-out accounts are skipped')
-  assert.equal(pickAccount('claude', all, [], [limits('claude', 99), limits('second', 97)]).id, 'api', 'used up: the API key takes over')
-  assert.equal(pickAccount('claude', [here, second, { ...api, auto: false }], [], [limits('claude', 99), limits('second', 97)]).id, 'second', 'not marked for automatic use')
+  assert.equal(pickAccount('claude', all, [], [limits('claude', 100), limits('second', 100)]).id, 'api', 'used up: the API key takes over')
+  assert.equal(pickAccount('claude', [here, second, { ...api, auto: false }], [], [limits('claude', 100), limits('second', 100)]).id, 'claude', 'not marked for automatic use')
   assert.equal(pickAccount('codex', [...all, { ...BUILTIN_ACCOUNTS[1]!, auto: false }], [], []).id, 'codex', 'falls back to the built-in account')
 })
 

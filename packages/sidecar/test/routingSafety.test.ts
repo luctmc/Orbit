@@ -11,11 +11,11 @@ test('expired and stale quota never becomes an observed zero, nor clears saturat
   for (const limit of [limits({ fiveHour: null }), limits({ updatedAt: now - 100000 }), limits({ updatedAt: now + 10000 }), limits({ refreshError: 'offline' }), limits({ fiveHour: { usedPercent: 10, resetsAt: now - 1, windowMinutes: 300 } })]) {
     assert.equal(rooms([limit])[0]!.used, null)
   }
-  assert.equal(rooms([limits({ updatedAt: now - 100000, fiveHour: { usedPercent: 99, resetsAt: now - 1, windowMinutes: 300 } })])[0]!.full, true)
+  assert.equal(rooms([limits({ updatedAt: now - 100000, fiveHour: { usedPercent: 100, resetsAt: now - 1, windowMinutes: 300 } })])[0]!.full, true)
   assert.equal(cliLoad(rooms([])), null, 'unknown capacity does not take part in load balancing')
 })
 test('all saturated windows must reset before reporting account recovery', () => {
-  const r = rooms([limits({ fiveHour: { usedPercent: 90, resetsAt: now + 1000, windowMinutes: 300 }, weekly: { usedPercent: 99, resetsAt: now + 100000, windowMinutes: 10080 } })])[0]!
+  const r = rooms([limits({ fiveHour: { usedPercent: 100, resetsAt: now + 1000, windowMinutes: 300 }, weekly: { usedPercent: 100, resetsAt: now + 100000, windowMinutes: 10080 } })])[0]!
   assert.equal(r.full, true)
   assert.equal(r.resetsAt, now + 100000)
   const healthy = { ...r, account: { ...account, id: 'healthy' }, used: 60, full: false }

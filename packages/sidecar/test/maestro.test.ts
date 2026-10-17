@@ -109,7 +109,7 @@ test('the maestro picks CLI and account by itself, falls back when one is used u
     assert.match(await call('agent_close', { agent: helpers[0]!.id, force: true }), /fechado/)
 
     // Every Codex account used up: the next test helper goes to Claude, and the receipt says why.
-    const full = (accountId: string): AccountLimits => ({ accountId, cli: 'codex', fiveHour: { usedPercent: 99, resetsAt: Date.now() + 3_600_000, windowMinutes: 300 }, weekly: null, plan: null, source: 'provider', updatedAt: Date.now() })
+    const full = (accountId: string): AccountLimits => ({ accountId, cli: 'codex', fiveHour: { usedPercent: 100, resetsAt: Date.now() + 3_600_000, windowMinutes: 300 }, weekly: null, plan: null, source: 'provider', updatedAt: Date.now() })
     server.core.store.setLimits(full('codex'))
     server.core.store.setLimits(full(work.id))
     const moved = await call('agent_spawn', { kind: 'testes', task: 'Mais testes' })

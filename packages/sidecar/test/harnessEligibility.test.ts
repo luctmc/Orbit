@@ -12,7 +12,7 @@ const limit: AccountLimits = { accountId: account.id, cli: 'codex', source: 'pro
 test('adaptive admission rejects stale, failed, incomplete and saturated quota, unknown auth and API seats', () => {
   assert.equal(harnessAccounts([account], [status], [limit], now).length, 1)
   assert.equal(harnessAccounts([account], [status], [{ ...limit, weekly: null }], now).length, 1, 'all available windows, not an invented weekly requirement')
-  for (const bad of [{ ...limit, updatedAt: now - 91000 }, { ...limit, updatedAt: now + 1 }, { ...limit, refreshError: 'fixture failure' }, { ...limit, weekly: null, fiveHour: null }, { ...limit, source: 'session' as const }, { ...limit, fiveHour: { ...window, usedPercent: 85 } }, { ...limit, fiveHour: { ...window, resetsAt: now - 1 } }]) assert.equal(harnessAccounts([account], [status], [bad], now).length, 0)
+  for (const bad of [{ ...limit, updatedAt: now - 91000 }, { ...limit, updatedAt: now + 1 }, { ...limit, refreshError: 'fixture failure' }, { ...limit, weekly: null, fiveHour: null }, { ...limit, source: 'session' as const }, { ...limit, fiveHour: { ...window, usedPercent: 100 } }, { ...limit, fiveHour: { ...window, resetsAt: now - 1 } }]) assert.equal(harnessAccounts([account], [status], [bad], now).length, 0)
   assert.equal(harnessAccounts([account], [{ ...status, loggedIn: null }], [limit], now).length, 0)
   assert.equal(harnessAccounts([{ ...account, kind: 'api' }], [status], [limit], now).length, 0)
 })

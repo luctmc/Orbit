@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { AGENT_CLIS, MODEL_ID, ROUTING_LIMITS, type AgentCliForRole, type AgentSeat, type Routing, type TaskType } from '@orbit/protocol'
 import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { CLI_LABEL, EFFORT_LABEL, suggestedTaskSeat } from '../orbit/labels.ts'
-import { CliSelect, EffortCycle, ModelSelect, SkillsField } from './agentPickers.tsx'
+import { AccountSelect, CliSelect, EffortCycle, ModelSelect, SkillsField } from './agentPickers.tsx'
 import { AccountsPanel } from './AccountsPanel.tsx'
 import { ClisPanel } from './ClisPanel.tsx'
 import { SkillsPanel } from './SkillsPanel.tsx'
@@ -110,10 +110,12 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
           <fieldset className="routing__lead">
             <legend>Líder padrão das missões agênticas</legend>
             <div className="squads__row">
-              <CliSelect id={`${uid}-lead-cli`} label="Agente do líder" value={draft.lead.cli} onChange={(cli) => edit({ ...draft, lead: suggestedTaskSeat(catalog, cli, 'lead') })} />
+              <CliSelect id={`${uid}-lead-cli`} label="Agente do líder" value={draft.lead.cli} onChange={(cli) => edit({ ...draft, lead: { ...suggestedTaskSeat(catalog, cli, 'lead'), accountId: null } })} />
               <ModelSelect id={`${uid}-lead`} className="routing__model" label="Modelo do líder" compact cli={draft.lead.cli} value={draft.lead.model} onChange={(model) => edit({ ...draft, lead: { ...draft.lead, model } })} />
               <EffortCycle label="Líder" cli={draft.lead.cli} model={draft.lead.model} value={draft.lead.effort} onChange={(effort) => edit({ ...draft, lead: { ...draft.lead, effort } })} />
             </div>
+            <AccountSelect id={`${uid}-lead-account`} cli={draft.lead.cli} value={draft.lead.accountId ?? null} onChange={(accountId) => edit({ ...draft, lead: { ...draft.lead, accountId } })} />
+            <p className="note">Modelo e conta salvos para novas missões. A conta automática escolhe apenas entre as contas deste agente; uma conta explícita é mantida mesmo com o uso automático desabilitado.</p>
           </fieldset>
 
           <details className="routing__policy"><summary>Regras de frontend, visual, motion e skills</summary>
@@ -186,7 +188,7 @@ export function RoutingDialog({ onClose, initialTab = 'routing' }: { onClose: ()
             }}>Restaurar padrão</button>
             <span className="spacer" />
             {error && <span className="form-error" role="alert">{error}</span>}
-            {saved && !dirty && <span className="muted" role="status">Salvo. Vale para os próximos ajudantes.</span>}
+            {saved && !dirty && <span className="muted" role="status">Salvo. Vale para novas missões e próximos ajudantes.</span>}
             <button type="submit" className="btn btn--primary btn--sm" disabled={!dirty}>Salvar tabela</button>
           </div>
         </form>
