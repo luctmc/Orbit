@@ -1,0 +1,72 @@
+{
+  "mode": "installed sidecar; real Codex CLI",
+  "checks": [
+    {
+      "name": "authenticated Codex account exists",
+      "pass": true
+    },
+    {
+      "name": "requested model available in native catalog",
+      "pass": true
+    },
+    {
+      "name": "leader opens without objective",
+      "pass": true
+    },
+    {
+      "name": "native launch receipt preserves explicit model and low effort",
+      "pass": true
+    },
+    {
+      "name": "native receipt names original execution and acceptance time",
+      "pass": true
+    },
+    {
+      "name": "duplicate request returns identical receipt",
+      "pass": true
+    },
+    {
+      "name": "real provider answers QA marker",
+      "pass": true
+    },
+    {
+      "name": "real helper CLI reports session readiness",
+      "pass": true
+    },
+    {
+      "name": "real helper spawns with independent process and epoch",
+      "pass": true
+    }
+  ],
+  "errors": [],
+  "creationRequestId": "0c2a00e2-5568-4b57-ab9b-8f34f7dce968",
+  "lead": {
+    "id": 52,
+    "model": "gpt-6-luna",
+    "effort": "low",
+    "executionEpoch": "1209449e-59aa-4078-b11c-7682f0e928ef",
+    "receipt": {
+      "type": "pane.submitted",
+      "requestId": "f1ff42f7-f11b-43fa-8882-787c31c466a8",
+      "paneId": 52,
+      "executionEpoch": "1209449e-59aa-4078-b11c-7682f0e928ef",
+      "acceptedAt": 1792275620178
+    },
+    "responseMarker": "ORBIT_QA_RECIBO_OK"
+  },
+  "helper": {
+    "id": 53,
+    "executionEpoch": "f87cbba9-7ebc-4d99-8f76-a36bf5e0e17f",
+    "pid": 57635,
+    "applied": {
+      "model": "gpt-6-luna",
+      "effort": "low"
+    }
+  },
+  "cleanup": {
+    "missionId": "4d60ed84-36d4-4338-9855-a8285f620e6a",
+    "workspaceId": "d40d0b7a-fa65-4402-8df0-488f3aeb139d",
+    "action": "QA mission archived and QA workspace entry removed; user workspaces unchanged; provider conversations retained",
+    "workspacePath": "isolated /private/tmp/orbit-native-qa-* (avoids macOS protected Documents for programmatic fixture)"
+  }
+}

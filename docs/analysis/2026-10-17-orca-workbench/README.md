@@ -121,3 +121,39 @@ aprovados. Jornada Chromium 42/42 e WebKit 42/42, com envio desktop e 375 px,
 troca de destinatário em Foco, continuidade de nós xterm/um attach por pane,
 rascunhos por destinatário e missão, recarga com seleção e modo conversa restaurados.
 A auditoria adicional bloqueia entrega se o processo muda enquanto a tradução prepara o texto.
+
+## Instalação e execução nativa
+
+Build local **0.2.24**, fonte de implementação `ca0f78bd43f0a1a4c95c3ba31d1bb771bf1c4624`,
+concluído por `npm run release -- 0.2.24` (sem --publish). Convenção existente preservada:
+cinco arquivos de versão ajustados só durante o build e restaurados byte a byte depois.
+O recurso de avisos MIT foi mantido na configuração Tauri. Não houve novo código de app
+após esse build; apenas evidências/scripts de verificação foram adicionados.
+
+`/Applications/Orbit.app` atualizado diretamente, assinatura ad hoc verificada com
+`codesign --verify --deep --strict --all-architectures`. Os **64 arquivos** instalados são
+idênticos ao bundle local (installed-manifest.json). Executável em execução mapeia o inode
+instalado, e seu filho é o sidecar empacotado. Ver installed.json para hashes SHA256 completos.
+Os **1.118 arquivos privados** sob ~/.orbit mantiveram os hashes durante a troca do bundle;
+nenhum diretório de dados foi apagado ou recriado. Logins Claude e Codex continuam válidos.
+A primeira leitura após `open` ocorreu antes de o filho iniciar; a seguinte comprovou o runtime.
+
+`native-live.json`: **9 verificações nativas**, sem erros, no sidecar instalado e Codex real.
+Líder sem objetivo; solicitado/aplicado GPT-6 Luna low; recibo PTY com epoch e horário;
+repetir o requestId devolve o mesmo recibo; resposta **do agente** contém ORBIT_QA_RECIBO_OK
+(não foi contada a mensagem da pessoa); reader observou modelo gpt-6-luna e effort low como
+**execution-context**, sem afirmar roteamento interno do provedor. Ajudante tem PID e epoch
+próprios e informou sessionId real antes de encerrar o ensaio. Missão QA arquivada, entrada
+QA de workspace removida; conversas da CLI preservadas. Nenhuma missão do usuário foi alterada.
+
+Limite encontrado: na fixture programática dentro de Documents, o login shell ficou parado
+em `/usr/libexec/path_helper`, bloqueado em open/fts_open, antes de chegar ao Codex. O journal
+confirmou criação e permitiu reconciliar a operação sem duplicá-la. Em diretório isolado sob
+/private/tmp, o fluxo real passou. Isso sugere controle de acesso do macOS à pasta protegida;
+a causa TCC não foi certificada nem contornada alterando permissões/configurações do usuário.
+Portanto a jornada real não certifica a seleção de pasta Documents por diálogo nativo.
+
+UI verificada visualmente em Chromium/WebKit; pixels da janela WKWebView nativa não foram
+capturados nesta execução. Nenhuma captura ou interação de tela do Overclock foi usada.
+CI GitHub da implementação passou (typecheck, 313+39 testes, frontend/sidecar build e cargo check).
+A assinatura local é ad hoc; não há alegação de notarização Apple.
