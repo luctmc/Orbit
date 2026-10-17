@@ -11,12 +11,13 @@ import { OrbitCore } from '../src/core.ts'
 import type { AgentLaunch } from '../src/command.ts'
 import './helpers.ts'
 
-test('focused Claude uses only the explicit MCP config and preserves hook settings and sandbox policy', () => {
+test('focused Claude uses only the explicit MCP config and preserves hook settings with default bypass', () => {
   const launch = { cli: 'claude' as const, model: 'claude-haiku-5-5', toolProfile: 'orbit' as const, mcpConfigPath: '/private/pane/mcp.json', settingsPath: '/private/pane/settings.json' }
   const focused = buildCommand(launch, '/bin/sh').args[2]!
   assert.match(focused, /--strict-mcp-config/)
+  assert.match(focused, /--dangerously-skip-permissions/)
   assert.match(focused, /--settings '\/private\/pane\/settings.json'/)
-  assert.doesNotMatch(focused, /--bare|--safe-mode|--disable-slash|skip-permissions/)
+  assert.doesNotMatch(focused, /--bare|--safe-mode|--disable-slash/)
   assert.doesNotMatch(buildCommand({ ...launch, toolProfile: 'inherit' }, '/bin/sh').args[2]!, /--strict-mcp-config/)
   assert.throws(() => buildCommand({ cli: 'claude', model: null, toolProfile: 'orbit' }, '/bin/sh'), /MCP|config/i)
 })
@@ -28,7 +29,7 @@ test('focused Codex keeps native read-only sandbox and the Orbit endpoint throug
   assert.match(line, /bearer_token_env_var/)
   assert.doesNotMatch(line, /--add-dir|danger-full-access|--disable plugins/)
   const inherited = buildCommand({ cli: 'codex', model: null, toolProfile: 'inherit' }, '/bin/sh').args[2]!
-  assert.equal(inherited, 'codex')
+  assert.equal(inherited, 'codex --dangerously-bypass-approvals-and-sandbox')
 })
 
 test('tool profile defaults to Orbit, persists inheritance and preserves old-client settings updates', () => {
@@ -71,6 +72,9 @@ test('Codex preflight refuses ambiguous metadata, preserves caller args/env and 
   assert.ok(observed.args.includes('apps'))
   assert.ok(!observed.args.includes('plugins'), 'plugin hooks and instructions are preserved')
   assert.doesNotMatch(result.stdout + result.stderr, /fixture-secret/)
+  const bypass = spawnSync(process.execPath, [helper, '--', 'resume', '--dangerously-bypass-approvals-and-sandbox', '--', '12345678-1234-1234-1234-123456789abc'], { env, encoding: 'utf8', timeout: 5000 })
+  assert.equal(bypass.status, 23, bypass.stderr)
+  assert.deepEqual(JSON.parse(bypass.stdout).args.slice(-4), ['resume', '--dangerously-bypass-approvals-and-sandbox', '--', '12345678-1234-1234-1234-123456789abc'])
 })
 
 test('profile changes affect the next native opening, retain sandbox restrictions and leave other adapters inherited', async () => {
@@ -94,7 +98,7 @@ test('profile changes affect the next native opening, retain sandbox restriction
     const currentLead = core.store.pane(lead.id)!
     const { pane: worker } = await core.spawnHelper(currentLead, { cli: 'codex', model: 'gpt-6-luna', task: 'Implement', title: 'Worker' })
     assert.equal(worker.toolProfile, 'orbit')
-    assert.equal(launches.at(-1)!.sandbox, 'workspace-write')
+    assert.equal(launches.at(-1)!.sandbox, 'danger-full-access')
     const { pane: other } = await core.spawnHelper(currentLead, { cli: 'gemini', model: null, readOnly: true, task: 'Read', title: 'Other adapter' })
     assert.equal(other.toolProfile, 'inherit')
   } finally { await core.shutdown() }

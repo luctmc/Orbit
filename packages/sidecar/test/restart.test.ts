@@ -12,10 +12,10 @@ const SESSION = '3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f'
 
 test('resuming continues the CLI conversation; the role is not sent again, only a new message', () => {
   const claude = buildCommand({ cli: 'claude', model: 'opus', rolePromptPath: '/p/role.md', resume: SESSION }, '/bin/zsh').args[2]!
-  assert.match(claude, new RegExp(`^claude --resume ${SESSION} --model opus`))
+  assert.match(claude, new RegExp(`^claude --dangerously-skip-permissions --resume ${SESSION} --model opus`))
   assert.doesNotMatch(claude, /task\.md/)
   const codex = buildCommand({ cli: 'codex', model: 'gpt-6', rolePromptPath: '/p/role.md', resume: SESSION }, '/bin/zsh').args[2]!
-  assert.match(codex, new RegExp(`^codex resume -m gpt-6 .*-- ${SESSION}`))
+  assert.match(codex, new RegExp(`^codex resume --dangerously-bypass-approvals-and-sandbox -m gpt-6 .*-- ${SESSION}`))
   assert.doesNotMatch(codex, /role\.md|task\.md/)
   // The lead resuming a helper: the message goes as the next turn of the same conversation.
   const next = buildCommand({ cli: 'codex', model: null, taskPath: '/p/task.md', rolePromptPath: '/p/role.md', resume: SESSION }, '/bin/zsh').args[2]!
