@@ -302,7 +302,7 @@ export class OrbitClient {
   }
 
   private receive(message: ServerMessage): void {
-    if (message.type === 'mission.checked') {
+    if (message.type === 'mission.checked' || message.type === 'workspace.saved' || message.type === 'workspace.error') {
       for (const answer of [...this.answers]) answer(message)
       return
     }
