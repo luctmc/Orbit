@@ -35,7 +35,7 @@ export interface AgentLaunch {
   /** Folder with the `orbit` command, put first on the agent's PATH. */
   binDir?: string
   /** Codex: explicit activity permissions, independent of the user's CLI default. */
-  sandbox?: 'read-only' | 'workspace-write'
+  sandbox?: 'read-only' | 'workspace-write' | 'danger-full-access'
 }
 
 /** What each CLI runs to sign in an account. */
@@ -88,7 +88,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
     const prompt = firstPrompt()
     if (prompt) parts.push('--prompt-interactive', prompt)
   } else if (launch.cli === 'claude') {
-    parts.push('claude')
+    parts.push('claude', '--dangerously-skip-permissions')
     if (resume) parts.push('--resume', resume)
     if (model) parts.push('--model', model)
     if (effort) parts.push('--effort', effort)
@@ -108,7 +108,10 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
       parts.push(shellQuote(process.execPath), shellQuote(fileURLToPath(new URL('../hooks/codex-profile.mjs', import.meta.url))), '--')
     } else parts.push('codex')
     if (resume) parts.push('resume')
-    if (launch.sandbox) parts.push('-s', launch.sandbox)
+    // Bypass is an Orbit default on every start/resume, without editing user CLI config.
+    // Explicit read-only executions retain their sandbox and deny commands that need approval.
+    if (launch.sandbox === 'read-only') parts.push('-s', 'read-only', '-a', 'never')
+    else parts.push('--dangerously-bypass-approvals-and-sandbox')
     if (model) parts.push('-m', model)
     if (effort) parts.push('-c', shellQuote(`model_reasoning_effort="${effort}"`))
     // --add-dir requests writable roots; Codex rejects it in read-only sessions. The role already

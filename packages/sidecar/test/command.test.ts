@@ -29,9 +29,9 @@ test('a failed CLI preserves its exit status instead of masquerading as a live s
 test('agent panes run the CLI with the model and preserve its lifecycle', () => {
   assert.deepEqual(buildCommand({ cli: 'claude', model: 'claude-opus-5-5' }, '/bin/zsh'), {
     file: '/bin/zsh',
-    args: ['-l', '-c', `claude --model claude-opus-5-5`],
+    args: ['-l', '-c', `claude --dangerously-skip-permissions --model claude-opus-5-5`],
   })
-  assert.deepEqual(buildCommand({ cli: 'codex', model: null }, '/bin/bash').args, ['-l', '-c', `codex`])
+  assert.deepEqual(buildCommand({ cli: 'codex', model: null }, '/bin/bash').args, ['-l', '-c', `codex --dangerously-bypass-approvals-and-sandbox`])
 })
 
 test('model ids that could inject shell syntax are rejected', () => {
@@ -84,4 +84,25 @@ test('pane env drops Orbit secrets and adds pane identity', () => {
   assert.equal(env.PATH, '/usr/bin')
   assert.equal(env.ORBIT_PANE_ID, '7')
   assert.equal(env.TERM, 'xterm-256color')
+})
+
+test('bypass defaults survive fresh/resumed panes and both MCP profiles without touching login or other providers', () => {
+  const resumeId = '12345678-1234-1234-1234-123456789abc'
+  for (const cli of ['claude', 'codex'] as const) {
+    for (const resume of [undefined, resumeId]) {
+      for (const toolProfile of ['inherit', 'orbit'] as const) {
+        const line = buildCommand({ cli, model: null, resume, toolProfile,
+          mcpUrl: 'http://127.0.0.1:4317/mcp', mcpConfigPath: '/tmp/mcp.json' }, '/bin/sh').args[2]!
+        assert.match(line, cli === 'claude' ? /--dangerously-skip-permissions/ : /--dangerously-bypass-approvals-and-sandbox/)
+        assert.doesNotMatch(line, /-s workspace-write|--ask-for-approval on-request/)
+        if (resume) assert.ok(line.includes(resume))
+      }
+    }
+    const login = buildCommand({ cli, model: null, login: true }, '/bin/sh').args[2]!
+    assert.equal(login, cli === 'claude' ? 'claude auth login' : 'codex login')
+  }
+  for (const cli of ['gemini', 'antigravity'] as const) {
+    const line = buildCommand({ cli, model: null }, '/bin/sh').args[2]!
+    assert.equal(line, cli === 'gemini' ? 'gemini' : 'agy')
+  }
 })

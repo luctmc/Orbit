@@ -2825,10 +2825,9 @@ export class OrbitCore {
     if (request.cli === 'codex') launch.disabledMcp = codexDisabledMcp(this.store.disabledCatalog())
     launch.toolProfile = toolProfile
     // Codex has no hooks to refuse edits: an orchestrating lead and read-only kinds run in its
-    // read-only sandbox, where any file change needs the person's approval.
-    // Writable helpers must explicitly request their bounded workspace policy too. Leaving it
-    // implicit can inherit read-only, which rejects --add-dir before the CLI even starts.
-    if (request.cli === 'codex') launch.sandbox = isReadOnly ? 'read-only' : 'workspace-write'
+    // read-only sandbox. Approval is disabled, so attempted writes fail without prompting.
+    // All writable executions use the requested bypass default, including restarts/resumes.
+    if (request.cli === 'codex') launch.sandbox = isReadOnly ? 'read-only' : 'danger-full-access'
     if (options.resume) launch.resume = options.resume
 
     let pane: Pane
