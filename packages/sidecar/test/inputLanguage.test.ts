@@ -259,3 +259,46 @@ test('an expanded translation is never silently truncated before initial mission
     assert.equal(f.core.store.snapshot().missions.length, count)
   } finally { await f.close() }
 })
+
+test('mission receipt queries never translate or launch and recover only proven terminal admission failures', async () => {
+  let calls = 0
+  const f = await fixture(async () => { calls++; throw new Error('must never translate') })
+  try {
+    const journal = new InputJournal(f.root), scope = `new-${f.workspace.id}`
+    const records = [
+      ['legacy-quota', { state: 'submitting', error: 'Não há conta do Claude com folga para abrir o agente: todas as contas estão no limite.' }, 'failed'],
+      ['uncertain', { state: 'submitting', error: 'PTY interrupted' }, 'pending'],
+      ['translation', { state: 'translating' }, 'pending'],
+      ['failed', { state: 'failed', error: 'Rejected' }, 'failed'],
+      ['acked', { state: 'acked', missionId: f.pane.missionId }, 'acked'],
+    ] as const
+    const launches = f.launches.length
+    for (const [id, value, expected] of records) {
+      const record = { fingerprint: 'immutable', original: 'Original', ...value }
+      journal.save(scope, id, record)
+      const result = await f.send({ type: 'mission.check', workspaceId: f.workspace.id, requestId: id })
+      assert.equal(result.type, 'mission.checked'); assert.equal(result.state, expected)
+      assert.deepEqual(journal.get(scope, id), record, 'consultation preserves original journal')
+    }
+    assert.equal((await f.send({ type: 'mission.check', workspaceId: f.workspace.id, requestId: 'missing' })).state, 'missing')
+    assert.equal(calls, 0); assert.equal(f.launches.length, launches)
+  } finally { await f.close() }
+})
+
+test('a quota admission rejection is terminal, preserves original, and never repeats the failed launch', async () => {
+  let translations = 0
+  const f = await fixture(async () => { translations++; throw new Error('unexpected translation') })
+  try {
+    const now = Date.now()
+    for (const account of f.core.store.accounts().filter(a => a.cli === 'claude')) f.core.store.setLimits({ accountId: account.id, cli: account.cli, source: 'provider', fiveHour: { usedPercent: 100, resetsAt: now + 3600000, windowMinutes: 300 }, weekly: null, updatedAt: now, plan: null })
+    const message = { type: 'mission.create', workspaceId: f.workspace.id, title: 'Quota QA', objective: '', mode: 'livre', requestId: 'quota-refused', lead: { cli: 'claude', model: null, title: '' } } as const
+    const launches = f.launches.length
+    const first = await f.send(message)
+    assert.equal(first.type, 'mission.create.error'); assert.equal(first.pending, false); assert.match(first.message, /Não há conta/)
+    const journal = new InputJournal(f.root).get(`new-${f.workspace.id}`, message.requestId)!
+    assert.equal(journal.state, 'failed'); assert.equal(journal.original, '')
+    assert.equal((await f.send(message)).pending, false)
+    assert.equal((await f.send({ type: 'mission.check', workspaceId: f.workspace.id, requestId: message.requestId })).state, 'failed')
+    assert.equal(f.launches.length, launches); assert.equal(translations, 0)
+  } finally { await f.close() }
+})

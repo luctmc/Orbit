@@ -1,4 +1,7 @@
 import { InputJournal, inputFingerprint, translateCodex, UncertainTranslation, RESPONSE_LANGUAGE, type InputRecord, type Translate } from './inputLanguage.ts'
+
+/** Admission refused before account preparation or any PTY launch. */
+class AgentAdmissionError extends Error {}
 import { readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { needsDelivery, noticeText } from './deliveryQueue.ts'
@@ -1299,7 +1302,8 @@ export class OrbitCore {
       try { await work(record) }
       catch (error) {
         // Once PTY paste/spawn begins, the result can be uncertain. Never repeat it.
-        if (record.state !== 'submitting' && !(error instanceof UncertainTranslation)) record.state = 'failed'
+        const admissionRejected = scope.startsWith('new-') && error instanceof AgentAdmissionError
+        if (admissionRejected || (record.state !== 'submitting' && !(error instanceof UncertainTranslation))) record.state = 'failed'
         record.error = error instanceof Error ? error.message : String(error)
         this.inputJournal.save(scope, requestId, record)
       }
@@ -1384,6 +1388,22 @@ export class OrbitCore {
 
   handle(message: ClientMessage, reply: (message: ServerMessage) => void = this.broadcast): void | Promise<void> {
     switch (message.type) {
+      case 'mission.check': {
+        try {
+          const scope = `new-${message.workspaceId}`
+          const record = this.inputJournal.get(scope, message.requestId)
+          const running = this.inputInFlight.has(`${scope}/${message.requestId}`)
+          // v0.2.20 marked submission before account admission. This exact rejection is
+          // thrown before account preparation or PTY launch; reading it never retries work.
+          const rejected = !running && record?.state === 'submitting' && /^Não há conta do .+ com folga para abrir o agente: /.test(record.error ?? '')
+          const state = !record ? 'missing' : running ? 'pending' : record.state === 'acked' ? 'acked' : record.state === 'failed' || rejected ? 'failed' : 'pending'
+          reply({ type: 'mission.checked', requestId: message.requestId, state, missionId: record?.missionId,
+            message: state === 'acked' ? 'Pedido anterior confirmado. Confira a lista de missões antes de lançar outra.' : state === 'failed' ? record?.error ?? 'Pedido anterior rejeitado; você pode corrigir o rascunho.' : state === 'missing' ? 'O motor não encontrou o recibo. O pedido continua incerto; nenhum agente foi iniciado por esta consulta.' : record?.error ?? 'Pedido ainda incerto. Confira a lista de missões; esta consulta não repete a abertura.' })
+        } catch (error) {
+          reply({ type: 'mission.checked', requestId: message.requestId, state: 'pending', message: error instanceof Error ? error.message : String(error) })
+        }
+        return
+      }
       case 'mission.progress': {
         const requestId = typeof message.requestId === 'string' ? message.requestId.slice(0, 100) : ''
         try {
@@ -2709,7 +2729,7 @@ export class OrbitCore {
       }
       if (choice.exhausted || !choice.account) {
         const back = choice.backAt ? ` A primeira volta ${untilText(choice.backAt)}.` : ''
-        throw new Error(`Não há conta do ${CLI_LABEL[request.cli]} com folga para abrir o agente: ${choice.reason}.${back}`)
+        throw new AgentAdmissionError(`Não há conta do ${CLI_LABEL[request.cli]} com folga para abrir o agente: ${choice.reason}.${back}`)
       }
       chosen = choice.account
       receipt.push(`conta: ${choice.reason}`)

@@ -78,6 +78,8 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   const [allowOriginal, setAllowOriginal] = useState(savedDraft?.allowOriginal ?? false)
   const [launching, setLaunching] = useState(false)
   const [pending, setPending] = useState(client.inputPending(`mission-${workspaceId}`))
+  const [checking, setChecking] = useState(false)
+  const [receipt, setReceipt] = useState<string | null>(null)
   const templates = allTemplates.filter((t) => t.workspaceId === null || t.workspaceId === workspaceId).sort((a, b) => a.name.localeCompare(b.name))
   const [templateId, setTemplateId] = useState('')
   const [cards, setCards] = useState<string[]>(savedDraft?.cards ?? [])
@@ -93,6 +95,20 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   const [budgetTokens, setBudgetTokens] = useState(savedDraft?.budget?.tokens ? String(savedDraft.budget.tokens / 1000) : '')
   const [budgetCost, setBudgetCost] = useState(savedDraft?.budget?.costUsd ? String(savedDraft.budget.costUsd) : '')
   const [error, setError] = useState<string | null>(null)
+
+  const checkPending = useCallback(async () => {
+    setChecking(true)
+    try {
+      const result = await client.checkPendingMission(workspaceId)
+      setReceipt(result.message)
+      setError(null)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { setChecking(false); setPending(client.inputPending(`mission-${workspaceId}`)) }
+  }, [client, workspaceId])
+
+  useEffect(() => {
+    if (client.inputPending(`mission-${workspaceId}`)) void checkPending()
+  }, [client, workspaceId, checkPending])
 
   useEffect(() => { client.missionDrafts.set(workspaceId, { workspaceId, title, objective, mode, adaptiveLead, squadId, isolation: worktrees ? 'worktrees' : null, cards, allowedClis: clis, budget: budgetFrom(budgetTokens, budgetCost), lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' }, translationAccountId: translationAccountId || undefined, allowOriginal }) }, [client, workspaceId, title, objective, mode, adaptiveLead, squadId, worktrees, cards, clis, budgetTokens, budgetCost, lead, translationAccountId, allowOriginal])
 
@@ -121,19 +137,23 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   }
 
   return (
-    <Dialog eyebrow={`Nova missão · ${workspaceName}`} title="O que vamos fazer?" submitLabel={pending ? "Conferir pedido" : "Lançar missão"} busy={launching} submitDisabled={launching} onClose={onClose} onSubmit={async () => {
+    <Dialog eyebrow={`Nova missão · ${workspaceName}`} title="O que vamos fazer?" submitLabel={checking ? 'Consultando pedido…' : pending ? 'Conferir pedido' : 'Lançar missão'} busy={launching} submitDisabled={launching || checking} onClose={onClose} onSubmit={async () => {
+      if (launching || checking) return
+      if (client.inputPending(`mission-${workspaceId}`)) { await checkPending(); return }
       if (!title.trim()) return setError('Dê um título para a missão.')
       if (mode === 'squad' && !squadId) return setError('Escolha o squad da missão.')
       if (invalidModel(lead)) return setError('Modelo inválido: use só letras, números, ponto, hífen, barra ou dois-pontos.')
       setLaunching(true)
       try {
-      await (pending ? client.checkPendingInput(`mission-${workspaceId}`) : client.createMission({ translationAccountId: translationAccountId || undefined, allowOriginal, workspaceId, title, objective, mode, adaptiveLead: mode === 'agentica' && adaptiveLead, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, cards, allowedClis: clis, budget: budgetFrom(budgetTokens, budgetCost), lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } }))
+      await client.createMission({ translationAccountId: translationAccountId || undefined, allowOriginal, workspaceId, title, objective, mode, adaptiveLead: mode === 'agentica' && adaptiveLead, squadId: mode === 'squad' ? squadId : null, isolation: worktrees ? 'worktrees' : null, cards, allowedClis: clis, budget: budgetFrom(budgetTokens, budgetCost), lead: { cli: lead.cli, model: modelOrNull(lead), effort: lead.cli === 'shell' ? null : lead.effort, accountId: lead.accountId, title: '' } })
       client.missionDrafts.delete(workspaceId)
       onClose()
       } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
       finally { setLaunching(false); setPending(client.inputPending(`mission-${workspaceId}`)) }
     }}>
-      <fieldset disabled={launching || pending} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      {pending && <p className="note note--warn" role="status">Há um pedido anterior sem confirmação. Você pode editar este rascunho; “Conferir pedido” consulta apenas o envio anterior e não abre agentes.</p>}
+      {receipt && <p className="note" role="status">{receipt}</p>}
+      <fieldset disabled={launching} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       {settings?.agentsInEnglish && <div className="field">
         <label htmlFor="mission-translator">Traduzir objetivo para inglês · {TRANSLATION_LABEL}</label>
         <select id="mission-translator" disabled={allowOriginal} value={translationAccountId} onChange={e => setTranslationAccountId(e.target.value)}>
