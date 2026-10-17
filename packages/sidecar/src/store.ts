@@ -361,7 +361,7 @@ export class Store {
   }
 
   /** Reserve the pane number and attempt in one durable commit before any spawn side effect. */
-  reserveActivity(input: { missionId: string; key: string; title: string; contractHash: string; acceptance: string[]; retryReason: string | null; assignedBy: number; requiresDelivery: boolean; dependencies?: ActivityRecord['dependencies'] }) {
+  reserveActivity(input: { missionId: string; key: string; title: string; contractHash: string; requestHash?: string; acceptance: string[]; retryReason: string | null; assignedBy: number; requiresDelivery: boolean; dependencies?: ActivityRecord['dependencies'] }) {
     return this.transaction(() => {
       const ledger = this.state.activityLedger!
       let activity = ledger.activities.find(a => a.missionId === input.missionId && a.key === input.key)
@@ -370,9 +370,12 @@ export class Store {
         const replay = input.retryReason ? ledger.attempts.find(a => a.activityId === activity!.id && a.retryReason === input.retryReason) : current
         if (replay) {
           if (replay.contractHash !== input.contractHash) throw new Error('O contrato ou critério da atividade mudou. Use retryReason com uma justificativa nova para criar uma revisão explícita.')
+          if (input.requestHash && replay.requestHash !== input.requestHash) throw new Error(replay.requestHash
+            ? 'O pedido da atividade mudou (instruções, modelo, esforço ou dificuldade). Use retryReason com uma justificativa nova; o trabalho anterior não foi reutilizado.'
+            : 'Pedido antigo sem fingerprint verificável. Consulte activity_status e os resultados; use agent_resume para continuar ou retryReason com justificativa nova para revisar. Nenhum agente novo foi aberto.')
           return { activity: structuredClone(activity), attempt: structuredClone(replay), reused: true }
         }
-        if (activity.contractHash !== input.contractHash) {
+        if (activity.contractHash !== input.contractHash || input.requestHash && current.requestHash !== input.requestHash) {
           activity.revision++
           activity.contractHash = input.contractHash
           activity.acceptance = [...input.acceptance]
@@ -382,6 +385,7 @@ export class Store {
       activity.verificationRequired = true
       activity.deliveryId = null
       const attempt = createAttempt(ledger, activity, this.state.nextPaneId++, input.retryReason)
+      if (input.requestHash) attempt.requestHash = input.requestHash
       // A crash before opening the terminal still leaves required work, so ready cannot skip it.
       if (input.requiresDelivery) {
         const delivery: DeliveryObligation = { id: randomUUID(), missionId: input.missionId, paneId: attempt.paneId, assignedBy: input.assignedBy, title: input.title, acceptance: [...input.acceptance], status: 'pending', summary: '', createdAt: attempt.createdAt, updatedAt: attempt.createdAt, waiver: null, replacementId: null }

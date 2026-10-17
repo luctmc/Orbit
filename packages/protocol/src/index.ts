@@ -265,6 +265,8 @@ export interface ActivityAttempt {
   activityId: string
   activityRevision: number
   contractHash: string
+  /** Exact normalized helper request; absent on pre-continuity attempts, never inferred. */
+  requestHash?: string
   acceptance: string[]
   paneId: number
   executionEpoch?: string | null

@@ -1,0 +1,24 @@
+{
+  "mode": "offline-real-Orbit-core-and-PTY-with-stand-in-agent",
+  "realProviderCalls": 0,
+  "tokens": null,
+  "costUsd": null,
+  "changedRequestRejected": true,
+  "resumeTaskBytes": 0,
+  "freshRestartPreservedTask": true,
+  "selectedSkill": {
+    "eligiblePersonalSkills": 40,
+    "pagesUntilSelected": 1,
+    "metadataUtf8Bytes": 7295,
+    "found": true
+  },
+  "takeover": {
+    "instructionsUtf8Bytes": 4114,
+    "instructionCopies": 1,
+    "totalPromptUtf8Bytes": 7851,
+    "recoveryBriefingIncludesInstructions": true
+  },
+  "codexOnlyMission": {
+    "prohibitedClassifierCommandsAttempted": 0
+  }
+}

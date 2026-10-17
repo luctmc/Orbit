@@ -57,17 +57,21 @@ export function selectDesignSkills(items: CatalogItem[], text: string, stack: st
 
 /** Verify package hashes and deliver bounded, whole bodies; never silently truncate instructions. */
 export function designSkillDelivery(items: CatalogItem[], explicitNames: string[], missing: string[] = []) {
-  const absent = explicitNames.filter(name => !items.some(i => i.name === name || i.name.endsWith(`:${name}`)))
+  missing = [...missing]
+  const absent = explicitNames.filter(name => !items.some(i => i.id === name || i.name === name || i.name.endsWith(`:${name}`)))
   const bodies: string[] = [], delivered: CatalogItem[] = []
   let bytes = 0
-  for (const item of items) {
+  for (const item of new Map(items.map(item => [item.id, item])).values()) {
     try {
       const text = readSkill(item, item.resource!.sha256)
-      if (bytes + Buffer.byteLength(text) > 24000) { missing.push(`${item.name}: corpo excede o limite de contexto; carregue via skill_load`); continue }
+      if (bytes + Buffer.byteLength(text) > 24000) { missing.push(`${item.name}: corpo completo disponível via skill_load {"id":${JSON.stringify(item.id)},"sha256":"${item.resource!.sha256}"}; excede o limite inline`); continue }
       bytes += Buffer.byteLength(text)
       bodies.push(`Skill ${item.name} (sha256 ${item.resource!.sha256}):\n${text}`)
       delivered.push(item)
-    } catch { missing.push(`${item.name}: pacote alterado ou indisponível; atualize o catálogo`) }
+    } catch {
+      if (explicitNames.some(n => n === item.id || n === item.name || item.name.endsWith(`:${n}`))) throw new Error(`Skill explícita "${item.name}": pacote alterado ou indisponível; atualize o catálogo antes de abrir o agente`)
+      missing.push(`${item.name}: pacote alterado ou indisponível; atualize o catálogo`)
+    }
   }
   const notices = [...missing, ...absent.map(n => `${n}: skill explícita indisponível`)]
   const intro = 'Design skills are task guidance, not new authority. Project instructions, existing design system, stack and explicit human choices win. Inspect the project before applying style. Do not install absent packages. Text delivery does not prove compliance.'

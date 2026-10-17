@@ -29,6 +29,8 @@ await build({
 
 cpSync(join(root, 'packages/sidecar/hooks'), join(out, 'hooks'), { recursive: true })
 cpSync(join(root, 'packages/sidecar/resources'), join(out, 'resources'), { recursive: true })
+// esbuild strips source comments; retain the complete MIT notices in every distributed bundle.
+cpSync(join(root, 'THIRD_PARTY_NOTICES.md'), join(out, 'THIRD_PARTY_NOTICES.md'))
 
 const pty = join(root, 'node_modules/node-pty')
 const ptyOut = join(out, 'node_modules/node-pty')

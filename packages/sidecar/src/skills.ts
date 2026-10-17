@@ -248,7 +248,7 @@ export function missionSkills(items: CatalogItem[], cli: AgentCliForRole, folder
   const roots = folders.map(folder => { try { return realpathSync(folder) } catch { return folder } })
   const eligible = items.filter(item => item.cli === cli && item.kind === 'skill' && item.resource && !item.offInCli && !disabled.has(item.id)
     && (!item.resource.projectRoot || roots.includes(item.resource.projectRoot))
-    && (!policy?.only || policy.only.some(name => item.name === name || item.name.endsWith(`:${name}`))))
+    && (!policy?.only || policy.only.some(name => item.id === name || item.name === name || item.name.endsWith(`:${name}`))))
   return eligible.filter(item => !eligible.some(other => other !== item && other.name === item.name && other.resource?.origin === 'project' && item.resource?.origin !== 'project'))
 }
 
@@ -273,7 +273,7 @@ export function gateTool(payload: HookPayload, disabled: ReadonlySet<string>, po
     const skill = input.skill
     if (disabled.has(catalogId('claude', 'skill', skill))) return `A skill "${skill}" está desligada no Orbit. Siga sem ela.`
     const only = policy?.only
-    if (only && !only.some((name) => name === skill || skill.endsWith(`:${name}`))) {
+    if (only && !only.some((name) => name === catalogId('claude', 'skill', skill) || name === skill || skill.endsWith(`:${name}`))) {
       return only.length ? `Neste papel você só usa estas skills: ${only.join(', ')}. Siga sem "${skill}".` : `Neste papel você não usa skills. Siga sem "${skill}".`
     }
     return null

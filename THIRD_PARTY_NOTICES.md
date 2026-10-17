@@ -1,5 +1,19 @@
 # Third-party notices
 
+## Orca — explicit skill selection (2026-10-17)
+
+Source: https://github.com/stablyai/orca/blob/09f12fa6dcbc910fea9113c3adf0617b0efe3e35/src/main/skills/agent-skill-selection.ts
+
+`packages/sidecar/src/skillSelection.ts` adapts the exact-ID-first selector, ambiguous/missing
+selection refusal and ID-based deduplication. Orbit uses its own mission-filtered CatalogItem,
+adds namespaced aliases, and uses plain Error diagnostics. No upstream error classes, runtime
+imports, packages, assets or services are included; no dependency was added. The MIT license
+and copyright below also cover this adaptation (Copyright (c) 2026 Lovecast Inc.).
+
+Orca's mutation receipts, launch preferences, preamble and compaction/usage handling were
+reviewed as architectural references; their implementation was not copied. See the pinned
+source map in `docs/analysis/2026-10-17-orca-continuity/README.md` for scope and limits.
+
 ## Orca — Lovecast Inc.
 
 Source: https://github.com/stablyai/orca

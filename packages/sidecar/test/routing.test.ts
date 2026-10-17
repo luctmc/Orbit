@@ -38,7 +38,11 @@ test('an agentic lead routes helpers through the table; the table is saved and r
     assert.deepEqual({ ...snapshot.routing, revision: undefined }, { ...DEFAULT_ROUTING, revision: undefined })
     assert.match(snapshot.routing.revision!, /^[a-f0-9]{64}$/)
 
-    // The user tweaks the table: tests go to Codex with high effort and a skill.
+    // The user tweaks the table: tests go to Codex with high effort and an installed skill.
+    await server.initialized
+    const { bundledCatalog } = await import('../src/skills.ts')
+    const installed = bundledCatalog().find(i => i.cli === 'codex')!
+    ;(server.core as any).catalogItems = [{ ...installed, id: 'codex:skill:prova-antes', name: 'prova-antes', resource: { ...installed.resource!, origin: 'personal' } }]
     const edited: Routing = structuredClone(DEFAULT_ROUTING)
     Object.assign(edited.taskTypes.find((t) => t.id === 'testes')!, { cli: 'codex', automatic: false, model: 'gpt-6.1', effort: 'high', skills: ['prova-antes'] })
     ui.send({ type: 'routing.save', routing: edited })

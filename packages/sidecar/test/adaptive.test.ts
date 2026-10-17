@@ -42,7 +42,8 @@ test('delegations are idempotent across concurrent calls, completion, close and 
     assert.notEqual(different.pane.id, retry.pane.id)
     const identity = { ...input, activityId: 'T42' }
     const identified = await server.core.spawnHelper(lead, identity)
-    assert.equal((await server.core.spawnHelper(lead, { ...identity, task: 'Same activity, phrased differently' })).pane.id, identified.pane.id)
+    await assert.rejects(server.core.spawnHelper(lead, { ...identity, task: 'Same activity, phrased differently' }), /pedido.*mudou/i)
+    assert.equal((await server.core.spawnHelper(lead, identity)).pane.id, identified.pane.id, 'identical requests remain reusable')
     const sameRetry = await server.core.spawnHelper(lead, { ...input, retryReason: 'Source changed after the verified build' })
     assert.equal(sameRetry.pane.id, retry.pane.id, 'repeating a justified retry also stays idempotent')
   } finally {

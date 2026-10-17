@@ -1,0 +1,53 @@
+(node:68379) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:68381) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ a stable activity rejects changed instructions, model and effort instead of silently reusing work (83.27ms)
+✔ concurrent replays share one launch, but conflicting payloads and retry intentions do not (61.564542ms)
+✔ native resume does not repeat the original task; fresh reopen retains the assignment (120.109125ms)
+✖ new leader gets project instructions once at launch; standalone recovery briefing remains self-contained (57.873875ms)
+✖ the first skill page includes selected task guidance even with a large eligible catalog (65.873625ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 3
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 573.806375
+
+✖ failing tests:
+
+test at packages/sidecar/test/taskContinuity.test.ts:75:1
+✖ new leader gets project instructions once at launch; standalone recovery briefing remains self-contained (57.873875ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  2 !== 1
+  
+      at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/taskContinuity.test.ts:82:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at packages/sidecar/test/taskContinuity.test.ts:88:1
+✖ the first skill page includes selected task guidance even with a large eligible catalog (65.873625ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(page.items.some(i => i.name === 'orbit-build' && i.selected))
+  
+      at TestContext.<anonymous> (file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/taskContinuity.test.ts:96:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
