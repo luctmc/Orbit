@@ -206,7 +206,7 @@ export function Terminal({ paneId, interactive, onFocus, suggestions = [], predi
       <div className="terminal-host" ref={host} />
       {ghost && <div className="terminal-surface__ghost" aria-hidden="true" style={{ left: ghost.left, top: ghost.top, maxWidth: ghost.maxWidth }}>{ghost.suffix}</div>}
     </div>
-    {predictionEnabled && <div className="terminal-surface__hint" role="status">
+    {predictionEnabled && ghost && <div className="terminal-surface__hint" role="status">
       {ghost ? <><span className="sr-only">Sugestão: {ghost.value}. </span><span>Orbit · <kbd>Tab</kbd> insere · Esc dispensa</span><span>{ghost.reason}</span></> : <span>{!predictionReady || !suggestions.length ? 'Sugestões do Orbit pausadas neste estado da missão.' : 'Sugestões do Orbit ao digitar no prompt do maestro · Tab insere quando houver sugestão'}</span>}
     </div>}
   </div>

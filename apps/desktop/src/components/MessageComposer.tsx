@@ -35,6 +35,26 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
   const [composing, setComposing] = useState(false)
   const [selection, setSelection] = useState({ start: 0, end: 0 })
   const [dismissed, setDismissed] = useState<string | null>(null)
+  const language = useRef<HTMLDetailsElement>(null)
+  useEffect(() => {
+    const dismiss = (event: KeyboardEvent | PointerEvent) => {
+      const details = language.current
+      if (!details?.open) return
+      if (event instanceof KeyboardEvent) {
+        if (event.key !== 'Escape') return
+        event.preventDefault(); details.open = false; details.querySelector('summary')?.focus()
+      } else if (!details.contains(event.target as Node)) details.open = false
+    }
+    document.addEventListener('keydown', dismiss)
+    document.addEventListener('pointerdown', dismiss)
+    return () => { document.removeEventListener('keydown', dismiss); document.removeEventListener('pointerdown', dismiss) }
+  }, [])
+  const localInput = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    if (!active) return
+    inputRef.current = localInput.current
+    return () => { if (inputRef.current === localInput.current) inputRef.current = null }
+  }, [active, inputRef])
   const picker = useRef<HTMLInputElement>(null)
   const previews = useRef(new Set(files.flatMap(f => f.preview ? [f.preview] : [])))
   const dictated = useRef('')
@@ -54,7 +74,7 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
   const prediction = dismissed === text ? null : candidate
   useLayoutEffect(() => {
     if (!active) return
-    const input = inputRef.current
+    const input = localInput.current
     if (!input) return
     const resize = () => {
       input.style.height = 'auto'
@@ -64,11 +84,12 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
     resize()
     // Reflow the draft when a sidebar or window resize changes the available writing width.
     let width = input.clientWidth
+    let frame = 0
     const observer = new ResizeObserver(() => {
-      if (input.clientWidth !== width) { width = input.clientWidth; resize() }
+      if (input.clientWidth !== width) { width = input.clientWidth; cancelAnimationFrame(frame); frame = requestAnimationFrame(resize) }
     })
     observer.observe(input)
-    return () => observer.disconnect()
+    return () => { cancelAnimationFrame(frame); observer.disconnect() }
   }, [text, prediction?.value, inputRef, active])
   const syncSelection = (input: HTMLTextAreaElement) => setSelection({ start: input.selectionStart, end: input.selectionEnd })
   const acceptPrediction = () => {
@@ -76,7 +97,7 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
     setText(prediction.value); dictated.current = prediction.value
     setSelection({ start: prediction.value.length, end: prediction.value.length })
     setDismissed(null)
-    inputRef.current?.focus()
+    localInput.current?.focus()
     // Only update the draft. send() remains the sole submission path.
   }
 
@@ -118,7 +139,7 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
       setText(''); dictated.current = ''; setSelection({ start: 0, end: 0 }); setDismissed(null)
       setSent(true)
       setFiles([])
-      inputRef.current?.focus()
+      requestAnimationFrame(() => localInput.current?.focus())
     } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause)) }
     finally { if (mounted.current) { setSending(false); setPending(client.inputPending(draftKey)); acceptingSpeech.current = true } }
   }
@@ -132,6 +153,7 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
         <label htmlFor={`message-${pane.id}`} title={`Mensagem para ${pane.title} · #${pane.id}`}><span className="composer__to" aria-hidden="true">Para</span><span className="sr-only">Mensagem para </span><strong>{pane.role === 'lead' ? 'o líder' : pane.title}</strong><span className="composer__recipient">#{pane.id}</span></label>
         <span className="composer__status" role="status">{connection !== 'open' ? 'Reconectando…' : uploading ? 'Preparando anexos…' : dictation.listening ? `Ouvindo${dictation.mode === 'apple' ? ' · Apple' : dictation.mode === 'local' ? ' · no Mac' : ''}…` : ''}</span>
       </div>
+      <div className="composer__content">
       {!!files.length && <ul className="composer__files" aria-label="Anexos da mensagem">
         {files.map((file) => <li key={file.id}>
           {file.preview && <img src={file.preview} alt={`Prévia de ${file.name}`} />}
@@ -144,9 +166,9 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
       </ul>}
       <div className="composer__input">
       {prediction && <div className="composer__ghost" aria-hidden="true"><span>{text}</span>{prediction.suffix}</div>}
-      <textarea id={`message-${pane.id}`} ref={inputRef} value={text} rows={1} maxLength={20_000} disabled={sending || pending}
+      <textarea id={`message-${pane.id}`} ref={localInput} value={text} rows={1} maxLength={20_000} disabled={sending || pending}
         aria-autocomplete={suggestionsOn && pane.role === 'lead' ? 'inline' : 'none'} aria-describedby={`message-help-${pane.id}${prediction ? ` prediction-${pane.id}` : ''}`}
-        placeholder={prediction ? '' : dragging ? 'Solte os arquivos aqui' : pane.role === 'lead' ? 'Qual é o próximo passo? Descreva seu objetivo ou dê uma orientação…' : 'Escreva uma orientação para este agente…'}
+        placeholder={prediction ? '' : dragging ? 'Solte os arquivos aqui' : pane.role === 'lead' ? 'Escreva para o líder…' : 'Escreva para este agente…'}
         onFocus={(e) => { setFocused(true); syncSelection(e.currentTarget) }}
         onBlur={(e) => { if (!e.currentTarget.closest('form')?.contains(e.relatedTarget as Node)) setFocused(false) }}
         onSelect={(e) => syncSelection(e.currentTarget)}
@@ -163,18 +185,10 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
       {prediction && <div className="composer__suggestion" id={`prediction-${pane.id}`} role="status">
         <span><strong>Sugestão do Orbit</strong><span className="sr-only">: {prediction.value}.</span><small>{prediction.reason} Tab insere · Esc dispensa.</small></span>
         <button type="button" className="btn btn--ghost btn--sm" disabled={disabled} onClick={acceptPrediction}>Inserir <kbd>Tab</kbd></button>
-        <button type="button" className="icon-btn" aria-label="Dispensar sugestão" onClick={() => { setDismissed(text); inputRef.current?.focus() }}><CloseIcon size={14} /></button>
+        <button type="button" className="icon-btn" aria-label="Dispensar sugestão" onClick={() => { setDismissed(text); localInput.current?.focus() }}><CloseIcon size={14} /></button>
       </div>}
-      {pane.cli !== 'shell' && settings?.agentsInEnglish && <div className="field">
-        <label htmlFor={`translator-${pane.id}`}>Traduzir prompt para inglês · {TRANSLATION_LABEL}</label>
-        <select id={`translator-${pane.id}`} disabled={editingDisabled || allowOriginal} value={translationAccountId} onChange={e => setTranslationAccountId(e.target.value)}>
-          <option value="">Escolha a conta Codex</option>
-          {accounts.filter(a => a.cli === 'codex' && a.kind === 'assinatura').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
-        <label><input type="checkbox" disabled={editingDisabled} checked={allowOriginal} onChange={e => setAllowOriginal(e.target.checked)} /> Autorizar envio do original sem tradução</label>
-      </div>}
-      {pane.cli !== 'shell' && <p className="note">O que você digita diretamente no terminal passa sem tradução. Para traduzir, use este campo com uma conta Codex escolhida.</p>}
       {pending && <p role="status">Confirmação pendente. Rascunho preservado; conferir consulta o mesmo pedido sem reenviar.</p>}
+      </div>
       <div className="composer__actions">
         <input className="sr-only" ref={picker} type="file" multiple tabIndex={-1} aria-label="Escolher anexos" onChange={(e) => { void addFiles(Array.from(e.target.files ?? [])); e.target.value = '' }} />
         <button className="icon-btn" type="button" disabled={editingDisabled || pane.cli === 'shell'} aria-label="Anexar imagens ou arquivos" title="Anexar imagens ou arquivos (4 MB por arquivo)" onClick={() => picker.current?.click()}><PlusIcon /></button>
@@ -182,10 +196,19 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
           aria-label={dictation.listening ? 'Parar ditado' : 'Ditar mensagem'} title={dictation.mode === 'apple' ? 'Ditado pelo macOS: áudio pode ser processado pela Apple' : 'Ditar mensagem'} onClick={() => {
             if (dictation.listening) return dictation.stop()
             if (!dictationAvailable) return setError('O reconhecimento de voz não está disponível neste ambiente. No macOS, use o atalho de Ditado do sistema no campo de mensagem.')
-            acceptingSpeech.current = true; dictated.current = text; dictation.start(); inputRef.current?.focus()
+            acceptingSpeech.current = true; dictated.current = text; dictation.start(); localInput.current?.focus()
           }}><MicIcon /></button>
+      {pane.cli !== 'shell' && settings?.agentsInEnglish && <details ref={language} className="composer__language"><summary>Idioma<span className="sr-only"> do envio{translationAccountId ? ' · conta selecionada' : allowOriginal ? ' · original autorizado' : ' · escolha uma conta para traduzir'}</span></summary><div className="field">
+        <label htmlFor={`translator-${pane.id}`}>Traduzir prompt para inglês · {TRANSLATION_LABEL}</label>
+        <select id={`translator-${pane.id}`} disabled={editingDisabled || allowOriginal} value={translationAccountId} onChange={e => setTranslationAccountId(e.target.value)}>
+          <option value="">Escolha a conta Codex</option>
+          {accounts.filter(a => a.cli === 'codex' && a.kind === 'assinatura').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        <label><input type="checkbox" disabled={editingDisabled} checked={allowOriginal} onChange={e => setAllowOriginal(e.target.checked)} /> Autorizar envio do original sem tradução</label>
+        <p className="note">O texto digitado diretamente no terminal segue no idioma original.</p>
+      </div></details>}
         <span className="composer__hint" role="status">{files.length ? `${files.length}/8 anexos` : sent && !text ? 'Mensagem encaminhada ao agente' : ''}</span>
-        {pane.role === 'lead' && ['claude', 'codex'].includes(pane.cli) && onToggleSuggestions && <button type="button" className="btn btn--ghost btn--sm composer__toggle" aria-pressed={suggestionsOn} title={suggestionsOn ? 'Desativar sugestões no campo e no terminal' : 'Ativar sugestões no campo e no terminal'} onClick={onToggleSuggestions}>Sugestões {suggestionsOn ? 'ligadas' : 'desligadas'}</button>}
+        {pane.role === 'lead' && ['claude', 'codex'].includes(pane.cli) && onToggleSuggestions && <button type="button" className="btn btn--ghost btn--sm composer__toggle" aria-pressed={suggestionsOn} title={suggestionsOn ? 'Desativar sugestões no campo e no terminal' : 'Ativar sugestões no campo e no terminal'} onClick={onToggleSuggestions}>Sugestões<span className="sr-only"> {suggestionsOn ? 'ligadas' : 'desligadas'}</span></button>}
         <span className="composer__shortcuts" id={`message-help-${pane.id}`}>Enter envia <span>· Shift+Enter nova linha</span><span className="sr-only">. ⌘J foca a mensagem.</span></span>
         <button className="btn btn--primary composer__send" type="submit" disabled={disabled || (!text.trim() && !files.length)}><SendIcon size={16} />{sending ? 'Enviando…' : pending ? 'Conferir pedido' : 'Enviar'}</button>
       </div>

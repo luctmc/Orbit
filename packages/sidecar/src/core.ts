@@ -1020,7 +1020,8 @@ export class OrbitCore {
 
   skillCatalog(caller: Pane, cursor?: string, limit = 15) {
     this.assertCurrent(caller)
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw new Error('Limite de catálogo inválido')
+    if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('Limite de catálogo inválido')
+    limit = Math.min(limit, 50)
     const items = this.eligibleSkills(caller)
     const revision = createHash('sha256').update(JSON.stringify([caller.missionId, caller.id, caller.executionEpoch, items.map(i => [i.id, i.resource!.sha256])])).digest('hex')
     const match = cursor && /^([a-f0-9]{64}):(\d+)$/.exec(cursor)
@@ -1028,7 +1029,7 @@ export class OrbitCore {
     const offset = match ? Number(match[2]) : 0
     if (!Number.isSafeInteger(offset) || offset > items.length) throw new Error('Cursor de catálogo inválido')
     const state = this.skillSessions.get(caller.id, caller.executionEpoch!)
-    return { revision, nativeVisibilityFilter: null, loadedMeaning: 'text served by Orbit; consumption and compliance unverified',
+    return { revision, limit, maxLimit: 50, nativeVisibilityFilter: null, loadedMeaning: 'text served by Orbit; consumption and compliance unverified',
       items: items.slice(offset, offset + limit).map(i => ({ id: i.id, name: i.name, description: i.description, source: i.source, sha256: i.resource!.sha256, bytes: i.resource!.bytes, version: i.resource!.version, origin: i.resource!.origin, role: i.resource!.role, compatibility: i.resource!.compatibility, capabilities: ['read-text'], available: true, selected: state.selectedNames.some(n => n === i.name || i.name.endsWith(`:${n}`)), loaded: state.loaded[i.id] ?? null, fulfilled: null })),
       nextCursor: offset + limit < items.length ? `${revision}:${offset + limit}` : null,
       unavailableSelectedNames: state.selectedNames.filter(n => !items.some(i => n === i.name || i.name.endsWith(`:${n}`))),

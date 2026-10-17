@@ -1,0 +1,21 @@
+{
+  "version": "0.2.22",
+  "filesCompared": 63,
+  "installedMatchesBuild": true,
+  "signatureStrictDeepAllArchitectures": true,
+  "stateByteIdenticalDuringSwap": true,
+  "credentialsUnchangedDuringSwap": true,
+  "privateFilesCompared": 1107,
+  "savedConversationsPreserved": 1,
+  "nativePids": [
+    7534
+  ],
+  "enginePids": [
+    7553
+  ],
+  "binarySha256": "141df97a18a08380abb86b75fef6acc9622fff7de9d2ac8cb9494115cd2e604d",
+  "sidecarSha256": "8198fb189fd8c13846174359915bcb2016096db3d0e803f9da10fb040a924c23",
+  "timestamp": 1792271382.4479842,
+  "rollback": "/Applications/.Orbit-pane167-update.app",
+  "sourceBuild": "/Users/lucas/Documents/GitHub/Orbit-terminal-parity/apps/desktop/src-tauri/target/release/bundle/macos/Orbit.app"
+}
