@@ -4,6 +4,7 @@ import pty, { type IPty } from 'node-pty'
 import headless from '@xterm/headless'
 import serialize from '@xterm/addon-serialize'
 import type { Pane, PaneHandoff, PaneStatus, SpawnPaneRequest, TokenUsage } from '@orbit/protocol'
+import { unavailableContext } from './structuredContext.ts'
 import { buildCommand, paneEnv, type AgentLaunch, type PaneCommand } from './command.ts'
 
 /** Output silence after which a running pane is considered idle. */
@@ -111,6 +112,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       assignedBy: null,
       usage: null,
       contextPercent: null,
+      contextUsage: unavailableContext('awaiting-provider'),
       pid: proc.pid,
       exitCode: null,
       createdAt: Date.now(),
@@ -356,6 +358,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     const efforts = [...new Set(identity.efforts)]
     if (!models.length && !efforts.length) return
     if (JSON.stringify(models) === JSON.stringify(pane.reportedModels ?? []) && JSON.stringify(efforts) === JSON.stringify(pane.reportedEfforts ?? []) && pane.identityEvidence === identity.level) return
+    if (models.length && JSON.stringify(models) !== JSON.stringify(pane.reportedModels ?? [])) {pane.contextUsage = unavailableContext('model-changed');pane.contextPercent=null}
     // The observation is one source's frame: never combine new models with a stale effort.
     pane.reportedModels = models
     pane.reportedEfforts = efforts
@@ -365,11 +368,12 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   }
 
   /** Session totals the CLI reported. */
-  setUsage(id: number, usage: TokenUsage | null, contextPercent: number | null): void {
+  setUsage(id: number, usage: TokenUsage | null, contextPercent: number | null, context?: import('@orbit/protocol').ContextUsage): void {
     const pane = this.panes.get(id)
     if (!pane) return
     if (usage) pane.usage = usage
-    if (contextPercent !== null) pane.contextPercent = contextPercent
+    if (context) {pane.contextUsage = context;pane.contextPercent=context.percent}
+    else if (contextPercent !== null) pane.contextPercent = contextPercent
     this.emit('status', { ...pane }, pane.status)
   }
 
@@ -377,6 +381,8 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   setSession(id: number, sessionId: string): void {
     const pane = this.panes.get(id)
     if (!pane || pane.sessionId === sessionId) return
+    pane.contextUsage = unavailableContext('session-changed')
+    pane.contextPercent = null
     pane.sessionId = sessionId
     this.emit('status', { ...pane }, pane.status)
   }

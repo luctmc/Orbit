@@ -163,7 +163,7 @@ export interface Mission {
   /** The squad a `squad` mission follows. */
   squadId: string | null
   /** Tokens and cost of every agent the mission has had (closed ones included). */
-  usage: TokenUsage
+  usage: TokenUsage & {costComplete?: boolean}
   /** Set when each agent works in its own branch (git worktree). */
   git: MissionGit | null
   /** The schedule that started it by itself, if any. */
@@ -450,6 +450,7 @@ export interface Pane {
   usage: TokenUsage | null
   /** How full the model's context window is, 0–100, when the CLI says. */
   contextPercent: number | null
+  contextUsage?: ContextUsage
   pid: number | null
   exitCode: number | null
   createdAt: number
@@ -483,6 +484,26 @@ export interface MissionProgress {
     reason: string | null
     checkedAt: number | null
   }
+}
+
+/** Current occupied context is separate from cumulative billed/session tokens. */
+export interface ContextUsage {
+  kind: 'measured' | 'estimated' | 'unavailable'
+  usedTokens: number | null
+  capacityTokens: number | null
+  percent: number | null
+  categories: Array<{ name: string; tokens: number }>
+  source: string
+  observedAt: number
+}
+
+/** Partial known cost is a lower bound; it cannot certify budget coverage. */
+export function budgetStatus(usage: {total:number;costUsd:number|null;costComplete?:boolean}, budget:{tokens:number|null;costUsd:number|null}) {
+  const shares: number[] = []
+  if (budget.tokens) shares.push(usage.total / budget.tokens)
+  const cost = usage.costUsd === null ? 'unavailable' as const : usage.costComplete === true ? 'reported' as const : 'partial' as const
+  if (budget.costUsd && cost === 'reported') shares.push(usage.costUsd! / budget.costUsd)
+  return {share:shares.length ? Math.max(...shares) : null,cost,knownCostUsd:usage.costUsd}
 }
 
 /** Tokens an agent (or a mission, or a day) used. `total` counts every kind. */

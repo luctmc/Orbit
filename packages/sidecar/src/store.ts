@@ -1303,7 +1303,7 @@ function defaultName(folders: string[]): string {
   return folders.length > 1 ? `${first} + ${folders.length - 1}` : first
 }
 
-function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+function addUsage(a: TokenUsage & {costComplete?:boolean}, b: TokenUsage & {costComplete?:boolean}): TokenUsage & {costComplete?:boolean} {
   return {
     input: a.input + b.input,
     output: a.output + b.output,
@@ -1311,6 +1311,7 @@ function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
     cacheWrite: a.cacheWrite + b.cacheWrite,
     total: a.total + b.total,
     costUsd: a.costUsd === null && b.costUsd === null ? null : Math.round(((a.costUsd ?? 0) + (b.costUsd ?? 0)) * 1e6) / 1e6,
+    costComplete: (a.total === 0 && a.costUsd === null || a.costComplete === true) && b.costUsd !== null && b.costComplete !== false,
   }
 }
 

@@ -154,7 +154,8 @@ export function PaneView({ pane, selected, onSelect, suggestions = [], suggestio
 
 /** Tokens this agent's session used, how full its context is and Claude's API-equivalent cost. */
 function PaneUsage({ pane }: { pane: Pane }) {
-  if (!pane.usage && pane.contextPercent === null) return null
+  const context = pane.contextUsage
+  const contextTitle = context ? `${context.kind === 'measured' ? 'Medido' : context.kind === 'estimated' ? 'Estimado' : 'Indisponível'} · ${context.source} · ${new Date(context.observedAt).toLocaleTimeString('pt-BR')}${context.capacityTokens ? ` · capacidade ${context.capacityTokens.toLocaleString('pt-BR')} tokens` : ''}` : 'Contexto não informado'
   const cost = costText(pane.usage?.costUsd ?? null)
   const detail = pane.usage
     ? [
@@ -166,13 +167,14 @@ function PaneUsage({ pane }: { pane: Pane }) {
     : undefined
   return (
     <span className="pane__usage" title={detail}>
-      {pane.usage && <span>{tokensText(pane.usage.total)} tokens</span>}
-      {pane.contextPercent !== null && (
-        <span className="pane__context" data-level={pane.contextPercent >= 80 ? 'wait' : 'ok'}>
+      {pane.usage && <span>{tokensText(pane.usage.total)} tokens acumulados</span>}
+      {pane.contextPercent !== null ? (
+        <span className="pane__context" title={contextTitle} data-level={pane.contextPercent >= 80 ? 'wait' : 'ok'}>
           <span className="limit__bar" aria-hidden="true"><span style={{ width: `${Math.min(100, pane.contextPercent)}%` }} /></span>
-          contexto {pane.contextPercent}%
+          contexto {context?.kind === 'estimated' ? '≈ ' : ''}{pane.contextPercent}%{context?.usedTokens !== null && context?.usedTokens !== undefined && context.capacityTokens ? ` · ${tokensText(context.usedTokens)} / ${tokensText(context.capacityTokens)}` : ''}
         </span>
-      )}
+      ) : <span title={contextTitle}>contexto indisponível</span>}
+      {pane.usage?.costUsd === null && <span>custo indisponível</span>}
     </span>
   )
 }

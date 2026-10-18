@@ -13,7 +13,7 @@ import { geminiHook, geminiAnswer } from './adapters/gemini.ts'
 import { adapterCapabilities } from './adapters/types.ts'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ATTACHMENT_LIMITS, ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type MemoryEntry, type MemoryKind, MEMORY_KINDS, MEMORY_LIMITS, type Difficulty, type AgentSeat, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { budgetStatus, ATTACHMENT_LIMITS, ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type MemoryEntry, type MemoryKind, MEMORY_KINDS, MEMORY_LIMITS, type Difficulty, type AgentSeat, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { Attachments } from './attachments.ts'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
@@ -454,7 +454,7 @@ export class OrbitCore {
     const budget = mission.budget
     if (!budget || budget.exceeded) return mission
     const use = budgetUse(mission, budget)
-    if (use >= 1) {
+    if (use !== null && use >= 1) {
       const live = this.missionPanes(mission.id).filter((p) => p.cli !== 'shell' && this.panes.isAlive(p.id))
       // Esc stops the turn in Claude Code and in Codex; the hook then refuses Claude's next tools.
       for (const pane of live) {
@@ -465,7 +465,7 @@ export class OrbitCore {
       this.event(mission.id, 'budget', 'Orçamento esgotado', `A missão chegou a ${budgetText(mission, budget)}. ${live.length ? `${live.length} ${live.length === 1 ? 'agente foi interrompido' : 'agentes foram interrompidos'}; ` : ''}aumente o orçamento para continuar.`, null)
       return this.store.updateMission(mission.id, { budget: { ...budget, warned: true, exceeded: true } }) ?? mission
     }
-    if (use >= BUDGET_WARN_AT && !budget.warned) {
+    if (use !== null && use >= BUDGET_WARN_AT && !budget.warned) {
       this.event(mission.id, 'budget', `Orçamento em ${Math.floor(use * 100)}%`, `A missão está em ${budgetText(mission, budget)}.`, null)
       return this.store.updateMission(mission.id, { budget: { ...budget, warned: true } }) ?? mission
     }
@@ -1715,7 +1715,7 @@ export class OrbitCore {
         const limits = budgetLimits({ tokens: message.tokens, costUsd: message.costUsd })
         // A new limit is judged against what the mission already used: no warning twice.
         const budget = limits && { ...limits, warned: false, exceeded: false }
-        const updated = this.store.updateMission(mission.id, { budget: budget && { ...budget, warned: budgetUse(mission, budget) >= BUDGET_WARN_AT, exceeded: budgetUse(mission, budget) >= 1 } })
+        const updated = this.store.updateMission(mission.id, { budget: budget && { ...budget, warned: (budgetUse(mission, budget) ?? -1) >= BUDGET_WARN_AT, exceeded: (budgetUse(mission, budget) ?? -1) >= 1 } })
         if (updated) this.broadcast({ type: 'mission.updated', mission: updated })
         return
       }
@@ -2463,7 +2463,7 @@ export class OrbitCore {
     if (!pane) return
     if (report.limits) this.broadcast({ type: 'limits', limits: this.store.setLimits({ ...report.limits, accountId: pane.accountId ?? report.limits.cli }) })
     if (identity) this.panes.setReportedIdentity(paneId, identity)
-    if (!report.usage && report.contextPercent === null) return
+    if (!report.usage && report.contextPercent === null && !report.context) return
     let usage = report.usage
     if (usage && pane.cli !== 'shell') {
       const accounted = this.store.accountSessionUsage(pane, usage, source, Date.now(), { mode: this.harnessMode, origin: report.origin, observed: report.observed, reportedModels: identity?.models ?? [], reportedEffort: identity?.efforts.length === 1 ? identity.efforts[0]! : null, identityComplete: identity?.complete === true, identityLevel: identity?.level ?? 'unknown' })
@@ -2475,7 +2475,7 @@ export class OrbitCore {
         this.broadcast({ type: 'usage.day', day: added.day })
       }
     }
-    this.panes.setUsage(paneId, usage, report.contextPercent)
+    this.panes.setUsage(paneId, usage, report.contextPercent,report.context)
   }
 
   /** Codex has no hooks: read each live Codex agent's session file for its totals. */
@@ -3034,7 +3034,7 @@ export class OrbitCore {
       // Same conversation: known now, not only when the CLI reports it again.
       if (resume && sessionId) {
         this.panes.setSession(opened.id, sessionId)
-        this.panes.setUsage(opened.id, pane.usage, pane.contextPercent)
+        this.panes.setUsage(opened.id, pane.usage, null)
       }
       if (pane.assignedBy !== null && this.pendingDeliveries(pane.missionId).some(d => d.paneId === pane.id)) {
         this.panes.setHandoff(opened.id, { status: pane.handoffStatus, assignedBy: pane.assignedBy })
@@ -3163,14 +3163,17 @@ function freshBudget(limits: { tokens: number | null; costUsd: number | null } |
 }
 
 /** How much of the budget is used: the larger of the token and the cost share. */
-function budgetUse(mission: Mission, budget: Pick<MissionBudget, 'tokens' | 'costUsd'>): number {
-  return Math.max(budget.tokens ? mission.usage.total / budget.tokens : 0, budget.costUsd ? (mission.usage.costUsd ?? 0) / budget.costUsd : 0)
+function budgetUse(mission: Mission, budget: Pick<MissionBudget, 'tokens' | 'costUsd'>): number | null {
+  const status = budgetStatus(mission.usage, budget)
+  // Even a partial known subtotal at/above the cap proves the cap has been reached.
+  if (budget.costUsd && mission.usage.costUsd !== null && mission.usage.costUsd >= budget.costUsd) return Math.max(1,status.share ?? 1)
+  return status.share
 }
 
 function budgetText(mission: Mission, budget: MissionBudget): string {
   const parts = []
   if (budget.tokens) parts.push(`${mission.usage.total.toLocaleString('pt-BR')} de ${budget.tokens.toLocaleString('pt-BR')} tokens`)
-  if (budget.costUsd) parts.push(`US$ ${(mission.usage.costUsd ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} de US$ ${budget.costUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`)
+  if (budget.costUsd) parts.push(`${mission.usage.costUsd === null ? 'Custo indisponível' : `US$ ${mission.usage.costUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} conhecido${mission.usage.costComplete ? '' : ' (parcial)'}`} de US$ ${budget.costUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`)
   return parts.join(' e ')
 }
 

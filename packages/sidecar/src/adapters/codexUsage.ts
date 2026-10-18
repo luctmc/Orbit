@@ -1,3 +1,4 @@
+import {unavailableContext} from '../structuredContext.ts'
 import { closeSync, openSync, readSync, statSync } from 'node:fs'
 import { EFFORTS, MODEL_ID, type Effort } from '@orbit/protocol'
 import { fromCodexRollout, type UsageReport } from '../usage.ts'
@@ -46,6 +47,7 @@ export class CodexUsageReader {
             c.session = typeof p?.id === 'string' ? p.id : null
           }
           if (event.type === 'turn_context') {
+            if(c.report)c.report={...c.report,contextPercent:null,context:unavailableContext('codex:awaiting-turn-usage',stat.mtimeMs)}
             c.context = typeof p?.turn_id === 'string' && typeof p.model === 'string' && MODEL_ID.test(p.model) && EFFORTS.includes(p.effort)
             if (typeof p?.model === 'string' && MODEL_ID.test(p.model)) c.models.add(p.model)
             if (EFFORTS.includes(p?.effort)) c.efforts.add(p.effort)
