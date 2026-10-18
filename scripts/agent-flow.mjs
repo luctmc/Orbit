@@ -50,6 +50,9 @@ function main([op, branch, ...paths]) {
       }
       const worktrees = git(['worktree', 'list', '--porcelain']).split('\n').filter(l => l.startsWith('worktree ')).map(l => l.slice(9))
       for (const worktree of worktrees) {
+        // Git retains prunable registrations after temporary worktrees disappear.
+        // They have no files to protect and must not block unrelated work with ENOENT.
+        if (!existsSync(worktree)) continue
         // Include staged, unstaged, untracked and committed changes of every existing worktree.
         const changed = [git(['diff', '--name-only', '--no-renames', 'origin/main'], worktree), git(['ls-files', '--others', '--exclude-standard'], worktree)]
           .join('\n').split('\n').filter(Boolean)

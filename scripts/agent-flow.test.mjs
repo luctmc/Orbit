@@ -37,6 +37,10 @@ test('real git worktrees reserve paths and reject overlap or preexisting changes
     git(['add', 'file.txt']); git(['commit', '-m', 'base'])
     git(['remote', 'add', 'origin', remote]); git(['push', '-u', 'origin', 'main'])
     const base = git(['rev-parse', 'origin/main'])
+    const vanished = join(scratch, 'vanished-worktree')
+    git(['worktree', 'add', '--detach', vanished, base])
+    rmSync(vanished, { recursive: true })
+    // A stale Git registration must not prevent a new independent reservation.
     const first = run(['begin', 'feature/orbit-first', 'src'])
     assert.equal(first.status, 0, first.stderr)
     const target = join(scratch, 'Orbit-feature-orbit-first')

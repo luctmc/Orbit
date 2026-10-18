@@ -64,7 +64,7 @@ test('promotion retains writable process capabilities', async () => {
     await core.changeLead(lead.missionId, { kind: 'promote', paneId: pane.id })
     assert.equal(core.store.pane(pane.id)?.role, 'lead')
     assert.equal(core.store.executionPolicy(pane.id)?.readOnly, true)
-    assert.equal(core.store.executionPolicy(pane.id)?.permissionPolicy, 'writable-bypass-v1')
+    assert.equal(core.store.executionPolicy(pane.id)?.permissionPolicy, 'writable-bypass-v2')
     const helper=await core.spawnHelper(core.store.pane(pane.id)!,{title:'After promotion',task:'Implement',cli:'claude',model:null})
     assert.ok(helper.pane.executionEpoch)
     assert.equal(core.store.pane(lead.id), undefined)
