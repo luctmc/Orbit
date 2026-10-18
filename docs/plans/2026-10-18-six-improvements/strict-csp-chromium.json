@@ -1,0 +1,12 @@
+{
+  "engine": "chromium",
+  "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; worker-src blob:; frame-src 'self'",
+  "pass": true,
+  "result": {
+    "channel": "strict-csp-fixture",
+    "kind": "result",
+    "requestId": "probe",
+    "ok": true,
+    "text": "{\"network\":\"denied\",\"process\":\"undefined\",\"window\":\"undefined\"}"
+  }
+}

@@ -572,9 +572,9 @@ test at test/adaptive.test.ts:55:1
 [31m✖ automatic leader, inferred helper seats, explicit overrides and attachment acknowledgements cross the real WebSocket [90m(148.58525ms)[39m[39m
   AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
   [32mactual[39m [31mexpected[39m
-  
+
   [39m'[39m[39mc[39m[39ml[39m[39ma[39m[39mu[39m[39md[39m[39me[39m[39m-[39m[32mo[39m[32mp[39m[31mh[39m[31ma[39m[31mi[39m[31mk[39m[39mu[39m[32ms[39m[39m-[39m[39m5[39m[39m-[39m[39m5[39m[39m'[39m
-  
+
       at TestContext.<anonymous> [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39mtest/adaptive.test.ts:68:12[90m)[39m
   [90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
   [90m    at async Test.run (node:internal/test_runner/test:1409:7)[39m
@@ -589,7 +589,7 @@ test at test/adaptive.test.ts:55:1
 
 test at test/admission.test.ts:8:1
 [31m✖ explicit squad CLI/model/effort reaches the launch and its durable decision receipt [90m(199.013042ms)[39m[39m
-  Error: Esforço "alto" não vale para user-pinned-model; use 
+  Error: Esforço "alto" não vale para user-pinned-model; use
       at OrbitCore.spawn [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39msrc/core.ts:2800:13[90m)[39m
       at OrbitCore.openHelper [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39msrc/core.ts:1994:25[90m)[39m
   [90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
@@ -598,7 +598,7 @@ test at test/agents.test.ts:60:1
 [31m✖ Antigravity models come from `agy models`, whatever the decoration [90m(1.720333ms)[39m[39m
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   [32m+ actual[39m [31m- expected[39m
-  
+
   [32m+[39m []
   [31m-[39m [
   [31m-[39m   'low',
@@ -607,7 +607,7 @@ test at test/agents.test.ts:60:1
   [31m-[39m   'xhigh',
   [31m-[39m   'max'
   [31m-[39m ]
-  
+
       at TestContext.<anonymous> [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39mtest/agents.test.ts:63:10[90m)[39m
   [90m    at Test.runInAsyncScope (node:async_hooks:226:14)[39m
   [90m    at Test.run (node:internal/test_runner/test:1402:25)[39m
@@ -627,7 +627,7 @@ test at test/agents.test.ts:60:1
 test at test/balance.test.ts:43:1
 [31m✖ the maestro shares work across CLIs by load, uses the table's equivalent, and tiers by difficulty [90m(814.799125ms)[39m[39m
   AssertionError [ERR_ASSERTION]: The input did not match the regular expression /▸ abriu: Claude · claude-sonnet-5-5/. Input:
-  
+
   'Aberto:\n' +
     '#2 Bug 1\n' +
     '  ▸ tipo: Correção de bug (escolhido pelo líder)\n' +
@@ -641,7 +641,7 @@ test at test/balance.test.ts:43:1
     '  ▸ abriu: Codex · gpt-6.1-sol · esforço médio\n' +
     '\n' +
     'Agora encerre o turno: o retorno chega sozinho.'
-  
+
       at TestContext.<anonymous> [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39mtest/balance.test.ts:80:12[90m)[39m
   [90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
   [90m    at async Test.run (node:internal/test_runner/test:1409:7)[39m
@@ -669,15 +669,15 @@ test at test/codexPermissions.test.ts:10:1
 test at test/designSkills.test.ts:40:1
 [31m✖ Codex under a Codex lead receives real design skill bodies and a writable implementation sandbox [90m(524.273958ms)[39m[39m
   AssertionError [ERR_ASSERTION]: The input did not match the regular expression /conflita com a política frontend/. Input:
-  
+
   'Error: Esforço "baixo" não vale para claude-haiku-5-5; use '
-  
+
       at async TestContext.<anonymous> [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39mtest/designSkills.test.ts:60:5[90m)[39m
   [90m    at async Test.run (node:internal/test_runner/test:1409:7)[39m
   [90m    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)[39m {
     generatedMessage: [33mtrue[39m,
     code: [32m'ERR_ASSERTION'[39m,
-    actual: Error: Esforço "baixo" não vale para claude-haiku-5-5; use 
+    actual: Error: Esforço "baixo" não vale para claude-haiku-5-5; use
         at OrbitCore.spawn [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39msrc/core.ts:2800:13[90m)[39m
         at OrbitCore.openHelper [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39msrc/core.ts:1994:25[90m)[39m
         at async OrbitCore.spawnHelper [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39msrc/core.ts:1927:18[90m)[39m
@@ -706,14 +706,14 @@ test at test/equivalentLaunch.test.ts:66:1
 [31m✖ parallel admission distributes live processes across two Codex accounts and Claude with isolated account data [90m(1032.276625ms)[39m[39m
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   [32m+ actual[39m [31m- expected[39m
-  
+
   [39m  [
   [31m-[39m   'claude',
   [39m    'codex',
   [32m+[39m   'codex',
   [39m    'codex-2'
   [39m  ]
-  
+
       at TestContext.<anonymous> [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39mtest/equivalentLaunch.test.ts:104:12[90m)[39m
   [90m    at async Test.run (node:internal/test_runner/test:1409:7)[39m
   [90m    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)[39m {
@@ -736,9 +736,9 @@ test at test/leadership.test.ts:41:1
 test at test/maestro.test.ts:59:1
 [31m✖ the maestro picks CLI and account by itself, falls back when one is used up, and the lead only orchestrates [90m(989.767875ms)[39m[39m
   AssertionError [ERR_ASSERTION]: The input did not match the regular expression /roteamento por quota válida e compatibilidade: claude/. Input:
-  
+
   'Roteamento automático: nenhuma conta com quota válida e modelo compatível. Atualize os limites em Contas ou escolha uma conta explicitamente.'
-  
+
       at TestContext.<anonymous> [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39mtest/maestro.test.ts:116:12[90m)[39m
   [90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
   [90m    at async Test.run (node:internal/test_runner/test:1409:7)[39m
@@ -779,14 +779,14 @@ test at test/taskPolicy.test.ts:28:1
 [31m✖ simple work stays cheap; frontend and motion obey exact catalog identities and efforts [90m(0.990417ms)[39m[39m
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   [32m+ actual[39m [31m- expected[39m
-  
+
   [32m+[39m null
   [31m-[39m {
   [31m-[39m   cli: 'claude',
   [31m-[39m   effort: 'high',
   [31m-[39m   model: 'claude-opus-5-5'
   [31m-[39m }
-  
+
       at TestContext.<anonymous> [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39mtest/taskPolicy.test.ts:33:10[90m)[39m
   [90m    at Test.runInAsyncScope (node:async_hooks:226:14)[39m
   [90m    at Test.run (node:internal/test_runner/test:1402:25)[39m

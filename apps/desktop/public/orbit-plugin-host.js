@@ -40,6 +40,6 @@ window.addEventListener('message',function initialize({source,data}) {
  setTimeout(()=>{if(!ready)stop('Inicialização do plugin excedeu 2 s')},2000);
  setInterval(()=>{if(ready&&!stopped&&!pending&&!queue.length)dispatch({kind:'ping',requestId:'ping-'+(++sequence)})},2000);
  window.addEventListener('pagehide',()=>worker?.terminate());
- 
+
 });
 parent.postMessage({kind:'orbit-plugin-host-ready'},'*');

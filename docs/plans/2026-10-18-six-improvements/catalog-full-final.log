@@ -570,7 +570,7 @@ npm notice run node --test "test/**/*.test.ts"
 
 test at test/admission.test.ts:8:1
 [31m✖ explicit squad CLI/model/effort reaches the launch and its durable decision receipt [90m(188.30975ms)[39m[39m
-  Error: Esforço "alto" não vale para user-pinned-model; use 
+  Error: Esforço "alto" não vale para user-pinned-model; use
       at OrbitCore.spawn [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39msrc/core.ts:2817:13[90m)[39m
       at OrbitCore.openHelper [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39msrc/core.ts:2011:25[90m)[39m
   [90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
@@ -579,7 +579,7 @@ test at test/agents.test.ts:60:1
 [31m✖ Antigravity models come from `agy models`, whatever the decoration [90m(0.861ms)[39m[39m
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   [32m+ actual[39m [31m- expected[39m
-  
+
   [32m+[39m []
   [31m-[39m [
   [31m-[39m   'low',
@@ -588,7 +588,7 @@ test at test/agents.test.ts:60:1
   [31m-[39m   'xhigh',
   [31m-[39m   'max'
   [31m-[39m ]
-  
+
       at TestContext.<anonymous> [90m(file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/[39mtest/agents.test.ts:63:10[90m)[39m
   [90m    at Test.runInAsyncScope (node:async_hooks:226:14)[39m
   [90m    at Test.run (node:internal/test_runner/test:1402:25)[39m
