@@ -1,0 +1,292 @@
+{
+  "engine": "chromium",
+  "mode": "real-sidecar-and-PTY; deterministic CLI stand-in",
+  "checks": [
+    {
+      "name": "leader without objective has an editable composer",
+      "pass": true
+    },
+    {
+      "name": "exactly one pane.submit for rapid repeated submit",
+      "pass": true
+    },
+    {
+      "name": "receipt names target and acceptance",
+      "pass": true
+    },
+    {
+      "name": "spawn leaves original xterm mounted",
+      "pass": true
+    },
+    {
+      "name": "leader draft survives helper/focus switch",
+      "pass": true
+    },
+    {
+      "name": "mission selection returns to leader",
+      "pass": true
+    },
+    {
+      "name": "mission return preserves draft",
+      "pass": true
+    },
+    {
+      "name": "mission return does not remount xterm",
+      "pass": true
+    },
+    {
+      "name": "helper draft preserved across missions",
+      "pass": true
+    },
+    {
+      "name": "second mission draft preserved",
+      "pass": true
+    },
+    {
+      "name": "per-mission helper focus restored",
+      "pass": true
+    },
+    {
+      "name": "requested resolved applied observed visible",
+      "pass": true
+    },
+    {
+      "name": "no provider identity invented",
+      "pass": true
+    },
+    {
+      "name": "no horizontal overflow 1440",
+      "pass": true
+    },
+    {
+      "name": "send visible 1440",
+      "pass": true
+    },
+    {
+      "name": "terminal remains usable 1440",
+      "pass": true
+    },
+    {
+      "name": "same terminals 1440",
+      "pass": true
+    },
+    {
+      "name": "no horizontal overflow 1024",
+      "pass": true
+    },
+    {
+      "name": "send visible 1024",
+      "pass": true
+    },
+    {
+      "name": "terminal remains usable 1024",
+      "pass": true
+    },
+    {
+      "name": "same terminals 1024",
+      "pass": true
+    },
+    {
+      "name": "no horizontal overflow 900",
+      "pass": true
+    },
+    {
+      "name": "send visible 900",
+      "pass": true
+    },
+    {
+      "name": "terminal remains usable 900",
+      "pass": true
+    },
+    {
+      "name": "same terminals 900",
+      "pass": true
+    },
+    {
+      "name": "no horizontal overflow 768",
+      "pass": true
+    },
+    {
+      "name": "send visible 768",
+      "pass": true
+    },
+    {
+      "name": "terminal remains usable 768",
+      "pass": true
+    },
+    {
+      "name": "same terminals 768",
+      "pass": true
+    },
+    {
+      "name": "no horizontal overflow 375",
+      "pass": true
+    },
+    {
+      "name": "send visible 375",
+      "pass": true
+    },
+    {
+      "name": "small-window target picker restores leader draft",
+      "pass": true
+    },
+    {
+      "name": "small focus has helper recipient",
+      "pass": true
+    },
+    {
+      "name": "small-window send receives helper ACK",
+      "pass": true
+    },
+    {
+      "name": "terminal remains usable 375",
+      "pass": true
+    },
+    {
+      "name": "same terminals 375",
+      "pass": true
+    },
+    {
+      "name": "each live pane attached once per viewer",
+      "pass": true
+    },
+    {
+      "name": "chat switch retains terminal DOM",
+      "pass": true
+    },
+    {
+      "name": "reload restores mission helper selection",
+      "pass": true
+    },
+    {
+      "name": "reload restores chat preference",
+      "pass": true
+    },
+    {
+      "name": "reload restores helper draft",
+      "pass": true
+    },
+    {
+      "name": "no runtime errors",
+      "pass": true
+    }
+  ],
+  "measurements": [
+    {
+      "width": 1440,
+      "height": 900,
+      "send": {
+        "top": 843,
+        "bottom": 887,
+        "height": 44,
+        "width": 100
+      },
+      "composer": {
+        "top": 749,
+        "bottom": 892,
+        "height": 143,
+        "width": 1184
+      },
+      "terminal": {
+        "top": 269,
+        "bottom": 736,
+        "height": 467,
+        "width": 570
+      },
+      "overflow": false
+    },
+    {
+      "width": 1024,
+      "height": 768,
+      "send": {
+        "top": 711,
+        "bottom": 755,
+        "height": 44,
+        "width": 100
+      },
+      "composer": {
+        "top": 617,
+        "bottom": 760,
+        "height": 143,
+        "width": 768
+      },
+      "terminal": {
+        "top": 321.609375,
+        "bottom": 604,
+        "height": 282.390625,
+        "width": 362
+      },
+      "overflow": false
+    },
+    {
+      "width": 900,
+      "height": 600,
+      "send": {
+        "top": 543,
+        "bottom": 587,
+        "height": 44,
+        "width": 100
+      },
+      "composer": {
+        "top": 465.96875,
+        "bottom": 592,
+        "height": 126.03125,
+        "width": 644
+      },
+      "terminal": {
+        "top": 321.609375,
+        "bottom": 559.609375,
+        "height": 238,
+        "width": 628
+      },
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "height": 1000,
+      "send": {
+        "top": 943,
+        "bottom": 987,
+        "height": 44,
+        "width": 100
+      },
+      "composer": {
+        "top": 849,
+        "bottom": 992,
+        "height": 143,
+        "width": 512
+      },
+      "terminal": {
+        "top": 321.609375,
+        "bottom": 559.609375,
+        "height": 238,
+        "width": 496
+      },
+      "overflow": false
+    },
+    {
+      "width": 375,
+      "height": 667,
+      "send": {
+        "top": 610,
+        "bottom": 654,
+        "height": 44,
+        "width": 88
+      },
+      "composer": {
+        "top": 516,
+        "bottom": 659,
+        "height": 143,
+        "width": 359
+      },
+      "terminal": {
+        "top": 321.609375,
+        "bottom": 559.609375,
+        "height": 238,
+        "width": 343
+      },
+      "overflow": false
+    }
+  ],
+  "errors": []
+}

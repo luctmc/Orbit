@@ -28,8 +28,12 @@ test('large optional memory is retrievable while task acceptance and user instru
     assert.ok(Buffer.byteLength(briefing) <= 18000)
     assert.match(briefing, /Never publish this repository/)
     assert.match(briefing, /USER RULE: ask before adding dependencies/)
-    const sha256 = /"sha256":"([a-f0-9]{64})"/.exec(briefing)![1]!
-    const page = core.readContext(lead, sha256)
+    // The briefing may also reference other guides. Identify the project memory section,
+    // rather than assuming the first recoverable document is the memory under test.
+    const pages = [...briefing.matchAll(/"sha256":"([a-f0-9]{64})"/g)].map(match => core.readContext(lead, match[1]!))
+    const page = pages.find(page => page.text.startsWith('## Project memory'))
+    assert.ok(page, 'optional project memory remains independently retrievable')
+    const sha256 = page.sha256
     assert.match(page.text, /Historical measurement/)
     assert.ok(page.nextOffset)
     const end = core.readContext(lead, sha256, page.nextOffset!, 16000)
