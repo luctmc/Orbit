@@ -1,14 +1,15 @@
-(node:48733) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(node:49609) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:48735) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(node:49610) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:48735) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
-[32m✔ real core/WebSocket/PTY: lost receipt reconciles once, reconnect restores Unicode and resize, restart changes port without replaying input [90m(1230.729125ms)[39m[39m
-[34mℹ tests 1[39m
+(node:49610) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+[32m✔ real core/WebSocket/PTY: lost receipt reconciles once, reconnect restores Unicode and resize, restart changes port without replaying input [90m(1239.16925ms)[39m[39m
+[32m✔ abrupt sidecar process death preserves inventory and does not silently reopen a sessionless orphan [90m(814.09575ms)[39m[39m
+[34mℹ tests 2[39m
 [34mℹ suites 0[39m
-[34mℹ pass 1[39m
+[34mℹ pass 2[39m
 [34mℹ fail 0[39m
 [34mℹ cancelled 0[39m
 [34mℹ skipped 0[39m
 [34mℹ todo 0[39m
-[34mℹ duration_ms 1493.79225[39m
+[34mℹ duration_ms 2307.649708[39m

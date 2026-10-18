@@ -55,7 +55,7 @@ node docs/analysis/2026-10-17-orca-recovery/verify-journey.mjs
 node docs/analysis/2026-10-17-orca-recovery/verify-journey.mjs --webkit
 ```
 
-Jornadas usam core, WebSocket, persistência, adapters e PTYs reais em `.research/recovery-journey` e portas5489/5490; o processo do agente é determinístico e não faz inferência. Prévia aberta no browser Overclock exclusivamente por MCP. Cenário de queda usa terminate do WebSocket e reinício de startServer; não é teste de SIGKILL do supervisor Rust nem simulação de falta de energia. Não foi medida melhoria de latência, tokens, custo ou qualidade.
+Jornadas usam core, WebSocket, persistência, adapters e PTYs reais em `.research/recovery-journey` e portas5489/5490; o processo do agente é determinístico e não faz inferência. Prévia aberta no browser Overclock exclusivamente por MCP. Cenários de queda usam terminate do WebSocket, reinício de startServer e SIGKILL de um processo sidecar isolado com inventário persistido; o restart confirma pane sem sessão nativa parado e recusa de resume fictício. Não é teste de SIGKILL do supervisor Rust nem simulação de falta de energia. Não foi medida melhoria de latência, tokens, custo ou qualidade.
 
 ## Coordenação e entrega integrada
 
