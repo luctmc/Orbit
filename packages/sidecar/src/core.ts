@@ -1399,8 +1399,12 @@ export class OrbitCore {
             this.inputJournal.save(pane.missionId, message.requestId!, record)
             if (pane.executionEpoch) this.measurements?.wakeup(pane.executionEpoch)
             resolve()
-          })
-          if (!queued) { clearTimeout(timer); reject(new Error('O terminal não confirmou o envio. Confira o pedido pendente.')) }
+          }, {requestId:message.requestId,queueTimeoutMs:message.queueTimeoutMs,dispatchTimeoutMs:message.dispatchTimeoutMs,rejected:error=>{
+            clearTimeout(timer)
+            if (!error.uncertain) record.state='failed'
+            record.error=error.message;this.inputJournal.save(pane.missionId,message.requestId!,record);reject(error)
+          }})
+          if (!queued) { clearTimeout(timer); if (record.state === 'submitting') record.state='failed'; reject(new Error(record.error ?? 'O terminal recusou o envio antes da colagem.')) }
           else if (pane.executionEpoch) this.measurements?.bytes(pane.executionEpoch, 'submittedBytes', text)
         })
       })
@@ -1668,6 +1672,17 @@ export class OrbitCore {
         reply({ type: 'pane.conversation', paneId: pane.id, turns: this.conversationOf(pane).slice(-60).map((t) => ({ ...t, text: t.text.slice(0, 12_000) })) })
         return
       }
+      case 'pane.queue.cancel': {
+        const pane=this.store.pane(message.paneId)
+        if (!pane) throw new Error('Agente inexistente')
+        let outcome=this.panes.cancelSubmit(pane.id,message.targetRequestId) as 'cancelled'|'dispatched'|'missing'|'preparing'
+        const record=this.inputJournal.get(pane.missionId,message.targetRequestId)
+        if(outcome==='missing' && record?.state==='acked')outcome='dispatched'
+        if(outcome==='missing' && this.inputInFlight.has(`${pane.missionId}/${message.targetRequestId}`))outcome='preparing'
+        const labels={cancelled:'Pedido cancelado na fila; rascunho preservado.',dispatched:'Texto já despachado. Cancelar a fila não desfaz o envio; interrompa o agente se necessário.',preparing:'Pedido em preparação; ainda não entrou na fila do terminal.',missing:'Pedido ausente da fila; confira o recibo antes de reenviar.'}
+        reply({type:'pane.queue.cancelled',requestId:message.requestId,outcome,message:labels[outcome]})
+        return
+      }
       case 'pane.submit':
         return this.submitInput(message, reply)
       case 'pane.resize':
@@ -1800,7 +1815,7 @@ export class OrbitCore {
         this.measurements?.wakeup(recipient.executionEpoch!)
         try { this.store.markNoticeAccepted(notice.id, recipient) }
         finally { this.sendingNotices.delete(key) }
-      })
+      }, {requestId:key,rejected:()=>this.sendingNotices.delete(key)})
       if (queued) this.measurements?.bytes(target.executionEpoch!, 'submittedBytes', noticeText(notice))
       if (!queued) this.sendingNotices.delete(key)
     }

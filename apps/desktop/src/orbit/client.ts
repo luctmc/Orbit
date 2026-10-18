@@ -112,6 +112,15 @@ export class OrbitClient {
     return result
   }
 
+  async cancelQueuedInput(key:string,paneId:number) {
+    const attempt=this.inputAttempts.get(key)
+    if(!attempt)throw new Error('Não há pedido pendente para cancelar.')
+    const requestId=crypto.randomUUID()
+    const result=await this.ask({type:'pane.queue.cancel',paneId,targetRequestId:attempt.requestId,requestId},'pane.queue.cancelled',m=>m.requestId===requestId)
+    if(result.outcome==='cancelled')this.inputAttempts.delete(key)
+    return result
+  }
+
   /** Consult the exact durable request, including original field normalization and attachment IDs. */
   async checkPendingInput(key: string) {
     const attempt = this.inputAttempts.get(key)
@@ -362,7 +371,7 @@ export class OrbitClient {
       for (const answer of [...this.answers]) answer(message)
       return
     }
-    if (message.type === 'mission.created' || message.type === 'mission.create.error' || message.type.startsWith('account.reset.') || message.type === 'pane.spawned' || message.type === 'pane.spawn.error' || message.type.startsWith('mission.progress') || message.type.startsWith('attachment.') || message.type === 'pane.submitted' || message.type === 'pane.submit.error' || message.type === 'pane.conversation' || message.type.startsWith('files.') || message.type.startsWith('git.') || message.type.startsWith('report') || message.type === 'ledger') {
+    if (message.type === 'mission.created' || message.type === 'mission.create.error' || message.type.startsWith('account.reset.') || message.type === 'pane.spawned' || message.type === 'pane.spawn.error' || message.type.startsWith('mission.progress') || message.type.startsWith('attachment.') || message.type === 'pane.queue.cancelled' || message.type === 'pane.submitted' || message.type === 'pane.submit.error' || message.type === 'pane.conversation' || message.type.startsWith('files.') || message.type.startsWith('git.') || message.type.startsWith('report') || message.type === 'ledger') {
       for (const answer of [...this.answers]) answer(message)
       return
     }

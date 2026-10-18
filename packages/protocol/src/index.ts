@@ -1002,7 +1002,8 @@ export type ClientMessage =
   /** Raw keystrokes from the terminal view. */
   | { type: 'pane.input'; paneId: number; data: string }
   /** A whole message typed elsewhere (the command bar): pasted, then submitted with Enter. */
-  | { type: 'pane.submit'; paneId: number; text: string; attachments?: string[]; requestId?: string; translationAccountId?: string; allowOriginal?: boolean }
+  | { type: 'pane.queue.cancel'; paneId: number; targetRequestId: string; requestId: string }
+  | { type: 'pane.submit'; queueTimeoutMs?: number; dispatchTimeoutMs?: number; paneId: number; text: string; attachments?: string[]; requestId?: string; translationAccountId?: string; allowOriginal?: boolean }
   | { type: 'attachment.add'; paneId: number; requestId: string; name: string; mime: string; data: string }
   | { type: 'pane.conversation'; paneId: number }
   | { type: 'pane.resize'; paneId: number; cols: number; rows: number }
@@ -1079,6 +1080,7 @@ export type ServerMessage =
   | { type: 'account.reset.error'; requestId: string; message: string }
   | { type: 'pane.spawned'; requestId: string; pane: Pane }
   | { type: 'pane.spawn.error'; requestId: string; message: string }
+  | { type: 'pane.queue.cancelled'; requestId:string; outcome:'cancelled'|'dispatched'|'missing'|'preparing'; message:string }
   | { type: 'pane.submitted'; requestId: string; paneId: number; executionEpoch?: string; acceptedAt?: number }
   | { type: 'pane.submit.error'; requestId: string; message: string; pending?: boolean }
   | { type: 'mission.created'; requestId: string; mission: Mission }

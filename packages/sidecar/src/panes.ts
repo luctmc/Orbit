@@ -25,12 +25,36 @@ interface Screen {
   serializer: InstanceType<typeof serialize.SerializeAddon>
 }
 
+export const SUBMIT_LIMITS = {maxQueued:32,maxQueuedBytes:256*1024,maxMessageBytes:128*1024,queueTimeoutMs:5000,dispatchTimeoutMs:5000} as const
+export class SubmitError extends Error {
+  readonly uncertain: boolean
+  constructor(message:string,uncertain=false){super(message);this.uncertain=uncertain}
+}
+export interface SubmitOptions {
+  requestId?:string
+  signal?:AbortSignal
+  queueTimeoutMs?:number
+  dispatchTimeoutMs?:number
+  rejected?:(error:SubmitError)=>void
+}
+interface SubmitItem {
+  text:string
+  accepted?:()=>void
+  id:string
+  rejected?:(error:SubmitError)=>void
+  cleanup:()=>void
+  expiresAt:number
+  dispatchTimeoutMs:number
+  dispatchedAt?:number
+}
+
 interface LivePane {
   pty: IPty
   idleTimer: NodeJS.Timeout | null
   /** Status comes from the agent's hooks, not from output activity. */
   hookDriven: boolean
-  queue: Array<{ text: string; accepted?: () => void }>
+  queue: SubmitItem[]
+  active?: SubmitItem[]
   submitTimer: NodeJS.Timeout | null
   closing: boolean
   terminationTimers: NodeJS.Timeout[]
@@ -149,6 +173,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       live.terminationTimers = []
       if (live.idleTimer) clearTimeout(live.idleTimer)
       if (live.submitTimer) clearTimeout(live.submitTimer)
+      this.rejectPending(live,new SubmitError('Terminal encerrou após início do envio; resultado incerto',true))
       // Even a forgotten/replaced pane must confirm its own epoch's termination.
       try { this.emit('terminated', id, pane.executionEpoch!) }
       catch (error) { this.emit('receiptError', error) }
@@ -183,27 +208,71 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     return this.submitWithReceipt(id, text)
   }
 
-  submitWithReceipt(id: number, text: string, accepted?: () => void): boolean {
+  submitWithReceipt(id: number, text: string, accepted?: () => void, options:SubmitOptions = {}): boolean {
     const live = this.live.get(id)
     if (!live || live.closing) return false
+    const reject = (message:string) => {try{options.rejected?.(new SubmitError(message))}catch(error){this.emit('receiptError',error)}return false}
+    if ([options.queueTimeoutMs,options.dispatchTimeoutMs].some(v=>v!==undefined&&(!Number.isFinite(v)||v<1||v>60_000))) return reject('Prazo inválido (1–60000 ms)')
+    if (options.signal?.aborted) return reject('Envio cancelado antes de entrar na fila')
     const clean = text.replaceAll('\x1b', '')
-    const item = { text: clean, accepted }
+    const bytes = Buffer.byteLength(clean)
+    if (bytes > SUBMIT_LIMITS.maxMessageBytes) return reject('Mensagem excede o limite de 128 KiB do terminal')
+    const requestId = options.requestId ?? randomUUID()
+    if ([...live.queue,...live.active ?? []].some(item => item.id === requestId)) return reject('Pedido já presente na fila; consulte o recibo existente')
+    if (live.queue.length >= SUBMIT_LIMITS.maxQueued || live.queue.reduce((sum,item)=>sum+Buffer.byteLength(item.text),0)+bytes > SUBMIT_LIMITS.maxQueuedBytes) return reject('Fila do terminal cheia (32 pedidos / 256 KiB); aguarde ou cancele um pedido')
+    const queueMs = Math.max(1,Math.min(60_000,options.queueTimeoutMs ?? SUBMIT_LIMITS.queueTimeoutMs))
+    const item:SubmitItem={text:clean,accepted,id:requestId,rejected:options.rejected,cleanup:()=>{},expiresAt:Date.now()+queueMs,dispatchTimeoutMs:Math.max(1,Math.min(60_000,options.dispatchTimeoutMs ?? SUBMIT_LIMITS.dispatchTimeoutMs))}
+    const cancel = () => this.cancelSubmit(id,requestId)
+    const timer = setTimeout(() => this.removeQueued(live,item,new SubmitError('Prazo de espera na fila esgotado; nenhum texto foi enviado')),queueMs)
+    options.signal?.addEventListener('abort',cancel,{once:true})
+    item.cleanup=()=>{clearTimeout(timer);options.signal?.removeEventListener('abort',cancel)}
     if (live.submitTimer) { live.queue.push(item); return true }
     return this.pasteAndSubmit(id, live, [item])
   }
 
+  /** Only queued requests can be cancelled safely. Already pasted/accepted text is irreversible. */
+  cancelSubmit(id:number,requestId:string):'cancelled'|'dispatched'|'missing' {
+    const live=this.live.get(id)
+    if (!live) return 'missing'
+    if (live.active?.some(item=>item.id===requestId)) return 'dispatched'
+    const item=live.queue.find(item=>item.id===requestId)
+    if (!item) return 'missing'
+    this.removeQueued(live,item,new SubmitError('Pedido cancelado na fila; nenhum texto foi enviado'))
+    return 'cancelled'
+  }
+
+  private removeQueued(live:LivePane,item:SubmitItem,error:SubmitError):void {
+    const at=live.queue.indexOf(item)
+    if(at<0)return
+    live.queue.splice(at,1);this.rejectItem(item,error)
+  }
+
+  private rejectItem(item:SubmitItem,error:SubmitError):void {item.cleanup();try{item.rejected?.(error)}catch(receiptError){this.emit('receiptError',receiptError)}}
+
+  private rejectPending(live:LivePane,error:SubmitError):void {
+    for(const item of live.active ?? []) {this.rejectItem(item,error)}
+    live.active=[]
+    for(const item of live.queue.splice(0)){this.rejectItem(item,new SubmitError('Terminal encerrado antes do envio'))}
+  }
+
   private pasteAndSubmit(id: number, live: LivePane, items: LivePane['queue']): boolean {
+    const now=Date.now()
+    items=items.filter(item=>{item.cleanup();if(item.expiresAt<=now){this.rejectItem(item,new SubmitError('Prazo da fila esgotado; nenhum texto foi enviado'));return false}item.dispatchedAt=now;return true})
+    if(!items.length){live.submitTimer=null;return true}
+    live.active=items
     const text = items.map(item => item.text).join('\n\n')
     const paste = this.screens.get(id)?.term.modes.bracketedPasteMode
     try { live.pty.write(paste ? `\x1b[200~${text}\x1b[201~` : text) }
     catch (error) { this.failSubmit(id, live, error); return false }
     live.submitTimer = setTimeout(() => {
       if (this.live.get(id) !== live || live.closing) return
+      if (items.some(item=>Date.now()-(item.dispatchedAt ?? 0)>item.dispatchTimeoutMs)) {this.failSubmit(id,live,new SubmitError('Prazo de dispatch esgotado após colagem; Enter não confirmado',true));return}
       try { live.pty.write('\r') }
       catch (error) { this.failSubmit(id, live, error); return }
       for (const item of items) {
         try { item.accepted?.() } catch (error) { this.emit('receiptError', error) }
       }
+      live.active=[]
       // Leave the submit keystroke separate from the next paste. Returns arriving together are
       // one subsequent message, preserving every result without several redundant wakeups.
       live.submitTimer = setTimeout(() => {
@@ -221,7 +290,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       live.closing = true
       if (live.submitTimer) clearTimeout(live.submitTimer)
       live.submitTimer = null
-      live.queue = []
+      this.rejectPending(live,error instanceof SubmitError ? error : new SubmitError('Falha de escrita; resultado do envio incerto',true))
       this.kill(id)
     }
     this.emit('receiptError', error)
@@ -245,7 +314,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     if (!live) return
     live.closing = true
     if (live.submitTimer) clearTimeout(live.submitTimer)
-    live.queue = []
+    this.rejectPending(live,new SubmitError('Terminal encerrado após início do envio; resultado incerto',true))
     if (live.terminationTimers.length) return
     // A shell can ignore HUP (including during startup). Keep the epoch leased until onExit,
     // but do not leave shutdown/restart waiting forever on that single best-effort signal.
