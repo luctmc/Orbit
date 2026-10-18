@@ -66,3 +66,18 @@ Checkout oficial, branch nova `fix/orbit-transport-recovery` a partir de origin/
 Pane182 integra o pedido adicional de vibe-coding-toolkit em arquivos reservados próprios (core, política, testes/docs e notices). Pane181 é o único responsável pela validação integrada, GitHub/build e instalação final. Nenhum build paralelo. Resultados finais de publicação/instalação e limites toolkit são registrados após a integração; estes não devem ser inferidos dos testes offline.
 
 Skills: inline [oc-showcase].
+
+## Evidência integrada antes da publicação
+
+- `npm ci`: exit0; lockfile mantido.
+- `npm run typecheck`: exit0 nos três workspaces.
+- `ORBIT_BROWSER=<Chromium headless local> npm test`: exit0, **345/345 sidecar e46/46 frontend**, após integração toolkit e correção do teste de memória por seção.
+- `node --test scripts/*.test.mjs`: exit0,6/6.
+- Regressões recovery/snapshot:16/16; incluem janela de parser que falhava antes, perdas de ACK, socket antigo, buffer lento, heartbeat, Unicode/resize e SIGKILL de sidecar isolado.
+- Revisão independente do conjunto toolkit + continuidade:23/23, comando `node --test packages/sidecar/test/toolkitPolicy.test.ts packages/sidecar/test/toolkitJourneys.test.ts packages/sidecar/test/taskContinuity.test.ts`.
+- Jornadas finais em bancada reiniciada com o código integrado:Chromium42/42 eWebKit42/42; zero pageerrors;375/768/900/1024/1440px sem overflow. Screenshots375/900/1440 inspecionadas. Nenhuma inferência paga nestas jornadas.
+- `git diff --check`: exit0.
+
+A primeira execução ampla detectou uma espera incorreta da fixture de recuperação por conteúdo não vazio (um shell pode entregar snapshot vazio); a fixture agora aguarda o recibo do snapshot e resize observado. A execução seguinte detectou o teste de memória que pegava o primeiro hash, agora pertencente ao toolkit; selecionar a seção `## Project memory` preserva as verificações originais de conteúdo, paginação e contrato, sem retirar o teste. Esses ajustes não foram tratados como correções de comportamento de produção.
+
+O build de aplicativo será o oficial do CI após merge (sem build local concorrente). A instalação será feita a partir desse mesmo artefato, conferindo source.json, digest GitHub, assinatura do updater com a chave pública existente, codesign, todos os hashes do bundle e processo nativo/sidecar em execução. O recibo efetivo fica em `.research/orca-recovery-installation/`; a entrega final aponta PR/release e estado observado, sem publicar dados/credenciais do usuário.

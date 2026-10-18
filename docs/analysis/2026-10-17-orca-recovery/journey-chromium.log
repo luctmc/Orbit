@@ -1,4 +1,4 @@
-(node:39430) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(node:71425) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 (Use `node --trace-warnings ...` to show where the warning was created)
 leader without objective has an editable composer [33mtrue[39m
 exactly one pane.submit for rapid repeated submit [33mtrue[39m
