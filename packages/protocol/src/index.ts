@@ -1,3 +1,4 @@
+export * from './plugins.ts'
 // Wire contract between the Orbit UI and the sidecar (JSON over one WebSocket).
 
 /** Isolated input translation; independent of agent routing and execution settings. */
@@ -1003,6 +1004,9 @@ export type ClientMessage =
   /** Raw keystrokes from the terminal view. */
   | { type: 'pane.input'; paneId: number; data: string }
   /** A whole message typed elsewhere (the command bar): pasted, then submitted with Enter. */
+  | { type: 'app-plugins.list'; requestId:string }
+  | { type: 'app-plugins.configure'; requestId:string; key:string; hash:string; enabled:boolean; permissions:import('./plugins.ts').AppPluginPermission[] }
+  | { type: 'app-plugins.load'; requestId:string; key:string }
   | { type: 'pane.history.get'; paneId:number; epoch?:string; requestId:string }
   | { type: 'pane.queue.cancel'; paneId: number; targetRequestId: string; requestId: string }
   | { type: 'pane.submit'; queueTimeoutMs?: number; dispatchTimeoutMs?: number; paneId: number; text: string; attachments?: string[]; requestId?: string; translationAccountId?: string; allowOriginal?: boolean }
@@ -1083,6 +1087,8 @@ export type ServerMessage =
   | { type: 'account.reset.error'; requestId: string; message: string }
   | { type: 'pane.spawned'; requestId: string; pane: Pane }
   | { type: 'pane.spawn.error'; requestId: string; message: string }
+  | { type: 'app-plugins'; requestId:string; plugins:import('./plugins.ts').AppPluginSummary[]; error?:string }
+  | { type: 'app-plugins.loaded'; requestId:string; plugin:import('./plugins.ts').LoadedAppPlugin|null; error?:string }
   | { type: 'pane.history'; paneId:number; requestId:string; entries:Array<{epoch:string;updatedAt:number}>; text?:string; error?:string }
   | { type: 'pane.queue.cancelled'; requestId:string; outcome:'cancelled'|'dispatched'|'missing'|'preparing'; message:string }
   | { type: 'pane.submitted'; requestId: string; paneId: number; executionEpoch?: string; acceptedAt?: number }

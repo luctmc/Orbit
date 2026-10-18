@@ -70,7 +70,7 @@ function LimitMeter({ limits, name: label, now }: { limits: AccountLimits; name:
   )
 }
 
-export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSelect, onOpen, onNewMission, onSquads, onSettings, pendingProposals = 0 }: {
+export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSelect, onOpen, onNewMission, onSquads, onSettings, onPlugins, pendingProposals = 0 }: {
   workspaces: Workspace[]
   activeId: string | null
   homeActive: boolean
@@ -79,6 +79,7 @@ export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSele
   onOpen: () => void
   onNewMission: (() => void) | null
   onSquads: () => void
+  onPlugins:()=>void
   onSettings: () => void
   /** Leads' table proposals waiting for the person. */
   pendingProposals?: number
@@ -98,6 +99,7 @@ export function WorkspaceTabs({ workspaces, activeId, homeActive, onHome, onSele
         <span className="eyebrow">Seu Orbit</span>
         <button type="button" onClick={onOpen}>Novo workspace<span>Conectar pastas de um projeto</span></button>
         <button type="button" onClick={onSquads}>Equipes e squads<span>Organizar papéis e especialidades</span></button>
+        <button type="button" onClick={onPlugins}>Plugins do aplicativo<span>Host experimental · painéis, comandos e eventos</span></button>
         <button type="button" onClick={onSettings}>Configurações{pendingProposals > 0 && <span className="count-badge">{pendingProposals} propostas</span>}<span>Contas, CLIs, modelos e ferramentas</span></button>
       </ActionMenu>
       <button type="button" className="icon-btn tabs__settings" aria-label="Configurações" title="Configurações" onClick={onSettings}><SettingsIcon size={18} />{pendingProposals > 0 && <span className="tabs__notification" aria-label={`${pendingProposals} propostas pendentes`} />}</button>

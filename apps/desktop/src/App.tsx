@@ -1,3 +1,4 @@
+import { AppPluginsPanel } from './components/AppPluginsPanel.tsx'
 import { useEffect, useRef, useState } from 'react'
 import { restoreMissionSelection } from './orbit/missionSelection.ts'
 import { hasNewPanes, selectedAfterRemoval } from './orbit/paneLayout.ts'
@@ -15,7 +16,7 @@ import { UpdaterProvider, useUpdater } from './orbit/updater.ts'
 import { useNotifications } from './orbit/notify.ts'
 import { OrbitMark, PlusIcon } from './components/icons.tsx'
 
-type DialogKind = 'workspace' | 'workspace-edit' | 'mission' | 'agent' | 'squads' | 'routing' | 'accounts' | 'about' | null
+type DialogKind = 'workspace' | 'workspace-edit' | 'mission' | 'agent' | 'squads' | 'routing' | 'accounts' | 'about' | 'plugins' | null
 
 const BOOT_AT = Date.now()
 
@@ -145,6 +146,7 @@ export function App() {
         onNewMission={workspace && view === 'mission' ? () => setDialog('mission') : null}
         onSquads={() => setDialog('squads')}
         onSettings={() => setDialog('routing')}
+        onPlugins={()=>setDialog('plugins')}
         pendingProposals={state.proposals.filter((p) => p.status === 'pendente').length}
       />
 
@@ -208,6 +210,7 @@ export function App() {
       {dialog === 'mission' && workspace && <NewMissionDialog workspaceId={workspace.id} workspaceName={workspace.name} onClose={() => setDialog(null)} onManageSquads={() => setDialog('squads')} onManageRouting={() => setDialog('routing')} />}
       {dialog === 'agent' && mission && <AddAgentDialog missionId={mission.id} onClose={() => setDialog(null)} />}
       {dialog === 'squads' && <SquadsDialog onClose={() => setDialog(null)} />}
+      {dialog === 'plugins' && <AppPluginsPanel onClose={()=>setDialog(null)} />}
       {dialog === 'routing' && <RoutingDialog onClose={() => setDialog(null)} />}
       {dialog === 'accounts' && <RoutingDialog initialTab="contas" onClose={() => setDialog(null)} />}
       {dialog === 'about' && <RoutingDialog initialTab="clis" onClose={() => setDialog(null)} />}

@@ -1,4 +1,5 @@
 import { catalogRevision as revisionOfCatalog } from './catalogRevision.ts'
+import { AppPlugins } from './appPlugins.ts'
 import { CatalogInvalidated, AccountCatalogs, accountCatalogKey, discoverAccountCatalog } from './accountCatalog.ts'
 import { InputJournal, inputFingerprint, translateCodex, UncertainTranslation, RESPONSE_LANGUAGE, type InputRecord, type Translate } from './inputLanguage.ts'
 
@@ -114,6 +115,7 @@ export interface CoreOptions {
 
 /** Orbit's domain logic: UI messages, MCP tool calls and hook reports all land here. */
 export class OrbitCore {
+  private readonly appPlugins:AppPlugins
   private readonly inputJournal: InputJournal
   private readonly translate: Translate
   private readonly inputInFlight = new Map<string, Promise<void>>()
@@ -185,6 +187,7 @@ export class OrbitCore {
     this.broadcast = broadcast
     this.run = run ?? loginShellRunner(shell)
     this.dataDir = dataDir
+    this.appPlugins=new AppPlugins(dataDir)
     this.inputJournal = new InputJournal(dataDir)
     this.translate = translate ?? translateCodex
     this.attachments = new Attachments(dataDir)
@@ -1676,6 +1679,21 @@ export class OrbitCore {
         const pane = this.store.pane(message.paneId)
         if (!pane) throw new Error('Agente inexistente')
         reply({ type: 'pane.conversation', paneId: pane.id, turns: this.conversationOf(pane).slice(-60).map((t) => ({ ...t, text: t.text.slice(0, 12_000) })) })
+        return
+      }
+      case 'app-plugins.list':
+      case 'app-plugins.configure': {
+        try{
+          if(message.type==='app-plugins.configure')this.appPlugins.configure(message.key,message.hash,message.enabled,message.permissions)
+          const result={type:'app-plugins' as const,requestId:message.requestId,plugins:this.appPlugins.list()}
+          reply(result)
+          if(message.type==='app-plugins.configure')this.broadcast({...result,requestId:''})
+        }catch(error){reply({type:'app-plugins',requestId:message.requestId,plugins:[],error:error instanceof Error?error.message:String(error)})}
+        return
+      }
+      case 'app-plugins.load': {
+        try{reply({type:'app-plugins.loaded',requestId:message.requestId,plugin:this.appPlugins.load(message.key)})}
+        catch(error){reply({type:'app-plugins.loaded',requestId:message.requestId,plugin:null,error:error instanceof Error?error.message:String(error)})}
         return
       }
       case 'pane.history.get': return (async()=>{
