@@ -101,3 +101,9 @@ account cache and conservative fallbacks. Source hashes and reviewed files are r
 `docs/plans/2026-10-18-six-improvements/upstream/sources.json`.
 The complete Orca MIT license above applies to this adaptation. No Orca runtime dependency,
 branding or installed third-party plugin is included. Its plugin API remains experimental.
+
+`apps/desktop/src/orbit/splitTree.ts` adapts the binary split-tree representation and
+collapse-on-removal approach reviewed in Orca bbdbe72
+`src/shared/terminal-pane-layout-tree.ts`. Orbit independently implements validated numeric
+pane membership, minimum-size geometry, flat keyed rendering and narrow-window focus.
+Copyright (c) 2026 Lovecast Inc.; the complete MIT notice above is retained in the bundle.

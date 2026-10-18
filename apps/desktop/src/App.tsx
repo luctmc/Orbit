@@ -187,7 +187,7 @@ export function App() {
                 active={active}
                 panes={state.panes.filter(p => p.missionId === item.id).sort((a, b) => a.role === b.role ? a.id - b.id : a.role === 'lead' ? -1 : 1)}
                 selectedPaneId={selections[item.id] ?? null}
-                layout={layouts[item.id] === 'foco' ? 'foco' : 'grade'}
+                layout={layouts[item.id] === 'foco' ? 'foco' : layouts[item.id] === 'livre' ? 'livre' : 'grade'}
                 onLayout={next => setLayouts(current => ({ ...current, [item.id]: next }))}
                 onSelectPane={setPaneId}
                 onAddAgent={() => setDialog('agent')}

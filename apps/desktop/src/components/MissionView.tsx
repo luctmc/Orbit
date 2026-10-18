@@ -131,6 +131,7 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
         <div className="mission__actions">
           <div className="segmented mission__layout" role="group" aria-label="Layout dos agentes">
             <button type="button" aria-pressed={layout === 'grade'} onClick={() => onLayout('grade')}>Grade</button>
+            <button type="button" aria-pressed={layout === 'livre'} onClick={() => onLayout('livre')}>Splits</button>
             <button type="button" aria-pressed={layout === 'foco'} onClick={() => onLayout('foco')}>Foco</button>
           </div>
           <ActionMenu label="Visualizar">

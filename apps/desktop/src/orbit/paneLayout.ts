@@ -1,4 +1,4 @@
-export type Layout = 'grade' | 'foco'
+export type Layout = 'grade' | 'foco' | 'livre'
 export type Columns = 'auto' | '1' | '2' | '3'
 
 /** Compare identities, not counts: duplicate, replacements and batched spawns all reveal the crew. */
