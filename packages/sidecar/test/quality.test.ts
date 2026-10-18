@@ -26,7 +26,7 @@ test('each kind of work carries its method to any CLI, and reading kinds are rea
   const mission = { title: 'M' } as Mission
   const role = crewRole(mission, { id: 3 }, { children: 2 }, undefined, review)
   assert.match(role, /How to do this kind of work:\n1\. Do not edit files/)
-  assert.match(role, /This task is read-only/)
+  assert.match(role, /Assignment scope: inspect and report/)
   assert.match(role, /up to 2 sub-helpers/)
   assert.doesNotMatch(crewRole(mission, { id: 4 }, {}, undefined, review), /sub-helpers/)
 })
@@ -102,7 +102,7 @@ test('helpers answer acceptance criteria, open sub-helpers within a cap, and the
     // A read-only kind: Claude's edit tools are refused; the flow keeps the receipt.
     const auditId = Number(/#(\d+) /.exec(await asLead.call('agent_spawn', { title: 'Auditar', task: 'Descubra por que o build é lento', kind: 'investigacao' }))![1])
     const auditToken = await tokenOf(auditId)
-    assert.match((await hook(auditToken, { hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: '/x' } })).hookSpecificOutput.permissionDecisionReason, /só de leitura/)
+    assert.equal(await hook(auditToken, { hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: '/x' } }), null)
     assert.equal(await hook(auditToken, { hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/x' } }), null)
     const opened = server.core.missionEvents(mission.id).find((e) => e.kind === 'pane.spawned' && e.paneId === auditId)!
     assert.match(opened.body, /▸ tipo: Investigação \(escolhido pelo líder\)[\s\S]*▸ conta: /)

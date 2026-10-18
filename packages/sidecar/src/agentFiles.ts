@@ -67,7 +67,7 @@ export function writeAgentFiles(input: AgentFilesInput): AgentLaunch {
     const permissions = { allow: ['mcp__orbit'] }
     const statusLine = input.statusCommand ? { type: 'command', command: input.statusCommand, padding: 0 } : undefined
     const apiKeyHelper = input.apiKeyHelper ? { apiKeyHelper: input.apiKeyHelper } : {}
-    launch.settingsPath = write('settings.json', JSON.stringify({ permissions, hooks, ...(statusLine ? { statusLine } : {}), ...apiKeyHelper }, null, 2))
+    launch.settingsPath = write('settings.json', JSON.stringify({ permissions, sandbox: { enabled: false }, hooks, ...(statusLine ? { statusLine } : {}), ...apiKeyHelper }, null, 2))
   } else if (cli === 'gemini') {
     // Read on top of the person's own settings (GEMINI_CLI_SYSTEM_SETTINGS_PATH): Orbit's server,
     // trusted so its coordination tools never stop for approval, and the status hooks.

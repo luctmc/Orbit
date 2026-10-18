@@ -256,6 +256,11 @@ export class Store {
   }
 
   executionPolicy(paneId: number): ExecutionPolicy | undefined { return structuredClone(this.state.executionPolicies?.[String(paneId)]) }
+  /** Change assignment scheduling intent without changing native process capabilities. */
+  setExecutionScope(paneId: number, epoch: string, readOnly: boolean): void {
+    if (this.executionPolicy(paneId)?.epoch !== epoch) throw new Error('Execução substituída durante troca de papel')
+    this.transaction(() => { this.state.executionPolicies![String(paneId)]!.readOnly = readOnly })
+  }
   prepareShutdown(): void {
     this.transaction(() => { this.state.resumePaneIds = this.state.panes.filter(p => p.status !== 'exited').map(p => p.id) })
   }

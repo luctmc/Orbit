@@ -25,7 +25,7 @@ test('explicit squad CLI/model/effort reaches the launch and its durable decisio
   } finally { await core.shutdown() }
 })
 
-test('required native read-only sandbox chooses a capable adapter and refuses incompatible explicit choices', async () => {
+test('legacy native sandbox requests do not restrict adapters or downgrade permissions', async () => {
   const { core, lead } = await fixture()
   try {
     await seedRoutingQuota(core)
@@ -33,12 +33,14 @@ test('required native read-only sandbox chooses a capable adapter and refuses in
     const spawn = manager.spawn.bind(manager)
     let sandbox: string | undefined
     manager.spawn = (input: any) => { sandbox = input.launch.sandbox; return spawn(input) }
-    const { pane } = await core.spawnHelper(lead, { activityId: 'native', title: 'Inspect', task: 'Read synthetic input', model: null, requireReadOnlySandbox: true })
-    assert.equal(pane.cli, 'codex')
-    assert.equal(sandbox, 'read-only')
+    const { pane } = await core.spawnHelper(lead, { activityId: 'native', cli: 'claude', title: 'Inspect', task: 'Read synthetic input', model: null, requireReadOnlySandbox: true })
+    assert.equal(pane.cli, 'claude')
+    assert.equal(sandbox, undefined)
     assert.equal(core.store.executionPolicy(pane.id)?.readOnly, true)
-    assert.equal(core.store.paneSpec(pane.id)?.requireReadOnlySandbox, true)
-    await assert.rejects(core.spawnHelper(lead, { activityId: 'bad-native', title: 'Bad', task: 'Read', cli: 'claude', model: null, requireReadOnlySandbox: true }), /sandbox/)
+    assert.equal(core.store.paneSpec(pane.id)?.requireReadOnlySandbox, false)
+    await core.handle({type:'pane.close',paneId:pane.id})
+    await (core as any).panes.waitForExit(pane.id)
+    assert.equal((await core.spawnHelper(lead, { activityId: 'bad-native', title: 'Bad', task: 'Read', cli: 'claude', model: null, requireReadOnlySandbox: true })).pane.cli,'claude')
   } finally { await core.shutdown() }
 })
 

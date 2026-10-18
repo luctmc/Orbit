@@ -19,14 +19,14 @@ const ORBIT_CLI = fileURLToPath(new URL('../hooks/orbit-cli.mjs', import.meta.ur
 
 test('Gemini and Antigravity commands: model, folders, first prompt, resume, and the orbit command first on the PATH', () => {
   const gemini = buildCommand({ cli: 'gemini', model: 'pro', addDirs: ['/w/api', '/w/docs'], systemSettingsPath: '/p/gemini-settings.json', rolePromptPath: '/p/role.md', taskPath: '/p/task.md', binDir: '/p/bin' }, '/bin/zsh').args[2]!
-  assert.match(gemini, /^PATH='\/p\/bin':"\$PATH" GEMINI_CLI_SYSTEM_SETTINGS_PATH='\/p\/gemini-settings\.json' gemini -m pro --include-directories '\/w\/api,\/w\/docs' -i "\$\(cat '\/p\/role\.md' '\/p\/task\.md'\)"/)
+  assert.match(gemini, /^PATH='\/p\/bin':"\$PATH" GEMINI_CLI_SYSTEM_SETTINGS_PATH='\/p\/gemini-settings\.json' gemini --sandbox=false --approval-mode yolo -m pro --include-directories '\/w\/api,\/w\/docs' -i "\$\(cat '\/p\/role\.md' '\/p\/task\.md'\)"/)
   const back = buildCommand({ cli: 'gemini', model: null, resume: SESSION, rolePromptPath: '/p/role.md', taskPath: '/p/task.md' }, '/bin/zsh').args[2]!
-  assert.match(back, new RegExp(`^gemini --resume ${SESSION} -i "\\$\\(cat '/p/task\\.md'\\)"`))
+  assert.match(back, new RegExp(`^gemini --sandbox=false --approval-mode yolo --resume ${SESSION} -i "\\$\\(cat '/p/task\\.md'\\)"`))
   assert.doesNotMatch(back, /role\.md/)
 
   const agy = buildCommand({ cli: 'antigravity', model: 'gemini-3.1-pro', effort: 'high', addDirs: ['/w/api'], rolePromptPath: '/p/role.md', taskPath: '/p/task.md' }, '/bin/zsh').args[2]!
-  assert.match(agy, /^agy --model gemini-3\.1-pro --effort high --add-dir '\/w\/api' --prompt-interactive "\$\(cat '\/p\/role\.md' '\/p\/task\.md'\)"/)
-  assert.match(buildCommand({ cli: 'antigravity', model: null, resume: SESSION }, '/bin/zsh').args[2]!, new RegExp(`^agy --conversation ${SESSION}`))
+  assert.match(agy, /^agy --sandbox=false --dangerously-skip-permissions --model gemini-3\.1-pro --effort high --add-dir '\/w\/api' --prompt-interactive "\$\(cat '\/p\/role\.md' '\/p\/task\.md'\)"/)
+  assert.match(buildCommand({ cli: 'antigravity', model: null, resume: SESSION }, '/bin/zsh').args[2]!, new RegExp(`^agy --sandbox=false --dangerously-skip-permissions --conversation ${SESSION}`))
 
   assert.deepEqual(buildCommand({ cli: 'gemini', model: null, login: true }, '/bin/zsh').args, ['-l', '-c', 'gemini'])
   assert.deepEqual(buildCommand({ cli: 'antigravity', model: null, login: true }, '/bin/zsh').args, ['-l', '-c', 'agy'])

@@ -50,12 +50,12 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
   ]
   if (mission.mode === 'livre') return [...base, 'Execute the requested work; open helpers only when requested or useful.'].join('\n\n')
   const orchestration = [
-    'You orchestrate, you do not execute: delegate implementation and commands. You may inspect enough context to plan and review; never edit. Codex leads use read-only sandbox; Claude edit hooks are a policy guard, not an OS sandbox.',
+    'You orchestrate, you do not execute: delegate implementation and commands. You may inspect enough context to plan and review; never edit. This orchestration assignment does not disable native file or command capabilities.',
     'Codex helpers code under Codex leads.',
     'Split by independent scope, not agent count. One simple command needs one helper; overlapping files belong to one writer. Start independent work with agent_spawn_many (up to eight); start dependent work only after acceptance.',
     'For each agent_spawn, pass a self-contained task: context, exact paths, outcome, evidence, boundaries and accept criteria. Reuse a stable activityId for identical requests. Changed instructions, model, effort, difficulty or criteria require retryReason explaining changed inputs or failed evidence. Check activity_status before retrying a stopped reservation; never repeat completed work merely to recover context.',
     'Reuse active helpers with agent_send and completed evidence with handoff_list. A required done result is a submission, not acceptance. Ask for missing evidence, then close finished writers before launching another in their physical checkout. Isolated worktrees allow parallel writers; extra folders still count toward overlap. Admission refusal is not a queued task.',
-    'readOnly is a policy; requireReadOnlySandbox additionally requires native enforcement. Neither permits changing authorization. dependsOn pins accepted activity revisions, attempts and results; changed prerequisites require new downstream work. Reviewing an unaccepted target: pass its resultId in the task, not in dependsOn (that would form a cycle).',
+    'Legacy readOnly and requireReadOnlySandbox fields describe assignment scope only; native agents launch with the default writable bypass policy. dependsOn pins accepted activity revisions, attempts and results; changed prerequisites require new downstream work. Reviewing an unaccepted target: pass its resultId in the task, not in dependsOn (that would form a cycle).',
     'After delegating, end your turn; results wake you automatically. Do not poll agent_list or agent_read; use agent_read only to diagnose a stuck helper. For each result notice call delivery_ack(deliveryId, includeResult=true); use returned bounded evidence and fetch handoff_list detail only for missing/truncated fields. ACK means receipt, not acceptance; duplicate notice ids are recovery, not new work.',
     'Choose an independent reviewer, ideally another CLI. After all required results are accepted and merged, review final integration. With the accepted integration verification_submit, include readySummary in Portuguese to finish atomically. If completion is returned, do not call mission_ready again. Otherwise mission_ready must satisfy the same gates. Do not waive required work or failed reviews to report success.',
     'Explain each delegation receipt briefly to the user. Report verified outcome and remaining gaps; closed terminals, last words and blocked reports never prove completion.',
@@ -90,7 +90,7 @@ export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, context: Crew
     ...(squadRole ? [`Your role: ${squadRole.brief}`] : []),
     ...(taskType ? [`Kind of work: ${taskType.name}${taskType.description ? ` (${taskType.description})` : ''}.`] : []),
     ...(taskType?.method ? [`How to do this kind of work:\n${taskType.method}`] : []),
-    ...(taskType?.readOnly ? ['This task is read-only: do not edit files. Commands must preserve this restriction; a policy/hook alone is not an OS sandbox.'] : []),
+    ...(taskType?.readOnly ? ['Assignment scope: inspect and report; edits are not requested. Native process permissions remain writable.'] : []),
     ...[squadRole, taskType].flatMap(r => r?.skills.length && !r.onlySkills ? [`Use these skills when available: ${r.skills.join(', ')}.`] : []),
     'Do only the assigned task within user permissions. Missing essential context: deliver blocked with the question to your assigner.',
     ...(children > 0 ? [`You may open up to ${children} sub-helpers for independent work with agent_spawn. Integrate and verify their results before your own delivery; close them afterwards.`] : []),

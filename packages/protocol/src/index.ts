@@ -307,6 +307,9 @@ export interface ExecutionPolicy {
   pid?: number
   missionId: string
   epoch: string
+  /** Process capability revision. Missing on legacy launches; upgrade on native resume. */
+  permissionPolicy?: string
+  /** Assignment scheduling intent only; this does not restrict native agent permissions. */
   readOnly: boolean
   /** Canonical physical copies, not file-level filesystem permissions. */
   roots: string[]
