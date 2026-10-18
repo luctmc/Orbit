@@ -3,10 +3,18 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, writeFileSync, existsSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { AGENT_PERMISSION_NOTE, AGENT_PERMISSION_POLICY } from '../src/agentPermissions.ts'
 import { buildCommand, type AgentLaunch } from '../src/command.ts'
 import { startServer } from '../src/server.ts'
 import { offline, connect, ORIGIN, TOKEN } from './helpers.ts'
 import { CATALOG_FIXTURE, seedCatalog } from './catalogFixture.ts'
+
+test('default permission briefing resolves reservations without renewing user approval or overriding real limits', () => {
+  assert.equal(AGENT_PERMISSION_POLICY, 'writable-bypass-v2')
+  assert.match(AGENT_PERMISSION_NOTE, /without asking again/)
+  assert.match(AGENT_PERMISSION_NOTE, /independent branch\/worktree and unclaimed files/)
+  assert.match(AGENT_PERMISSION_NOTE, /macOS privacy entitlements/)
+})
 
 test('legacy sandbox flags cannot downgrade the default agent capability on start or resume', () => {
   for (const sandbox of [undefined, 'read-only', 'workspace-write', 'danger-full-access'] as const) {
