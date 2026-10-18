@@ -6,6 +6,7 @@ import type { ClientMessage, ServerMessage, StartupTask } from '@orbit/protocol'
 import { OrbitCore, type CoreOptions } from './core.ts'
 import type { HookPayload } from './hooks.ts'
 import { handleMcp } from './mcp.ts'
+import { ClientTransport, CLIENT_HEARTBEAT_MS } from './clientTransport.ts'
 
 const MAX_BODY = 1024 * 1024
 
@@ -42,13 +43,13 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
    * Per connection: panes whose snapshot is being prepared (with the output held back meanwhile)
    * and the missions whose browser it is watching (frames only go there).
    */
-  const clients = new Map<WebSocket, { id: string; attaching: Map<number, ServerMessage[]>; watching: Set<string> }>()
+  const clients = new Map<WebSocket, { id: string; transport: ClientTransport; watching: Set<string> }>()
   const tasks: StartupTask[] = ['recovery', 'catalog', 'accounts', 'clis', 'skills'].map(id => ({ id: id as StartupTask['id'], state: 'pending' }))
   let closed = false
   let resolveInitialized!: () => void
   const initialized = new Promise<void>(resolve => { resolveInitialized = resolve })
   const send = (ws: WebSocket, message: ServerMessage) => {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message))
+    clients.get(ws)?.transport.send(message)
   }
   const core = new OrbitCore({
     dataDir: options.dataDir,
@@ -59,11 +60,9 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     measurements: options.measurements,
     benchmarkEagerContext: options.benchmarkEagerContext,
     broadcast: (message) => {
-      for (const [ws, { attaching, watching }] of clients) {
+      for (const [, { transport, watching }] of clients) {
         if (message.type === 'browser.frame' && !watching.has(message.missionId)) continue
-        const held = message.type === 'pane.data' ? attaching.get(message.paneId) : undefined
-        if (held) held.push(message)
-        else send(ws, message)
+        transport.broadcast(message)
       }
     },
   })
@@ -73,15 +72,14 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
    * sent right behind the snapshot. The view ignores `pane.data` until its snapshot arrives.
    */
   const attach = async (ws: WebSocket, paneId: number) => {
-    const attaching = clients.get(ws)?.attaching
-    if (!attaching || attaching.has(paneId)) return
-    attaching.set(paneId, [])
+    const transport = clients.get(ws)?.transport
+    if (!transport?.beginAttach(paneId)) return
     try {
       const snapshot = await core.paneSnapshot(paneId)
-      if (snapshot) send(ws, { type: 'pane.snapshot', paneId, ...snapshot })
-      for (const message of attaching.get(paneId) ?? []) send(ws, message)
-    } finally {
-      attaching.delete(paneId)
+      transport.finishAttach(paneId, snapshot ? { type: 'pane.snapshot', paneId, ...snapshot } : undefined)
+    } catch (error) {
+      transport.finishAttach(paneId)
+      send(ws, { type: 'error', message: error instanceof Error ? error.message : String(error) })
     }
   }
 
@@ -107,8 +105,10 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   })
 
   wss.on('connection', (ws: WebSocket) => {
-    const client = { id: randomUUID(), attaching: new Map<number, ServerMessage[]>(), watching: new Set<string>() }
+    const client = { id: randomUUID(), transport: new ClientTransport(ws), watching: new Set<string>() }
     clients.set(ws, client)
+    ws.on('pong', () => client.transport.pong())
+    ws.on('error', () => client.transport.stop())
     for (const message of core.welcome()) send(ws, message)
     send(ws, { type: 'engine.startup', tasks })
     ws.on('message', (raw) => {
@@ -130,6 +130,9 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
       core.browser.unwatchAll(client.id)
     })
   })
+
+  const heartbeat = setInterval(() => { for (const client of clients.values()) client.transport.heartbeat() }, CLIENT_HEARTBEAT_MS)
+  heartbeat.unref()
 
   await new Promise<void>((resolve) => http.listen(options.port, '127.0.0.1', resolve))
   const address = http.address()
@@ -164,6 +167,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     async close() {
       closed = true
       clearTimeout(startup)
+      clearInterval(heartbeat)
       resolveInitialized()
       const shutdown = core.shutdown()
       for (const ws of clients.keys()) ws.terminate()

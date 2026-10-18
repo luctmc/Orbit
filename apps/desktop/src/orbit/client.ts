@@ -163,6 +163,10 @@ export class OrbitClient {
   private readonly messageListeners = new Set<(message: ServerMessage) => void>()
   /** One-off answers (files.*) go to whoever asked, not into the shared state. */
   private readonly answers = new Set<(message: ServerMessage) => void>()
+  private readonly interrupted = new Set<() => void>()
+  private stopped = false
+  private retryTimer: ReturnType<typeof setTimeout> | undefined
+  private connectionGeneration = 0
   private ws: WebSocket | null = null
   private retryMs = 500
   private readonly resolveUrl: () => Promise<string>
@@ -187,7 +191,7 @@ export class OrbitClient {
   }
 
   send(message: ClientMessage): void {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(message))
+    if (this.state.snapshotReady && this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(message))
     else this.update({ lastError: 'Sem conexão com o motor do Orbit' })
   }
 
@@ -250,14 +254,19 @@ export class OrbitClient {
         if (m.type === type && match(m as Extract<ServerMessage, { type: T }>)) finish(() => resolve(m as Extract<ServerMessage, { type: T }>))
         else if ((m.type === 'files.error' && !['mission.progress', 'pane.submit', 'mission.create'].includes(message.type)) || ((m.type === 'mission.create.error' || m.type === 'account.reset.error' || m.type === 'workspace.error' || m.type === 'attachment.error' || m.type === 'pane.submit.error' || m.type === 'pane.spawn.error' || m.type === 'mission.progress.error') && 'requestId' in message && m.requestId === message.requestId)) finish(() => reject('pending' in m && m.pending ? new OrbitPendingInput(m.message) : new Error(m.message)))
       }
+      const interrupt = () => finish(() => reject(new OrbitRequestTimeout('A conexão com o motor caiu antes da confirmação. Confira o mesmo pedido quando reconectar.')))
       const finish = (settle: () => void) => {
         clearTimeout(timer)
         this.answers.delete(listener)
+        this.interrupted.delete(interrupt)
         settle()
       }
       this.answers.add(listener)
-      if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(message))
-      else finish(() => reject(new Error('Sem conexão com o motor do Orbit')))
+      this.interrupted.add(interrupt)
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        try { this.ws.send(JSON.stringify(message)) }
+        catch { interrupt() } // The transport may have accepted bytes before reporting failure.
+      } else finish(() => reject(new Error('Sem conexão com o motor do Orbit')))
     })
   }
 
@@ -286,35 +295,64 @@ export class OrbitClient {
     this.ws.send(JSON.stringify({ type: 'pane.attach', paneId } satisfies ClientMessage))
   }
 
+  /** Release transport resources without deleting drafts, receipts or uncertain operation IDs. */
+  dispose(): void {
+    this.stopped = true
+    this.connectionGeneration++
+    clearTimeout(this.retryTimer)
+    const ws = this.ws
+    this.ws = null
+    ws?.close()
+    this.invalidateConnection()
+  }
+
+  private invalidateConnection(): void {
+    this.attaching.clear()
+    for (const views of this.views.values()) for (const state of views.values()) state.ready = false
+    for (const interrupt of [...this.interrupted]) interrupt()
+    this.update({ connection: 'closed', snapshotReady: false })
+  }
+
   private async connect(): Promise<void> {
-    this.update({ connection: 'connecting' })
-    let url: string
+    if (this.stopped) return
+    const generation = ++this.connectionGeneration
+    this.update({ connection: 'connecting', snapshotReady: false })
+    let ws: WebSocket
     try {
-      url = await this.resolveUrl()
+      const url = await this.resolveUrl()
+      if (this.stopped || generation !== this.connectionGeneration) return
+      ws = new WebSocket(url)
     } catch (error) {
+      if (this.stopped || generation !== this.connectionGeneration) return
       this.update({ connection: 'closed', lastError: error instanceof Error ? error.message : String(error) })
       this.retryLater()
       return
     }
-    const ws = new WebSocket(url)
     this.ws = ws
+    const current = () => !this.stopped && generation === this.connectionGeneration && this.ws === ws
     ws.onopen = () => {
-      this.retryMs = 500
-      this.update({ connection: 'open', lastError: null })
+      if (!current()) return
+      // Only a fresh inventory makes actions safe after a sidecar restart.
+      this.update({ lastError: null })
     }
     ws.onmessage = (event) => {
+      if (!current()) return
       const message = JSON.parse(String(event.data)) as ServerMessage
       this.receive(message)
       for (const listener of this.messageListeners) listener(message)
     }
     ws.onclose = () => {
-      this.update({ connection: 'closed' })
+      if (!current()) return
+      this.ws = null
+      this.invalidateConnection()
       this.retryLater()
     }
   }
 
   private retryLater(): void {
-    setTimeout(() => void this.connect(), this.retryMs)
+    if (this.stopped) return
+    clearTimeout(this.retryTimer)
+    this.retryTimer = setTimeout(() => void this.connect(), this.retryMs)
     this.retryMs = Math.min(this.retryMs * 2, 8000)
   }
 
@@ -333,7 +371,8 @@ export class OrbitClient {
         return
       case 'snapshot':
         // Open pages follow as browser.state messages.
-        this.update({ ...message.snapshot, snapshotReady: true, browsers: [] })
+        this.retryMs = 500
+        this.update({ ...message.snapshot, connection: 'open', snapshotReady: true, browsers: [] })
         // (Re)connected: every mounted view starts over from a fresh snapshot.
         this.attaching.clear()
         for (const [paneId, views] of this.views) {

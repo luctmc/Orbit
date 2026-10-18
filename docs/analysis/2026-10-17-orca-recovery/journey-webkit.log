@@ -1,0 +1,45 @@
+(node:39428) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+leader without objective has an editable composer [33mtrue[39m
+exactly one pane.submit for rapid repeated submit [33mtrue[39m
+receipt names target and acceptance [33mtrue[39m
+spawn leaves original xterm mounted [33mtrue[39m
+leader draft survives helper/focus switch [33mtrue[39m
+mission selection returns to leader [33mtrue[39m
+mission return preserves draft [33mtrue[39m
+mission return does not remount xterm [33mtrue[39m
+helper draft preserved across missions [33mtrue[39m
+second mission draft preserved [33mtrue[39m
+per-mission helper focus restored [33mtrue[39m
+requested resolved applied observed visible [33mtrue[39m
+no provider identity invented [33mtrue[39m
+no horizontal overflow 1440 [33mtrue[39m
+send visible 1440 [33mtrue[39m
+terminal remains usable 1440 [33mtrue[39m
+same terminals 1440 [33mtrue[39m
+no horizontal overflow 1024 [33mtrue[39m
+send visible 1024 [33mtrue[39m
+terminal remains usable 1024 [33mtrue[39m
+same terminals 1024 [33mtrue[39m
+no horizontal overflow 900 [33mtrue[39m
+send visible 900 [33mtrue[39m
+terminal remains usable 900 [33mtrue[39m
+same terminals 900 [33mtrue[39m
+no horizontal overflow 768 [33mtrue[39m
+send visible 768 [33mtrue[39m
+terminal remains usable 768 [33mtrue[39m
+same terminals 768 [33mtrue[39m
+no horizontal overflow 375 [33mtrue[39m
+send visible 375 [33mtrue[39m
+small-window target picker restores leader draft [33mtrue[39m
+small focus has helper recipient [33mtrue[39m
+small-window send receives helper ACK [33mtrue[39m
+terminal remains usable 375 [33mtrue[39m
+same terminals 375 [33mtrue[39m
+each live pane attached once per viewer [33mtrue[39m
+chat switch retains terminal DOM [33mtrue[39m
+reload restores mission helper selection [33mtrue[39m
+reload restores chat preference [33mtrue[39m
+reload restores helper draft [33mtrue[39m
+no runtime errors [33mtrue[39m
+{"engine":"webkit","checks":42,"errors":[]}

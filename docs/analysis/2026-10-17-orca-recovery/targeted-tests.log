@@ -1,0 +1,30 @@
+(node:48822) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:48823) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:48823) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+[32m✔ transport open waits for authoritative inventory and disconnection invalidates readiness [90m(10.361625ms)[39m[39m
+[32m✔ disconnect promptly settles in-flight input as uncertain, retaining its exact ID and draft [90m(0.901ms)[39m[39m
+[32m✔ late callbacks of the previous socket cannot overwrite inventory or close the new transport [90m(0.1405ms)[39m[39m
+[32m✔ reconnection reattaches each terminal once and suppresses live bytes until its replacement snapshot [90m(0.445792ms)[39m[39m
+[32m✔ raw terminal input is refused during reconnect and is never replayed into a replacement process [90m(0.154ms)[39m[39m
+[32m✔ disposing while the endpoint resolves prevents a late socket and keeps durable drafts [90m(0.133709ms)[39m[39m
+[32m✔ a synchronous send failure retains the uncertain input identity and releases request listeners [90m(0.165458ms)[39m[39m
+(node:48824) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ slow client output is bounded in UTF-8 bytes, terminates only that client and ignores subsequent output [90m(0.4525ms)[39m[39m
+[32m✔ snapshot output is bounded across panes, preserves order and releases held bytes [90m(0.570583ms)[39m[39m
+[32m✔ a missing heartbeat response releases a dead client, while pongs keep it alive [90m(0.249ms)[39m[39m
+[32m✔ a large authoritative inventory can reconnect on an empty link without an infinite size rejection [90m(0.233917ms)[39m[39m
+(node:48825) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:48825) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+[32m✔ real core/WebSocket/PTY: lost receipt reconciles once, reconnect restores Unicode and resize, restart changes port without replaying input [90m(1226.250041ms)[39m[39m
+[34mℹ tests 12[39m
+[34mℹ suites 0[39m
+[34mℹ pass 12[39m
+[34mℹ fail 0[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 1465.497917[39m
