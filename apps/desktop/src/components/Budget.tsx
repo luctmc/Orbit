@@ -36,16 +36,16 @@ export function budgetShare(mission: Mission): number {
 /** Header chip: how much of the budget the mission used; opens the editor. */
 export function BudgetChip({ mission, onEdit }: { mission: Mission; onEdit: () => void }) {
   const b = mission.budget
-  if (!b) return <button type="button" className="btn btn--ghost btn--sm" onClick={onEdit} title="Limitar tokens ou custo desta missão">Orçamento</button>
+  if (!b) return <button type="button" className="btn btn--ghost btn--sm" onClick={onEdit} title="Acompanhar tokens ou custo desta missão">Orçamento</button>
   const share = budgetShare(mission)
   const level = b.exceeded ? 'danger' : share >= 0.8 ? 'wait' : 'ok'
   const usd = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const coverage = budgetStatus(mission.usage,b)
   const text = b.tokens ? `${tokensText(mission.usage.total)} / ${tokensText(b.tokens)}` : coverage.cost !== 'reported' ? `Custo ${coverage.cost === 'partial' ? 'parcial' : 'indisponível'} / US$ ${usd(b.costUsd!)}` : `US$ ${usd(mission.usage.costUsd!)} / ${usd(b.costUsd!)}`
   return (
-    <button type="button" className="budget-chip" data-level={level} onClick={onEdit} title={b.exceeded ? 'Orçamento esgotado: os agentes foram interrompidos. Clique para aumentar.' : 'Orçamento da missão'}>
+    <button type="button" className="budget-chip" data-level={level} onClick={onEdit} title={b.exceeded ? 'Orçamento atingido: o trabalho continua. Clique para ajustar o aviso.' : 'Orçamento da missão'}>
       <span className="limit__bar" aria-hidden="true"><span style={{ width: `${Number.isFinite(share) ? Math.min(100, share * 100) : 0}%` }} /></span>
-      {b.exceeded ? 'Orçamento esgotado' : text}
+      {b.exceeded ? 'Orçamento atingido' : text}
     </button>
   )
 }
@@ -62,7 +62,7 @@ export function BudgetDialog({ mission, onClose }: { mission: Mission; onClose: 
     }}>
       <p className="muted">Usado até agora: {tokensText(mission.usage.total)} tokens{costText(mission.usage.costUsd) ? ` · ${costText(mission.usage.costUsd)} (Claude)` : ''}.</p>
       <BudgetFields idPrefix="budget" tokens={tokens} cost={cost} onTokens={setTokens} onCost={setCost} />
-      <p className="note">Aos 80% o Orbit avisa. Ao chegar no limite, interrompe os agentes da missão, recusa as próximas ferramentas do Claude e não abre novos agentes até você aumentar o orçamento. O custo só considera valores relatados. Custo ausente ou parcial não garante controle do teto em dólares; use também limite de tokens. O valor do Claude é uma estimativa de preço de API e pode diferir da cobrança. Deixe os dois em branco para tirar o limite.</p>
+      <p className="note">Aos 80% o Orbit avisa. Ao atingir o valor, avisa novamente. O orçamento é informativo: não interrompe turnos, não recusa ferramentas e não impede abrir ou retomar agentes. O custo só considera valores relatados. Custo ausente ou parcial não representa o total gasto. O valor do Claude é uma estimativa de preço de API e pode diferir da cobrança. Deixe os dois em branco para remover os avisos.</p>
     </Dialog>
   )
 }

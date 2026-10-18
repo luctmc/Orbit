@@ -9,7 +9,6 @@ export function missionSignal(mission: Mission, panes: Pane[], progress: Mission
   if (mission.status === 'archived') return { state: 'idle', title: 'Missão arquivada', detail: 'O histórico de trabalho e de revisão continua disponível.' }
   const waiting = panes.find(p => p.status === 'waiting')
   if (waiting) return { state: 'waiting', title: 'Precisa de você', detail: `#${waiting.id} · ${waiting.attention || 'O agente aguarda uma resposta ou permissão.'}` }
-  if (mission.budget?.exceeded) return { state: 'blocked', title: 'Limite da missão atingido', detail: 'Revise o orçamento antes de continuar a execução.' }
   const unresolved = progress.activities.filter(a => a.state !== 'waived')
   const blocked = unresolved.find(a => ['blocked', 'stopped'].includes(a.state))
   if (blocked) return { state: 'blocked', title: 'Atividade precisa de atenção', detail: `${blocked.title} · Confira o último retorno antes de retomar.` }

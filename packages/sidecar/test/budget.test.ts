@@ -9,7 +9,7 @@ import { connect, offline, ORIGIN, TOKEN } from './helpers.ts'
 
 const status = (input: number) => ({ model: { display_name: 'Opus' }, cost: { total_cost_usd: input / 100_000 }, context_window: { total_input_tokens: input, total_output_tokens: 0, used_percentage: 5 }, orbit_session_usage: { format: 'claude-transcript-v1', input: input, output: 0, cacheRead: 0, cacheWrite: 0, total: input + 0 } })
 
-test('a mission budget warns at 80%, stops the agents at 100% and frees them when raised; usage goes to the ledger', async () => {
+test('a mission budget warns at 80%, keeps agents and tools running at 100% and resets warnings when raised; usage goes to the ledger', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-data-'))
   const fake = (_launch: AgentLaunch, shell: string) => ({ file: shell, args: ['-c', `exec ${shell}`] })
   const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline, agentCommand: fake, browser: null, scheduler: false })
@@ -31,17 +31,27 @@ test('a mission budget warns at 80%, stops the agents at 100% and frees them whe
     await ui.next('event.added', (m) => m.event.kind === 'budget' && m.event.title === 'Orçamento em 82%')
     assert.equal((await post('/hooks', tool)).status, 204, 'still working under the limit')
 
+    const before = server.core.store.pane(pane.id)!
+    const terminalWrites: string[] = []
+    const terminals = (server.core as any).panes
+    const originalWrite = terminals.write.bind(terminals)
+    terminals.write = (id: number, data: string) => { terminalWrites.push(data); return originalWrite(id, data) }
     await post('/status', status(60_000))
-    await ui.next('event.added', (m) => m.event.title === 'Orçamento esgotado' && /1 agente foi interrompido/.test(m.event.body))
+    await ui.next('event.added', (m) => m.event.title === 'Orçamento atingido' && /continuam/.test(m.event.body))
     await ui.next('mission.updated', (m) => m.mission.budget?.exceeded === true)
-    assert.equal(server.core.store.pane(pane.id)!.status, 'idle', 'an interrupted turn shows as stopped')
+    assert.notEqual(server.core.store.pane(pane.id)!.status, 'exited', 'budget must not end a live execution')
+    assert.equal(server.core.store.pane(pane.id)!.pid, before.pid)
+    assert.equal(server.core.store.pane(pane.id)!.executionEpoch, before.executionEpoch)
+    assert.ok(!terminalWrites.includes('\x1b'), 'no escape is injected into existing work')
     const refused = await post('/hooks', tool)
-    assert.equal(refused.status, 200)
-    assert.match((await refused.json()).hookSpecificOutput.permissionDecisionReason, /orçamento desta missão no Orbit acabou/)
-    ui.send({ type: 'pane.spawn', request: { missionId: mission.id, role: 'crew', cli: 'claude', model: null, title: 'mais um' } })
-    assert.match((await ui.next('error')).message, /orçamento desta missão acabou/)
+    assert.equal(refused.status, 204, 'existing execution keeps native tool permissions')
+    ui.send({ type: 'pane.spawn', request: { missionId: mission.id, role: 'crew', cli: 'claude', model: 'opus', title: 'mais um' } })
+    const second = (await ui.next('pane.updated', m => m.pane.title === 'mais um')).pane
+    assert.ok(second.pid)
+    assert.equal(server.core.liveTerminalCount(), 2)
+    assert.equal(server.core.store.pane(pane.id)!.pid, before.pid)
 
-    // Raising it frees the agents; 60k of 200k is under 80%, so no new warning is due either.
+    // Raising it resets the warning; existing executions never lost their permissions.
     ui.send({ type: 'mission.budget', missionId: mission.id, tokens: 200_000, costUsd: null })
     const raised = await ui.next('mission.updated', (m) => m.mission.budget?.tokens === 200_000)
     assert.deepEqual([raised.mission.budget!.warned, raised.mission.budget!.exceeded], [false, false])

@@ -453,20 +453,13 @@ export class OrbitCore {
 
   // ---- budget ----
 
-  /** Warns at 80% of the budget; at 100% interrupts the mission's agents (once). */
+  /** Budgets are advisory: retain usage and warnings without interrupting executions. */
   private checkBudget(mission: Mission): Mission {
     const budget = mission.budget
     if (!budget || budget.exceeded) return mission
     const use = budgetUse(mission, budget)
     if (use !== null && use >= 1) {
-      const live = this.missionPanes(mission.id).filter((p) => p.cli !== 'shell' && this.panes.isAlive(p.id))
-      // Esc stops the turn in Claude Code and in Codex; the hook then refuses Claude's next tools.
-      for (const pane of live) {
-        this.panes.write(pane.id, '\x1b')
-        // An interrupted turn fires no Stop hook: say it stopped.
-        this.panes.report(pane.id, 'idle', null)
-      }
-      this.event(mission.id, 'budget', 'Orçamento esgotado', `A missão chegou a ${budgetText(mission, budget)}. ${live.length ? `${live.length} ${live.length === 1 ? 'agente foi interrompido' : 'agentes foram interrompidos'}; ` : ''}aumente o orçamento para continuar.`, null)
+      this.event(mission.id, 'budget', 'Orçamento atingido', `A missão chegou a ${budgetText(mission, budget)}. Agentes e ferramentas continuam disponíveis; o orçamento é informativo.`, null)
       return this.store.updateMission(mission.id, { budget: { ...budget, warned: true, exceeded: true } }) ?? mission
     }
     if (use !== null && use >= BUDGET_WARN_AT && !budget.warned) {
@@ -474,10 +467,6 @@ export class OrbitCore {
       return this.store.updateMission(mission.id, { budget: { ...budget, warned: true } }) ?? mission
     }
     return mission
-  }
-
-  private budgetBlocks(missionId: string): boolean {
-    return this.store.mission(missionId)?.budget?.exceeded === true
   }
 
   // ---- scheduled missions ----
@@ -2015,7 +2004,6 @@ export class OrbitCore {
         via = `${via}; classificação auxiliar Claude não executada: CLI fora das permitidas nesta missão`
       }
       if (!sure && assessed.difficulty !== 'simples' && this.store.settings().smartClassify && mission.allowedClis.includes('claude')) {
-        if (this.budgetBlocks(caller.missionId)) throw new Error('O orçamento desta missão acabou antes da classificação')
         const call = this.store.startAuxiliaryCall({ missionId: caller.missionId, attemptId: attempt.id, model: DECIDER_MODEL, promptBytes: Buffer.byteLength(decisionPrompt(text, types)) })
         let observation!: AuxiliaryObservation
         const decided = await decideTaskType(this.run, join(this.dataDir, 'decisor'), text, types, value => { observation = value }).catch(() => null)
@@ -2377,8 +2365,7 @@ export class OrbitCore {
    * message for it, so whoever waits is never left hanging. Returns the reason to block, if any.
    */
   private turnEnded(pane: Pane, lastMessage: string | null, canBlock: boolean): string | null {
-    // Out of budget, stopping is what we want: no chasing for a handoff.
-    if (!this.owesHandoff(pane) || this.budgetBlocks(pane.missionId)) return null
+    if (!this.owesHandoff(pane)) return null
     // A progress checkpoint may end a turn, but the durable obligation still gates completion.
     if (pane.handoffStatus === 'progress') return null
     if (canBlock) return HANDOFF_NUDGE
@@ -2656,9 +2643,6 @@ export class OrbitCore {
     const pane = this.store.pane(paneId)
     if (pane) this.noteEdit(pane, payload)
     if (typeof payload.session_id === 'string' && SESSION_ID.test(payload.session_id)) this.panes.setSession(paneId, payload.session_id)
-    if (pane && payload.hook_event_name === 'PreToolUse' && this.budgetBlocks(pane.missionId)) {
-      return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'O orçamento desta missão no Orbit acabou. Pare aqui e diga ao usuário, em poucas linhas, o que foi feito e o que falta; ele pode aumentar o orçamento para você continuar.' } }
-    }
     const reason = gateTool(payload, new Set(this.store.disabledCatalog()), this.skillPolicies.get(paneId))
     return reason ? { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } } : null
   }
@@ -2697,7 +2681,6 @@ export class OrbitCore {
     receipt.push(`permissões: ${AGENT_PERMISSION_POLICY}`)
     const mission = this.store.mission(input.missionId)
     if (!mission || mission.status !== 'active') throw new Error('Missão inexistente ou arquivada')
-    if (mission.budget?.exceeded && input.cli !== 'shell') throw new Error('O orçamento desta missão acabou; aumente-o para abrir agentes')
     const workspace = this.store.workspace(mission.workspaceId)
     if (!workspace) throw new Error('Workspace da missão sumiu')
 

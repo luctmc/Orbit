@@ -53,14 +53,16 @@ test('later unpriced usage preserves the known subtotal and marks it partial', a
   } finally { await core.shutdown() }
 })
 
-test('classifier usage trips the mission budget before launching the next helper', async () => {
+test('classifier usage records an exceeded advisory budget without blocking the next helper', async () => {
   const { core, lead } = await fixture()
   try {
+    await seedRoutingQuota(core)
     core.handle({ type: 'mission.budget', missionId: lead.missionId, tokens: 10, costUsd: null })
     ;(core as any).run = async () => ({ code: 0, stdout: JSON.stringify({ structured_output: { kind: 'investigacao' }, usage: { input_tokens: 12, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } }), stderr: '' })
-    await assert.rejects(core.spawnHelper(lead, { title: 'Lista lenta', task: 'A lista de pedidos leva 8 segundos para aparecer', model: null, readOnly: true }), /orçamento/)
+    const { pane } = await core.spawnHelper(lead, { title: 'Lista lenta', task: 'A lista de pedidos leva 8 segundos para aparecer', model: null, readOnly: true })
+    assert.ok(pane.pid)
     assert.equal(core.store.mission(lead.missionId)!.usage.total, 13)
     assert.equal(core.store.mission(lead.missionId)!.budget!.exceeded, true)
-    assert.equal(core.store.snapshot().panes.length, 2)
+    assert.equal(core.store.snapshot().panes.length, 3)
   } finally { await core.shutdown() }
 })

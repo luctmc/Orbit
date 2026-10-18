@@ -30,3 +30,11 @@ test('dependency admission rejects direct and transitive cycles', () => {
   assert.throws(() => assertNoDependencyCycle('a', ['a'], graph), /circular/)
   assert.throws(() => assertNoDependencyCycle('a', ['c'], graph), /circular/)
 })
+
+test('maximum permissions admit parallel writers even while a legacy pane remains alive', () => {
+  const legacy = { epoch: 'old', missionId: 'mission', readOnly: false, roots: ['/shared'] }
+  const current = { ...legacy, epoch: 'new', permissionPolicy: 'writable-bypass-v2' }
+  assert.equal(writerConflict(current, legacy), false)
+  assert.equal(writerConflict(legacy, current), false)
+  assert.equal(writerConflict(current, { ...current, epoch: 'another' }), false)
+})

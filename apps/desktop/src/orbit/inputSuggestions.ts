@@ -16,7 +16,7 @@ const fold = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLo
 
 /** Local suggestions describe possible next steps; they never grant permission or certify work. */
 export function inputSuggestions({ mission, pane, progress, cards, connected, now = Date.now() }: Context): InputSuggestion[] {
-  if (!connected || mission.id !== pane.missionId || mission.status !== 'active' || pane.role !== 'lead' || !['claude', 'codex'].includes(pane.cli) || ['exited', 'starting', 'waiting'].includes(pane.status) || mission.budget?.exceeded) return []
+  if (!connected || mission.id !== pane.missionId || mission.status !== 'active' || pane.role !== 'lead' || !['claude', 'codex'].includes(pane.cli) || ['exited', 'starting', 'waiting'].includes(pane.status)) return []
   const items: InputSuggestion[] = []
   const add = (id: string, text: string, reason: string) => items.push({ id, text, reason })
   const age = progress ? now - progress.observedAt : Infinity
