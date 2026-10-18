@@ -14,9 +14,9 @@ test('a historical ready declaration never overrides disconnected, unknown, stal
   assert.equal(missionSignal(mission, [], { ...progress, activities: [{ state: 'waived' } as any] }, 'open', null).state, 'idle')
   assert.equal(missionSignal(mission, [], progress, 'open', null).state, 'done')
 })
-test('permission, budget and unresolved work take precedence over a ready declaration', () => {
+test('permission and unresolved work take precedence over a ready declaration', () => {
   assert.equal(missionSignal(mission, [{ id: 2, status: 'waiting', attention: 'Permission' } as Pane], progress, 'open', null).state, 'waiting')
-  assert.equal(missionSignal({ ...mission, budget: { exceeded: true } as any }, [], progress, 'open', null).state, 'blocked')
+  assert.equal(missionSignal({ ...mission, budget: { exceeded: true } as any }, [], progress, 'open', null).state, 'done')
   for (const state of ['stopped', 'blocked', 'awaiting_validation', 'running'] as const) {
     const p = { ...progress, activities: [{ title: 'Work', state } as any] }
     assert.equal(missionSignal(mission, [], p, 'open', null).state, state === 'awaiting_validation' ? 'review' : state === 'running' ? 'working' : 'blocked')

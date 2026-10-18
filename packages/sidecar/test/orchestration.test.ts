@@ -13,10 +13,15 @@ test('a worker declaration cannot make new work ready without independent review
   } finally { await core.shutdown() }
 })
 
-test('managed writers cannot overlap in the same physical checkout', async () => {
-  const { core, lead } = await fixture()
+test('maximum permissions admit another writer while preserving existing work in the checkout', async () => {
+  const { core, lead, pane } = await fixture()
   try {
-    await assert.rejects(core.spawnHelper(lead, { title: 'Another writer', task: 'Modify the same checkout', cli: 'claude', model: null }), /escrita|cópia/i)
+    const another = await core.spawnHelper(lead, { title: 'Another writer', task: 'Modify the same checkout', cli: 'claude', model: null })
+    assert.ok(another.pane.pid)
+    assert.notEqual(another.pane.pid, pane.pid)
+    assert.equal(core.store.pane(pane.id)!.pid, pane.pid)
+    assert.equal(core.store.pane(pane.id)!.executionEpoch, pane.executionEpoch)
+    assert.equal(core.liveTerminalCount(), 3)
   } finally { await core.shutdown() }
 })
 
@@ -47,7 +52,7 @@ test('closing a live writer holds its lease through the forgotten process exit',
   try {
     core.closeHelper(lead, pane.id, true)
     assert.equal(core.store.executionPolicy(pane.id)?.epoch, pane.executionEpoch)
-    assert.throws(() => core.store.startExecution(999, 'early', { epoch: 'early', missionId: lead.missionId, roots: core.store.executionPolicy(pane.id)!.roots, readOnly: false }), /escrita/)
+    assert.throws(() => core.store.startExecution(pane.id, 'early', { epoch: 'early', missionId: lead.missionId, permissionPolicy: 'writable-bypass-v2', roots: core.store.executionPolicy(pane.id)!.roots, readOnly: false }), /execução anterior/)
     const manager = (core as unknown as { panes: { waitForExit(id: number): Promise<void> } }).panes
     await manager.waitForExit(pane.id)
     assert.equal(core.store.executionPolicy(pane.id), undefined)

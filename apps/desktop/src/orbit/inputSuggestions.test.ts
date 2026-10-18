@@ -30,7 +30,7 @@ test('unknown, stale and other-mission context cannot produce an old action', ()
 
 test('predictions stay out of shell, helpers, permission prompts, exhausted budgets and disconnected missions', () => {
   const c = context()
-  for (const patch of [{ connected: false }, { pane: { ...c.pane, cli: 'shell' as const } }, { pane: { ...c.pane, role: 'crew' as const } }, { pane: { ...c.pane, status: 'waiting' as const } }, { pane: { ...c.pane, missionId: 'other' } }, { mission: { ...c.mission, budget: { exceeded: true, warned: true, tokens: 1, costUsd: null } } }]) assert.deepEqual(inputSuggestions({ ...c, ...patch }), [])
+  for (const patch of [{ connected: false }, { pane: { ...c.pane, cli: 'shell' as const } }, { pane: { ...c.pane, role: 'crew' as const } }, { pane: { ...c.pane, status: 'waiting' as const } }, { pane: { ...c.pane, missionId: 'other' } }]) assert.deepEqual(inputSuggestions({ ...c, ...patch }), [])
 })
 
 test('prefix completion preserves spelling/case and never substitutes unrelated or multiline input', () => {
@@ -47,4 +47,9 @@ test('Tab accepts only without modifiers or composition', () => {
   assert.equal(acceptsSuggestionKey(plain), true)
   for (const key of ['shiftKey', 'ctrlKey', 'altKey', 'metaKey', 'isComposing'] as const) assert.equal(acceptsSuggestionKey({ ...plain, [key]: true }), false)
   assert.equal(acceptsSuggestionKey({ ...plain, key: 'Enter' }), false)
+})
+
+test('an advisory exceeded budget preserves suggestions for ongoing work', () => {
+  const c = context()
+  assert.deepEqual(inputSuggestions({ ...c, mission: { ...c.mission, budget: { exceeded: true, warned: true, tokens: 1, costUsd: null } } }), inputSuggestions(c))
 })
