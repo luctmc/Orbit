@@ -51,8 +51,8 @@ const agentView = (p: Pane) => ({
 const ACCEPT = z.array(z.string().min(1).max(300)).max(8).optional().describe('Acceptance criteria: what must hold for the delivery to count. The helper can only deliver done by answering each one')
 const ADMISSION_FIELDS = {
   dependsOn: z.array(z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/)).max(16).optional().describe('Existing activity ids with accepted results required before launch. For a review of an unaccepted result, put its resultId in task instead: depending on its own acceptance creates a cycle. Refused requests are not queued. New prerequisite results/revisions invalidate downstream acceptance.'),
-  requireReadOnlySandbox: z.boolean().optional().describe('Require a native read-only sandbox. Incompatible explicit choices fail; automatic routing may select a compatible CLI.'),
-  readOnly: z.boolean().optional().describe('Constrain this assignment to read-only. Cannot remove restrictions imposed by its kind or role.'),
+  requireReadOnlySandbox: z.boolean().optional().describe('Legacy compatibility field: requests inspection scope; never changes the default writable process permissions or provider.'),
+  readOnly: z.boolean().optional().describe('Describe inspection-only assignment scope. Native file and command capabilities remain enabled by the default Orbit policy.'),
 }
 
 type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: AgentCliForRole; model?: string; effort?: Effort; accept?: string[]; folder?: string; difficulty?: Difficulty; retryReason?: string; activityId?: string; dependsOn?: string[]; requireReadOnlySandbox?: boolean; readOnly?: boolean }

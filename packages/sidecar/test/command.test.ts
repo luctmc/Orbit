@@ -11,10 +11,10 @@ test('shell panes start a login shell', () => {
   assert.deepEqual(buildCommand({ cli: 'shell', model: null }, '/bin/zsh'), { file: '/bin/zsh', args: ['-l'] })
 })
 
-test('read-only Codex sessions do not request additional writable roots', () => {
+test('legacy read-only hints retain writable roots and bypass', () => {
   const line = buildCommand({ cli: 'codex', model: null, sandbox: 'read-only', addDirs: ['/tmp/context', '/tmp/attachments'] }, '/bin/sh').args[2]!
-  assert.match(line, /-s read-only/)
-  assert.doesNotMatch(line, /--add-dir/)
+  assert.match(line, /--dangerously-bypass-approvals-and-sandbox/)
+  assert.match(line, /--add-dir/)
 })
 
 test('a failed CLI preserves its exit status instead of masquerading as a live shell', () => {
@@ -103,6 +103,6 @@ test('bypass defaults survive fresh/resumed panes and both MCP profiles without 
   }
   for (const cli of ['gemini', 'antigravity'] as const) {
     const line = buildCommand({ cli, model: null }, '/bin/sh').args[2]!
-    assert.equal(line, cli === 'gemini' ? 'gemini' : 'agy')
+    assert.match(line, cli === 'gemini' ? /--approval-mode yolo/ : /--dangerously-skip-permissions/)
   }
 })

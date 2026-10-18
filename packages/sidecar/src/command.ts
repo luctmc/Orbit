@@ -1,5 +1,6 @@
 import { EFFORTS, MODEL_ID, SESSION_ID, type AgentCli, type Effort } from '@orbit/protocol'
 import { fileURLToPath } from 'node:url'
+import { agentPermissionArgs } from './agentPermissions.ts'
 
 export interface PaneCommand {
   file: string
@@ -34,7 +35,7 @@ export interface AgentLaunch {
   systemSettingsPath?: string
   /** Folder with the `orbit` command, put first on the agent's PATH. */
   binDir?: string
-  /** Codex: explicit activity permissions, independent of the user's CLI default. */
+  /** Legacy launch hint, accepted for compatibility; the central capability policy wins. */
   sandbox?: 'read-only' | 'workspace-write' | 'danger-full-access'
 }
 
@@ -71,7 +72,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
   }
   if (launch.cli === 'gemini') {
     if (launch.systemSettingsPath) parts.push(`GEMINI_CLI_SYSTEM_SETTINGS_PATH=${shellQuote(launch.systemSettingsPath)}`)
-    parts.push('gemini')
+    parts.push('gemini', ...agentPermissionArgs(launch.cli))
     if (model) parts.push('-m', model.includes('[') ? shellQuote(model) : model)
     // Its conversation id comes with every hook; a fixed --session-id would break the restart
     // Gemini does itself after the folder-trust question.
@@ -80,7 +81,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
     const prompt = firstPrompt()
     if (prompt) parts.push('-i', prompt)
   } else if (launch.cli === 'antigravity') {
-    parts.push('agy')
+    parts.push('agy', ...agentPermissionArgs(launch.cli))
     if (model) parts.push('--model', model.includes('[') ? shellQuote(model) : model)
     if (effort) parts.push('--effort', effort)
     for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
@@ -88,7 +89,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
     const prompt = firstPrompt()
     if (prompt) parts.push('--prompt-interactive', prompt)
   } else if (launch.cli === 'claude') {
-    parts.push('claude', '--dangerously-skip-permissions')
+    parts.push('claude', ...agentPermissionArgs(launch.cli))
     if (resume) parts.push('--resume', resume)
     if (model) parts.push('--model', model.includes('[') ? shellQuote(model) : model)
     if (effort) parts.push('--effort', effort)
@@ -108,15 +109,12 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
       parts.push(shellQuote(process.execPath), shellQuote(fileURLToPath(new URL('../hooks/codex-profile.mjs', import.meta.url))), '--')
     } else parts.push('codex')
     if (resume) parts.push('resume')
-    // Bypass is an Orbit default on every start/resume, without editing user CLI config.
-    // Explicit read-only executions retain their sandbox and deny commands that need approval.
-    if (launch.sandbox === 'read-only') parts.push('-s', 'read-only', '-a', 'never')
-    else parts.push('--dangerously-bypass-approvals-and-sandbox')
+    // Legacy persisted sandbox hints must not downgrade the user's default capabilities.
+    parts.push(...agentPermissionArgs(launch.cli))
     if (model) parts.push('-m', model.includes('[') ? shellQuote(model) : model)
     if (effort) parts.push('-c', shellQuote(`model_reasoning_effort="${effort}"`))
-    // --add-dir requests writable roots; Codex rejects it in read-only sessions. The role already
-    // carries absolute read references to workspace folders and attachments.
-    if (launch.sandbox !== 'read-only') for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
+    // Additional roots remain available under the default writable policy.
+    for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
     if (launch.mcpUrl) {
       parts.push('-c', shellQuote(`mcp_servers.orbit.url="${launch.mcpUrl}"`))
       parts.push('-c', shellQuote('mcp_servers.orbit.bearer_token_env_var="ORBIT_PANE_TOKEN"'))

@@ -1,5 +1,6 @@
 import { catalogRevision as revisionOfCatalog } from './catalogRevision.ts'
 import { AppPlugins } from './appPlugins.ts'
+import { AGENT_PERMISSION_NOTE, AGENT_PERMISSION_POLICY } from './agentPermissions.ts'
 import { CatalogInvalidated, AccountCatalogs, accountCatalogKey, discoverAccountCatalog } from './accountCatalog.ts'
 import { InputJournal, inputFingerprint, translateCodex, UncertainTranslation, RESPONSE_LANGUAGE, type InputRecord, type Translate } from './inputLanguage.ts'
 
@@ -80,7 +81,6 @@ const oneLine = (text: string) => text.replace(/\s*\n\s*/g, ' / ').trim()
 /** Sub-helpers a helper may have open at once (they cannot open their own). */
 const MAX_CHILDREN = 2
 // Claude Code's and Gemini CLI's file-editing tools.
-const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'write_file', 'replace']
 const RESUME_NOTE = 'O Orbit foi reaberto. Continue a tarefa de onde parou e, ao terminar, entregue com handoff_submit.'
 
 export interface HelperRequest {
@@ -154,7 +154,6 @@ export class OrbitCore {
   /** Acceptance criteria each helper must answer when it delivers done. */
   private readonly acceptance = new Map<number, string[]>()
   /** Helpers whose task type only reads (Claude's edit tools are refused). */
-  private readonly readOnly = new Set<number>()
   private codexTimer: NodeJS.Timeout | null = null
   private usageTimer: NodeJS.Timeout | null = null
   private readonly limitRefreshes = new LimitRefreshGate()
@@ -945,8 +944,8 @@ export class OrbitCore {
       const helper = this.store.pane(to.paneId)
       if (!helper || helper.missionId !== missionId || helper.role !== 'crew') throw new Error('Escolha um ajudante desta missão')
       if (helper.cli === 'shell' || !this.panes.isAlive(helper.id)) throw new Error(`#${helper.id} não é um agente rodando`)
-      if (mission.mode !== 'livre' && !this.store.executionPolicy(helper.id)?.readOnly) throw new Error('Este ajudante é um writer. Abra um líder novo: promover o papel não altera o sandbox do processo existente.')
       if (mission.git && helper.branch !== mission.git.branch) throw new Error('Numa missão com um branch por agente, o líder trabalha no branch da missão: troque por um agente novo')
+      if (mission.mode !== 'livre' && helper.executionEpoch) this.store.setExecutionScope(helper.id, helper.executionEpoch, true)
       this.panes.setSeat(helper.id, { role: 'lead', assignedBy: null })
       lead = this.store.pane(helper.id) ?? helper
     } else {
@@ -2660,16 +2659,6 @@ export class OrbitCore {
     if (pane && payload.hook_event_name === 'PreToolUse' && this.budgetBlocks(pane.missionId)) {
       return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'O orçamento desta missão no Orbit acabou. Pare aqui e diga ao usuário, em poucas linhas, o que foi feito e o que falta; ele pode aumentar o orçamento para você continuar.' } }
     }
-    if (pane && this.readOnly.has(pane.id) && payload.hook_event_name === 'PreToolUse' && EDIT_TOOLS.includes(payload.tool_name ?? '')) {
-      return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'Esta tarefa é só de leitura: não edite arquivos. Aponte o que mudar na sua entrega.' } }
-    }
-    // Role is installed at launch; enforce editing restrictions without reinjecting its prompt.
-    const mission = pane && pane.role === 'lead' ? this.store.mission(pane.missionId) : undefined
-    if (mission && (mission.mode === 'agentica' || mission.mode === 'squad')) {
-      if (payload.hook_event_name === 'PreToolUse' && EDIT_TOOLS.includes(payload.tool_name ?? '')) {
-        return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'Você é o maestro desta missão e não edita arquivos. Abra um ajudante com agent_spawn para essa mudança.' } }
-      }
-    }
     const reason = gateTool(payload, new Set(this.store.disabledCatalog()), this.skillPolicies.get(paneId))
     return reason ? { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } } : null
   }
@@ -2702,9 +2691,10 @@ export class OrbitCore {
   }
 
   /** `resume` continues that conversation of the CLI; `opened` replaces the flow's "Agente #N aberto". */
-  private spawn(input: SpawnPaneRequest, options: { resume?: string; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; attemptId?: string; explicitCli?: AgentCli; tier?: { difficulty: Difficulty; by: string }; keep?: AgentSeat; requireReadOnlySandbox?: boolean; decisionSource?: DecisionReceipt['source']; harnessTask?: { difficulty: Difficulty; retry: boolean } } = {}): Pane {
+  private spawn(input: SpawnPaneRequest, options: { resume?: string; permissionUpgrade?: boolean; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; attemptId?: string; explicitCli?: AgentCli; tier?: { difficulty: Difficulty; by: string }; keep?: AgentSeat; requireReadOnlySandbox?: boolean; decisionSource?: DecisionReceipt['source']; harnessTask?: { difficulty: Difficulty; retry: boolean } } = {}): Pane {
     if (this.stopping) throw new Error('Orbit está encerrando; novas execuções não são admitidas')
     const receipt = options.receipt ?? []
+    receipt.push(`permissões: ${AGENT_PERMISSION_POLICY}`)
     const mission = this.store.mission(input.missionId)
     if (!mission || mission.status !== 'active') throw new Error('Missão inexistente ou arquivada')
     if (mission.budget?.exceeded && input.cli !== 'shell') throw new Error('O orçamento desta missão acabou; aumente-o para abrir agentes')
@@ -2714,7 +2704,9 @@ export class OrbitCore {
     // A squad role, or a row of the task table, decides who fills the seat: CLI, model, effort.
     const squad = this.missionSquad(mission.id)
     const routing = this.store.routing()
-    const requiresSandbox = options.requireReadOnlySandbox ?? input.requireReadOnlySandbox ?? false
+    // Historical task/role flags describe assignment scope, never process permissions.
+    const requiresSandbox = false
+    if (options.requireReadOnlySandbox || input.requireReadOnlySandbox) receipt.push('permissões: sandbox legado substituído pela política padrão gravável')
     let squadRole: Squad['roles'][number] | undefined
     let taskType: TaskType | undefined
     if (input.squadRoleId) {
@@ -2739,22 +2731,15 @@ export class OrbitCore {
     // Explicit choices override routing defaults, including when kind is supplied.
     if (input.model) request.model = input.model
     if (input.effort) request.effort = input.effort
-    if (requiresSandbox && !adapterCapabilities(request.cli).supports.readOnlySandbox) {
-      if (options.explicitCli || input.model || !mission.allowedClis.includes('codex')) throw new Error('A escolha explícita não oferece o sandbox somente leitura exigido; escolha uma CLI compatível')
-      request.cli = 'codex'; request.model = null; request.effort = input.effort ?? null
-      fallbackUsed = true
-      receipt.push('capacidade: sandbox somente leitura exige Codex no adapter atual')
-    }
     if (request.role === 'crew' && request.cli !== 'shell' && !mission.allowedClis.includes(request.cli) && (options.explicitCli || input.model || input.accountId || options.keep)) throw new Error('A CLI escolhida explicitamente não está permitida nesta missão')
     // Reopening an agent keeps the seat it really had (balancing and difficulty already decided it).
     if (options.keep) Object.assign(request, { cli: options.keep.cli, model: options.keep.model, effort: options.keep.effort })
-    if (requiresSandbox && !adapterCapabilities(request.cli).supports.readOnlySandbox) throw new Error('A CLI retomada não oferece o sandbox somente leitura exigido')
     if (!CLIS.includes(request.cli)) throw new Error(`Agente inválido: ${request.cli}`)
     if (request.model && (typeof request.model !== 'string' || !MODEL_ID.test(request.model))) throw new Error('Modelo inválido: use letras, números, ponto, hífen, barra ou dois-pontos')
     if (request.effort && !EFFORTS.includes(request.effort)) throw new Error(`Esforço inválido: ${request.effort}`)
 
     const catalogRevision = this.catalog ? revisionOfCatalog(this.harnessMode==='live'?{default:this.catalog,accounts:this.accountCatalogs}:this.catalog) : null
-    const harnessReadOnly = !!(input.readOnly || requiresSandbox || taskType?.readOnly || squadRole?.readOnly)
+    const harnessReadOnly = !!(input.readOnly || input.requireReadOnlySandbox || taskType?.readOnly || squadRole?.readOnly)
     const eligibleAccounts = harnessAccounts(this.store.accounts(), [...this.accountStatus.values()], this.store.limits())
     const harnessExplicit = !!(options.explicitCli || input.model || input.effort || input.accountId || input.squadRoleId || taskType?.automatic === false || (taskType && taskType.automatic !== true) || options.keep)
     const classified = options.harnessTask && !taskType ? classifyTask(`${input.title}\n${input.task ?? ''}`, routing.taskTypes, input.title ?? '') : null
@@ -2770,7 +2755,7 @@ export class OrbitCore {
     ) : undefined
     const work = request.role === 'crew' && !['operacao', 'documentacao'].includes(taskType?.id ?? '') ? designWork(`${taskType?.id ?? ''} ${input.title} ${input.task ?? ''}`) : null
     const automatic = !harnessExplicit && (!harness?.selected || work) && request.role === 'crew' && (taskType || work) && this.catalog
-      ? automaticTaskSeat({ catalogForAccount: this.harnessMode === 'live' ? account => this.currentAccountCatalog(account) : undefined, catalog: this.catalog, preferred: { cli: request.cli as AgentCliForRole, model: request.model, effort: request.effort ?? null }, alternate: taskType?.alt, difficulty: options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal', design: work, allowed: mission.allowedClis.filter(cli => !requiresSandbox || adapterCapabilities(cli).supports.readOnlySandbox), rooms: cli => this.rooms(cli, this.liveByAccount()).filter(r => this.accountStatus.get(r.account.id)?.loggedIn === true && !this.accountStatus.get(r.account.id)?.busy) }) : null
+      ? automaticTaskSeat({ catalogForAccount: this.harnessMode === 'live' ? account => this.currentAccountCatalog(account) : undefined, catalog: this.catalog, preferred: { cli: request.cli as AgentCliForRole, model: request.model, effort: request.effort ?? null }, alternate: taskType?.alt, difficulty: options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal', design: work, allowed: mission.allowedClis, rooms: cli => this.rooms(cli, this.liveByAccount()).filter(r => this.accountStatus.get(r.account.id)?.loggedIn === true && !this.accountStatus.get(r.account.id)?.busy) }) : null
     // Once a catalog is available, autonomous staffing needs a valid quota and compatible model.
     if (!harnessExplicit && request.role === 'crew' && (taskType || work) && !automatic && (!harness?.selected || work)) throw new Error('Roteamento automático: nenhuma conta com quota válida e modelo compatível. Atualize os limites em Contas ou escolha uma conta explicitamente.')
     const measured = work ? automatic : harness?.selected ?? automatic
@@ -2793,9 +2778,8 @@ export class OrbitCore {
     if (request.cli !== 'shell' && !request.accountId) {
       const allowedHere = mission.allowedClis
       // The row's equivalent on another CLI, when the mission allows it.
-      const alt = taskType?.alt && allowedHere.includes(taskType.alt.cli) && (!requiresSandbox || adapterCapabilities(taskType.alt.cli).supports.readOnlySandbox) ? taskType.alt : null
+      const alt = taskType?.alt && allowedHere.includes(taskType.alt.cli) ? taskType.alt : null
       const move = (to: AgentCliForRole, why: string) => {
-        if (requiresSandbox && !adapterCapabilities(to).supports.readOnlySandbox) throw new Error('O fallback não oferece o sandbox somente leitura exigido')
         fallbackUsed = true
         receipt.push(`${CLI_LABEL[request.cli]} → ${CLI_LABEL[to]}: ${why}`)
         request.cli = to
@@ -2826,7 +2810,7 @@ export class OrbitCore {
       // Used up: the next CLI the mission allows that is installed and has room.
       if ((choice.exhausted || choice.account?.kind === 'api') && !measured && !harnessExplicit && request.role !== 'lead') {
         // The table's equivalent first, then any other CLI the mission allows.
-        const others = allowedHere.filter((c) => c !== request.cli && (!requiresSandbox || adapterCapabilities(c).supports.readOnlySandbox)).sort((a, b) => Number(b === alt?.cli) - Number(a === alt?.cli))
+        const others = allowedHere.filter((c) => c !== request.cli).sort((a, b) => Number(b === alt?.cli) - Number(a === alt?.cli))
         // Exhaust subscriptions across allowed providers before using a paid API account.
         for (const other of others) {
           const next = chooseAccount(roomsForSeat(other, live).filter(room => room.account.kind === 'assinatura'))
@@ -2911,7 +2895,7 @@ export class OrbitCore {
       branch = tree.branch
     }
     const title = request.title.trim().slice(0, 120) || squadRole?.name || taskType?.name || `${CLI_LABEL[request.cli]} #${id}`
-    const isReadOnly = input.readOnly || requiresSandbox || taskType?.readOnly || squadRole?.readOnly || (request.role === 'lead' && (mission.mode === 'agentica' || mission.mode === 'squad')) || false
+    const isReadOnly = input.readOnly || input.requireReadOnlySandbox || taskType?.readOnly || squadRole?.readOnly || (request.role === 'lead' && (mission.mode === 'agentica' || mission.mode === 'squad')) || false
     const token = randomBytes(24).toString('base64url')
     const english = this.store.settings().agentsInEnglish
     const toolProfile = request.cli === 'claude' || request.cli === 'codex' ? this.store.settings().agentToolProfile ?? 'orbit' : 'inherit'
@@ -2924,7 +2908,7 @@ export class OrbitCore {
       ? toolkit.text : ''
     const roleContext = this.contextPack(mission.id, [
       { id: 'default-working-agreements', text: toolkit?.text ?? '', required: true },
-      { id: 'permissions', text: (isReadOnly ? 'This execution is read-only. Do not modify project files.\n\n' : '') + (toolProfile === 'orbit' ? 'External MCP profile: only Orbit coordination is loaded. Native file/terminal tools, project instructions, skills and permission rules still apply. If the task needs an external integration, report the missing capability and ask for the full tool profile on reopen. Do not install or reconfigure integrations to bypass this profile.\n\n' : '') + commandToolsNote(request.cli) + workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy), required: true },
+      { id: 'permissions', text: AGENT_PERMISSION_NOTE + '\n\n' + (toolProfile === 'orbit' ? 'External MCP profile: only Orbit coordination is loaded. Native file/terminal tools, project instructions, skills and permission rules still apply. If the task needs an external integration, report the missing capability and ask for the full tool profile on reopen. Do not install or reconfigure integrations to bypass this profile.\n\n' : '') + commandToolsNote(request.cli) + workspaceNote(workspace.folders) + instructionsNote(workspace.instructions) + (branch && mission.git ? worktreeNote(mission.git, request.role, branch, cwd) : '') + this.skillNote(request.cli, policy), required: true },
       { id: 'design-skills', text: skillDelivery.text, required: true },
       { id: 'required-project-memory', text: request.role === 'lead' ? projectMemoryNote(this.projectMemory(mission.workspaceId, Infinity, 'required')) : '', required: true },
       { id: 'project-memory', text: request.role === 'lead' ? projectMemoryNote(this.projectMemory(mission.workspaceId, Infinity, 'optional')) : '', maxBytes: harness?.strategy.optionalContextBytes ?? 2000 },
@@ -2932,6 +2916,7 @@ export class OrbitCore {
       { id: 'role-contract', text: request.role === 'lead' ? leadRole(mission, { id }, squad, routing, english) : crewRole(mission, { id }, { boss: options.boss ?? lead, children: options.children ?? 0, english, attemptId: options.attemptId, hasBoard: this.store.cards(mission.id).length > 0 }, squadRole, taskType), required: true },
     ], 48_000)
     const taskContext = this.contextPack(mission.id, [
+      { id: 'permission-policy-upgrade', text: options.resume && options.permissionUpgrade ? AGENT_PERMISSION_NOTE + '\nNo new task is assigned by this policy update; preserve the current conversation and assignment.' : '', required: true },
       { id: 'toolkit-session-upgrade', text: toolkitMigration, required: true },
       { id: 'assignment-and-acceptance', text: request.task?.trim() || (toolkitMigration ? 'Policy update only. No new task is assigned: await user input; do not execute setup or restart earlier work.' : ''), required: true },
     ], 128_000)
@@ -2953,16 +2938,14 @@ export class OrbitCore {
 
     if (request.cli === 'codex') launch.disabledMcp = codexDisabledMcp(this.store.disabledCatalog())
     launch.toolProfile = toolProfile
-    // Codex has no hooks to refuse edits: an orchestrating lead and read-only kinds run in its
-    // read-only sandbox. Approval is disabled, so attempted writes fail without prompting.
-    // All writable executions use the requested bypass default, including restarts/resumes.
-    if (request.cli === 'codex') launch.sandbox = isReadOnly ? 'read-only' : 'danger-full-access'
+    // Capabilities never depend on assignment scope, role or legacy persisted sandbox hints.
+    if (request.cli === 'codex') launch.sandbox = 'danger-full-access'
     if (options.resume) launch.resume = options.resume
 
     let pane: Pane
     let processStarted = false
     const executionEpoch = randomUUID()
-    const executionPolicy: ExecutionPolicy | undefined = request.cli === 'shell' ? undefined : { epoch: executionEpoch, missionId: mission.id, readOnly: isReadOnly, roots: copyRoots([cwd, ...workspace.folders.filter(f => f !== workspace.path && f !== folder)]) }
+    const executionPolicy: ExecutionPolicy | undefined = request.cli === 'shell' ? undefined : { epoch: executionEpoch, missionId: mission.id, permissionPolicy: AGENT_PERMISSION_POLICY, readOnly: isReadOnly, roots: copyRoots([cwd, ...workspace.folders.filter(f => f !== workspace.path && f !== folder)]) }
     const suggested = request.role === 'lead' ? 'orbit-pilot' : taskType?.id === 'revisao' ? 'orbit-review' : taskType?.readOnly ? 'orbit-research' : taskType?.id === 'operacao' ? 'orbit-verify' : 'orbit-build'
     try {
       this.store.startExecution(id, executionEpoch, executionPolicy)
@@ -2977,7 +2960,6 @@ export class OrbitCore {
         harness: harness ? { ...harness, executionMode: this.harnessMode, executed: request.cli !== 'shell' && request.model && request.effort && this.clis.get(request.cli)?.version && catalogRevision ? { cli: request.cli, model: request.model, effort: request.effort, cliVersion: this.clis.get(request.cli)!.version!, catalogRevision } : null } : undefined,
         capabilityLimits: [
           !this.catalog && 'Catálogo de modelos não detectado; modelo padrão não é uma identidade confirmada',
-          request.cli !== 'codex' && isReadOnly && 'Somente leitura depende de hooks/instruções; sandbox nativo indisponível',
           'Capacidades vêm do contrato do adapter, não de certificação de toda versão do provedor',
         ].filter((s): s is string => !!s),
       }, { routing, squad, allowedClis: mission.allowedClis, requireReadOnlySandbox: requiresSandbox })
@@ -3022,9 +3004,8 @@ export class OrbitCore {
     }
     this.paneTokens.set(token, id)
     // Enough to open it again later; the account is the one it really ran as (its conversations live there).
-    this.store.setPaneSpec(id, { ...input, accountId: account?.id ?? null, requireReadOnlySandbox: requiresSandbox })
+    this.store.setPaneSpec(id, { ...input, accountId: account?.id ?? null, readOnly: !!(input.readOnly || input.requireReadOnlySandbox), requireReadOnlySandbox: false })
     if (policy) this.skillPolicies.set(id, policy)
-    if (isReadOnly) this.readOnly.add(id)
     if (request.cli === 'codex' || request.cli === 'claude') this.watchCodex()
     this.syncPane(pane)
     this.dispatchDeliveries(mission.id)
@@ -3061,6 +3042,7 @@ export class OrbitCore {
         ? this.missionBriefing(pane.missionId, undefined, true)
         : originalPending ? spec.task : null)
       const sessionId = pane.sessionId
+      const permissionUpgrade = !pane.executionConfig?.decision.reasons.includes(`permissões: ${AGENT_PERMISSION_POLICY}`)
       const git = this.store.mission(pane.missionId)?.git
       const worktree = git && pane.branch ? { path: this.worktreeOf(pane, git), branch: pane.branch } : undefined
       const accept = this.acceptance.get(paneId)
@@ -3077,6 +3059,7 @@ export class OrbitCore {
         id: paneId,
         worktree,
         resume: resume ? sessionId! : undefined,
+        permissionUpgrade,
         opened: (id) => (resume ? `#${id} retomou a conversa` : `#${id} reaberto numa conversa nova`),
       })
       // The next turn is a delta, not a replacement for the durable original assignment.
@@ -3123,7 +3106,6 @@ export class OrbitCore {
     this.codexRollouts.delete(id)
     this.nudged.delete(id)
     this.acceptance.delete(id)
-    this.readOnly.delete(id)
     this.skillPolicies.delete(id)
     this.skillSessions.removePane(id)
     this.store.removePane(id)

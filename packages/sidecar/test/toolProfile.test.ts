@@ -22,12 +22,13 @@ test('focused Claude uses only the explicit MCP config and preserves hook settin
   assert.throws(() => buildCommand({ cli: 'claude', model: null, toolProfile: 'orbit' }, '/bin/sh'), /MCP|config/i)
 })
 
-test('focused Codex keeps native read-only sandbox and the Orbit endpoint through its startup helper', () => {
+test('focused Codex uses writable bypass and the Orbit endpoint through its startup helper', () => {
   const line = buildCommand({ cli: 'codex', model: 'gpt-6-luna', toolProfile: 'orbit', sandbox: 'read-only', mcpUrl: 'http://127.0.0.1:1/mcp', addDirs: ['/not-writable'] }, '/bin/sh').args[2]!
   assert.match(line, /codex-profile\.mjs/)
-  assert.match(line, /-s read-only/)
+  assert.match(line, /--dangerously-bypass-approvals-and-sandbox/)
   assert.match(line, /bearer_token_env_var/)
-  assert.doesNotMatch(line, /--add-dir|danger-full-access|--disable plugins/)
+  assert.match(line, /--add-dir/)
+  assert.doesNotMatch(line, /--disable plugins/)
   const inherited = buildCommand({ cli: 'codex', model: null, toolProfile: 'inherit' }, '/bin/sh').args[2]!
   assert.equal(inherited, 'codex --dangerously-bypass-approvals-and-sandbox')
 })
@@ -77,7 +78,7 @@ test('Codex preflight refuses ambiguous metadata, preserves caller args/env and 
   assert.deepEqual(JSON.parse(bypass.stdout).args.slice(-4), ['resume', '--dangerously-bypass-approvals-and-sandbox', '--', '12345678-1234-1234-1234-123456789abc'])
 })
 
-test('profile changes affect the next native opening, retain sandbox restrictions and leave other adapters inherited', async () => {
+test('profile changes affect the next native opening, retain writable capabilities and leave other adapters inherited', async () => {
   const root = mkdtempSync(join(tmpdir(), 'orbit-profile-core-')), launches: AgentLaunch[] = []
   const core = new OrbitCore({ dataDir: join(root, 'data'), shell: '/bin/sh', browser: null, broadcast: () => {}, run: async () => ({ code: 127, stdout: '', stderr: 'offline' }),
     agentCommand: launch => { launches.push(structuredClone(launch)); return { file: '/bin/sh', args: ['-c', 'printf "READY\\n"; while read line; do :; done'] } },
@@ -88,12 +89,12 @@ test('profile changes affect the next native opening, retain sandbox restriction
     core.handle({ type: 'mission.create', workspaceId: core.store.snapshot().workspaces[0]!.id, title: 'Profile', objective: '', mode: 'agentica', allowedClis: ['claude', 'codex', 'gemini'], lead: { cli: 'codex', model: 'gpt-6-luna', title: 'Lead' } })
     const lead = core.store.snapshot().panes.find(p => p.role === 'lead')!
     assert.equal(lead.toolProfile, 'orbit')
-    assert.equal(launches[0]!.sandbox, 'read-only')
+    assert.equal(launches[0]!.sandbox, 'danger-full-access')
     core.store.saveSettings({ ...core.store.settings(), agentToolProfile: 'inherit' })
     assert.equal(core.store.pane(lead.id)!.toolProfile, 'orbit', 'changing defaults cannot rewrite a running execution')
     await core.handle({ type: 'pane.restart', paneId: lead.id, resume: false })
     assert.equal(core.store.pane(lead.id)!.toolProfile, 'inherit')
-    assert.equal(launches.at(-1)!.sandbox, 'read-only')
+    assert.equal(launches.at(-1)!.sandbox, 'danger-full-access')
     core.store.saveSettings({ ...core.store.settings(), agentToolProfile: 'orbit' })
     const currentLead = core.store.pane(lead.id)!
     const { pane: worker } = await core.spawnHelper(currentLead, { cli: 'codex', model: 'gpt-6-luna', task: 'Implement', title: 'Worker' })

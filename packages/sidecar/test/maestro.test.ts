@@ -97,7 +97,7 @@ test('the maestro picks CLI and account by itself, falls back when one is used u
 
     // The role is configured at launch; messages do not reinject it, and edits remain blocked.
     assert.equal(await hook({ hook_event_name: 'UserPromptSubmit', prompt: 'oi' }), null)
-    assert.equal((await hook({ hook_event_name: 'PreToolUse', tool_name: 'Edit', tool_input: { file_path: '/x' } })).hookSpecificOutput.permissionDecision, 'deny')
+    assert.equal(await hook({ hook_event_name: 'PreToolUse', tool_name: 'Edit', tool_input: { file_path: '/x' } }), null)
     assert.equal(await hook({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/x' } }), null)
 
     // Two test helpers without kind: classified as tests, sent to Codex, one per Codex account.

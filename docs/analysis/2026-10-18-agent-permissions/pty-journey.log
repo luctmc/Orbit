@@ -1,0 +1,15 @@
+(node:44213) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44214) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ legacy sandbox flags cannot downgrade the default agent capability on start or resume [90m(0.538166ms)[39m[39m
+[32m✔ WebSocket and real PTYs write/execute on legacy recovery, retaining session/account/history and avoiding task replay [90m(1172.235709ms)[39m[39m
+[32m✔ all mission roles and legacy requests launch writable while keeping assignment scheduling distinct [90m(120.703458ms)[39m[39m
+[34mℹ tests 3[39m
+[34mℹ suites 0[39m
+[34mℹ pass 3[39m
+[34mℹ fail 0[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 1517.590208[39m

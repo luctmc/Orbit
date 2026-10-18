@@ -15,9 +15,9 @@ import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 const SESSION = '3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f'
 const textOf = (result: unknown) => ((result as { content: Array<{ text: string }> }).content[0]?.text ?? '')
 
-test('a Codex lead runs in the read-only sandbox', () => {
-  assert.match(buildCommand({ cli: 'codex', model: null, sandbox: 'read-only' }, '/bin/zsh').args[2]!, /^codex -s read-only/)
-  assert.match(buildCommand({ cli: 'codex', model: null, sandbox: 'read-only', resume: SESSION }, '/bin/zsh').args[2]!, /^codex resume -s read-only .*-- 3f2a9c1e/)
+test('a Codex lead always uses the default writable bypass', () => {
+  assert.match(buildCommand({ cli: 'codex', model: null, sandbox: 'read-only' }, '/bin/zsh').args[2]!, /^codex --dangerously-bypass-approvals-and-sandbox/)
+  assert.match(buildCommand({ cli: 'codex', model: null, sandbox: 'read-only', resume: SESSION }, '/bin/zsh').args[2]!, /^codex resume --dangerously-bypass-approvals-and-sandbox .*-- 3f2a9c1e/)
 })
 
 test("an agent's last words are read from its CLI's own files", () => {
@@ -67,7 +67,7 @@ test('the lead changes hands without losing anything: briefing, notes, helpers a
     ui.send({ type: 'mission.create', allowOriginal: true, workspaceId: workspace.id, title: 'Troca', objective: 'Corrigir a média e cobrir com testes', mode: 'agentica', lead: { cli: 'codex', model: null, title: 'Líder' } })
     const { mission } = await ui.next('mission.updated')
     const { pane: codexLead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
-    assert.equal(launches.at(-1)!.sandbox, 'read-only')
+    assert.equal(launches.at(-1)!.sandbox, 'danger-full-access')
     const screen = server.core as unknown as { panes: { screenText: (id: number, lines: number) => string } }
     const sees = async (id: number, text: string) => {
       for (let i = 0; i < 100; i++) {
@@ -110,7 +110,7 @@ test('the lead changes hands without losing anything: briefing, notes, helpers a
     assert.match(briefing, /## Objective \(written by the user\)\n\nCorrigir a média e cobrir com testes/)
     assert.match(briefing, /## Decisions the leads wrote down\n\n- \(#\d+\) Média divide por length; não mexer em soma/)
     assert.match(briefing, new RegExp(`- #${helperId} Correção — Claude · claude-sonnet-5-5, Correção de bug; \\w+; owes a result to you \\(it was working for #${codexLead.id}\\)`))
-    assert.equal(launches.at(-1)!.sandbox, undefined, 'a Claude lead is kept from editing by its hook')
+    assert.equal(launches.at(-1)!.sandbox, undefined, 'a Claude lead uses permission bypass')
     assert.equal(server.core.store.pane(helperId)!.assignedBy, claudeLead.id)
     const changed = (await ui.next('event.added', (m) => m.event.kind === 'lead.changed')).event
     assert.match(changed.title, new RegExp(`Liderança: #${codexLead.id} \\(Codex\\) → #${claudeLead.id}`))
