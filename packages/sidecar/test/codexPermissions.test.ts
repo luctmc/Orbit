@@ -1,3 +1,4 @@
+import { seedCatalog } from './catalogFixture.ts'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync } from 'node:fs'
@@ -14,6 +15,7 @@ test('Codex permissions match the activity on launch and restart, independent of
     broadcast: () => {}, run: async () => ({ code: 127, stdout: '', stderr: 'offline' }),
     agentCommand: launch => { launches.push(structuredClone(launch)); return { file: '/bin/sh', args: ['-c', 'while read line; do :; done'] } },
   })
+  seedCatalog(core)
   core.setEndpoint('http://127.0.0.1:1')
   try {
     core.handle({ type: 'workspace.open', path: root })

@@ -1,0 +1,15 @@
+(node:96236) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:96246) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ output journal replays only rows after the atomic checkpoint; partial final write is ignored [90m(11.543417ms)[39m[39m
+[32m✔ symlink, malformed sequence and traversal cannot inject input or replace arbitrary files [90m(1.058667ms)[39m[39m
+[32m✔ real terminal history survives manager/core loss and is recovered as output without rerunning commands [90m(19.532458ms)[39m[39m
+[34mℹ tests 3[39m
+[34mℹ suites 0[39m
+[34mℹ pass 3[39m
+[34mℹ fail 0[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 173.835875[39m

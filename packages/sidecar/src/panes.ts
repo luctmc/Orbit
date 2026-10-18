@@ -1,9 +1,12 @@
+import { join } from 'node:path'
+import { TerminalHistory, HISTORY_LIMITS } from './terminalHistory.ts'
 import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import pty, { type IPty } from 'node-pty'
 import headless from '@xterm/headless'
 import serialize from '@xterm/addon-serialize'
 import type { Pane, PaneHandoff, PaneStatus, SpawnPaneRequest, TokenUsage } from '@orbit/protocol'
+import { unavailableContext } from './structuredContext.ts'
 import { buildCommand, paneEnv, type AgentLaunch, type PaneCommand } from './command.ts'
 
 /** Output silence after which a running pane is considered idle. */
@@ -13,7 +16,7 @@ const SUBMIT_DELAY_MS = 120
 /** A native startup hook can precede its input listener and restored terminal paint. */
 const DELIVERY_QUIET_MS = 1200
 /** Scrollback kept by the screen mirror and handed to views. */
-const SCROLLBACK_LINES = 3000
+const SCROLLBACK_LINES = HISTORY_LIMITS.scrollbackLines
 
 /**
  * Mirror of a pane's terminal, always at the PTY's size. It is what views start from (serialized)
@@ -22,6 +25,32 @@ const SCROLLBACK_LINES = 3000
 interface Screen {
   term: InstanceType<typeof headless.Terminal>
   serializer: InstanceType<typeof serialize.SerializeAddon>
+  history?: TerminalHistory
+  historyTimer?: NodeJS.Timeout
+  checkpoint?: Promise<void>
+}
+
+export const SUBMIT_LIMITS = {maxQueued:32,maxQueuedBytes:256*1024,maxMessageBytes:128*1024,queueTimeoutMs:5000,dispatchTimeoutMs:5000} as const
+export class SubmitError extends Error {
+  readonly uncertain: boolean
+  constructor(message:string,uncertain=false){super(message);this.uncertain=uncertain}
+}
+export interface SubmitOptions {
+  requestId?:string
+  signal?:AbortSignal
+  queueTimeoutMs?:number
+  dispatchTimeoutMs?:number
+  rejected?:(error:SubmitError)=>void
+}
+interface SubmitItem {
+  text:string
+  accepted?:()=>void
+  id:string
+  rejected?:(error:SubmitError)=>void
+  cleanup:()=>void
+  expiresAt:number
+  dispatchTimeoutMs:number
+  dispatchedAt?:number
 }
 
 interface LivePane {
@@ -29,7 +58,8 @@ interface LivePane {
   idleTimer: NodeJS.Timeout | null
   /** Status comes from the agent's hooks, not from output activity. */
   hookDriven: boolean
-  queue: Array<{ text: string; accepted?: () => void }>
+  queue: SubmitItem[]
+  active?: SubmitItem[]
   submitTimer: NodeJS.Timeout | null
   closing: boolean
   terminationTimers: NodeJS.Timeout[]
@@ -49,6 +79,7 @@ export interface PaneManagerEvents {
   exit: [pane: Pane]
   terminated: [paneId: number, epoch: string]
   receiptError: [error: unknown]
+  historyError: [paneId:number,error:unknown]
 }
 
 export interface SpawnInput {
@@ -74,11 +105,13 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   private readonly exits = new Map<number, Set<Promise<void>>>()
   /** Agents with a question for the person: they stay "waiting" until the person answers. */
   private readonly asking = new Set<number>()
+  private readonly historyRoot?: string
   private readonly shell: string
   private readonly command: (launch: AgentLaunch, shell: string) => PaneCommand
 
-  constructor(shell: string, command: (launch: AgentLaunch, shell: string) => PaneCommand = buildCommand) {
+  constructor(shell: string, command: (launch: AgentLaunch, shell: string) => PaneCommand = buildCommand, historyRoot?: string) {
     super()
+    this.historyRoot = historyRoot
     this.shell = shell
     this.command = command
   }
@@ -111,14 +144,18 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       assignedBy: null,
       usage: null,
       contextPercent: null,
+      contextUsage: unavailableContext('awaiting-provider'),
       pid: proc.pid,
       exitCode: null,
       createdAt: Date.now(),
     }
+    const oldScreen=this.screens.get(id)
+    if(oldScreen)void this.checkpointScreen(id,oldScreen).finally(()=>oldScreen.term.dispose())
     const term = new headless.Terminal({ cols, rows, scrollback: SCROLLBACK_LINES, allowProposedApi: true })
     const serializer = new serialize.SerializeAddon()
     term.loadAddon(serializer)
     const screen: Screen = { term, serializer }
+    if (this.historyRoot && pane.executionEpoch) { try {screen.history=new TerminalHistory(this.historyRoot,id,pane.executionEpoch);pane.historyState='durable'}catch(error){pane.historyState='unavailable';this.emit('historyError',id,error)} }
     const live: LivePane = { pty: proc, idleTimer: null, hookDriven, queue: [], submitTimer: null, closing: false, terminationTimers: [], lastOutputAt: null }
     this.live.set(id, live)
     this.screens.set(id, screen)
@@ -138,7 +175,9 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     proc.onData((data) => {
       if (!current()) return
       live.lastOutputAt = Date.now()
+      try {screen.history?.append({type:'data',data})}catch(error){this.historyFailed(id,error)}
       screen.term.write(data)
+      this.scheduleCheckpoint(id,screen)
       this.emit('data', id, data)
       if (!live.hookDriven) this.markActive(id, live)
     })
@@ -147,6 +186,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       live.terminationTimers = []
       if (live.idleTimer) clearTimeout(live.idleTimer)
       if (live.submitTimer) clearTimeout(live.submitTimer)
+      this.rejectPending(live,new SubmitError('Terminal encerrou após início do envio; resultado incerto',true))
       // Even a forgotten/replaced pane must confirm its own epoch's termination.
       try { this.emit('terminated', id, pane.executionEpoch!) }
       catch (error) { this.emit('receiptError', error) }
@@ -154,6 +194,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       if (!pending.size) this.exits.delete(id)
       stopped()
       if (!current()) return
+      void this.checkpointScreen(id,screen)
       this.live.delete(id)
       this.asking.delete(id)
       Object.assign(pane, { status: 'exited', attention: null, choices: null, pid: null, exitCode })
@@ -181,27 +222,71 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     return this.submitWithReceipt(id, text)
   }
 
-  submitWithReceipt(id: number, text: string, accepted?: () => void): boolean {
+  submitWithReceipt(id: number, text: string, accepted?: () => void, options:SubmitOptions = {}): boolean {
     const live = this.live.get(id)
     if (!live || live.closing) return false
+    const reject = (message:string) => {try{options.rejected?.(new SubmitError(message))}catch(error){this.emit('receiptError',error)}return false}
+    if ([options.queueTimeoutMs,options.dispatchTimeoutMs].some(v=>v!==undefined&&(!Number.isFinite(v)||v<1||v>60_000))) return reject('Prazo inválido (1–60000 ms)')
+    if (options.signal?.aborted) return reject('Envio cancelado antes de entrar na fila')
     const clean = text.replaceAll('\x1b', '')
-    const item = { text: clean, accepted }
+    const bytes = Buffer.byteLength(clean)
+    if (bytes > SUBMIT_LIMITS.maxMessageBytes) return reject('Mensagem excede o limite de 128 KiB do terminal')
+    const requestId = options.requestId ?? randomUUID()
+    if ([...live.queue,...live.active ?? []].some(item => item.id === requestId)) return reject('Pedido já presente na fila; consulte o recibo existente')
+    if (live.queue.length >= SUBMIT_LIMITS.maxQueued || live.queue.reduce((sum,item)=>sum+Buffer.byteLength(item.text),0)+bytes > SUBMIT_LIMITS.maxQueuedBytes) return reject('Fila do terminal cheia (32 pedidos / 256 KiB); aguarde ou cancele um pedido')
+    const queueMs = Math.max(1,Math.min(60_000,options.queueTimeoutMs ?? SUBMIT_LIMITS.queueTimeoutMs))
+    const item:SubmitItem={text:clean,accepted,id:requestId,rejected:options.rejected,cleanup:()=>{},expiresAt:Date.now()+queueMs,dispatchTimeoutMs:Math.max(1,Math.min(60_000,options.dispatchTimeoutMs ?? SUBMIT_LIMITS.dispatchTimeoutMs))}
+    const cancel = () => this.cancelSubmit(id,requestId)
+    const timer = setTimeout(() => this.removeQueued(live,item,new SubmitError('Prazo de espera na fila esgotado; nenhum texto foi enviado')),queueMs)
+    options.signal?.addEventListener('abort',cancel,{once:true})
+    item.cleanup=()=>{clearTimeout(timer);options.signal?.removeEventListener('abort',cancel)}
     if (live.submitTimer) { live.queue.push(item); return true }
     return this.pasteAndSubmit(id, live, [item])
   }
 
+  /** Only queued requests can be cancelled safely. Already pasted/accepted text is irreversible. */
+  cancelSubmit(id:number,requestId:string):'cancelled'|'dispatched'|'missing' {
+    const live=this.live.get(id)
+    if (!live) return 'missing'
+    if (live.active?.some(item=>item.id===requestId)) return 'dispatched'
+    const item=live.queue.find(item=>item.id===requestId)
+    if (!item) return 'missing'
+    this.removeQueued(live,item,new SubmitError('Pedido cancelado na fila; nenhum texto foi enviado'))
+    return 'cancelled'
+  }
+
+  private removeQueued(live:LivePane,item:SubmitItem,error:SubmitError):void {
+    const at=live.queue.indexOf(item)
+    if(at<0)return
+    live.queue.splice(at,1);this.rejectItem(item,error)
+  }
+
+  private rejectItem(item:SubmitItem,error:SubmitError):void {item.cleanup();try{item.rejected?.(error)}catch(receiptError){this.emit('receiptError',receiptError)}}
+
+  private rejectPending(live:LivePane,error:SubmitError):void {
+    for(const item of live.active ?? []) {this.rejectItem(item,error)}
+    live.active=[]
+    for(const item of live.queue.splice(0)){this.rejectItem(item,new SubmitError('Terminal encerrado antes do envio'))}
+  }
+
   private pasteAndSubmit(id: number, live: LivePane, items: LivePane['queue']): boolean {
+    const now=Date.now()
+    items=items.filter(item=>{item.cleanup();if(item.expiresAt<=now){this.rejectItem(item,new SubmitError('Prazo da fila esgotado; nenhum texto foi enviado'));return false}item.dispatchedAt=now;return true})
+    if(!items.length){live.submitTimer=null;return true}
+    live.active=items
     const text = items.map(item => item.text).join('\n\n')
     const paste = this.screens.get(id)?.term.modes.bracketedPasteMode
     try { live.pty.write(paste ? `\x1b[200~${text}\x1b[201~` : text) }
     catch (error) { this.failSubmit(id, live, error); return false }
     live.submitTimer = setTimeout(() => {
       if (this.live.get(id) !== live || live.closing) return
+      if (items.some(item=>Date.now()-(item.dispatchedAt ?? 0)>item.dispatchTimeoutMs)) {this.failSubmit(id,live,new SubmitError('Prazo de dispatch esgotado após colagem; Enter não confirmado',true));return}
       try { live.pty.write('\r') }
       catch (error) { this.failSubmit(id, live, error); return }
       for (const item of items) {
         try { item.accepted?.() } catch (error) { this.emit('receiptError', error) }
       }
+      live.active=[]
       // Leave the submit keystroke separate from the next paste. Returns arriving together are
       // one subsequent message, preserving every result without several redundant wakeups.
       live.submitTimer = setTimeout(() => {
@@ -219,7 +304,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       live.closing = true
       if (live.submitTimer) clearTimeout(live.submitTimer)
       live.submitTimer = null
-      live.queue = []
+      this.rejectPending(live,error instanceof SubmitError ? error : new SubmitError('Falha de escrita; resultado do envio incerto',true))
       this.kill(id)
     }
     this.emit('receiptError', error)
@@ -234,7 +319,9 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     const r = Math.floor(rows)
     if (c === screen.term.cols && r === screen.term.rows) return
     live.pty.resize(c, r)
+    try{screen.history?.append({type:'resize',cols:c,rows:r})}catch(error){this.historyFailed(id,error)}
     screen.term.resize(c, r)
+    this.scheduleCheckpoint(id,screen)
     this.emit('resized', id, c, r)
   }
 
@@ -243,7 +330,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     if (!live) return
     live.closing = true
     if (live.submitTimer) clearTimeout(live.submitTimer)
-    live.queue = []
+    this.rejectPending(live,new SubmitError('Terminal encerrado após início do envio; resultado incerto',true))
     if (live.terminationTimers.length) return
     // A shell can ignore HUP (including during startup). Keep the epoch leased until onExit,
     // but do not leave shutdown/restart waiting forever on that single best-effort signal.
@@ -262,9 +349,68 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     this.kill(id)
     this.live.delete(id)
     this.asking.delete(id)
-    this.screens.get(id)?.term.dispose()
+    const screen=this.screens.get(id)
+    if(screen?.historyTimer)clearTimeout(screen.historyTimer)
+    if(screen)void this.checkpointScreen(id,screen).finally(()=>screen.term.dispose())
     this.screens.delete(id)
     this.panes.delete(id)
+  }
+
+  private historyFailed(id:number,error:unknown):void {
+    const pane=this.panes.get(id)
+    if(pane?.historyState==='unavailable')return
+    if(pane){pane.historyState='unavailable';this.emit('status',{...pane},pane.status)}
+    this.emit('historyError',id,error)
+  }
+
+  private scheduleCheckpoint(id:number,screen:Screen):void {
+    if(!screen.history||screen.historyTimer)return
+    screen.historyTimer=setTimeout(()=>{screen.historyTimer=undefined;void this.checkpointScreen(id,screen)},HISTORY_LIMITS.checkpointMs)
+    screen.historyTimer.unref()
+  }
+
+  private checkpointScreen(id:number,screen:Screen):Promise<void> {
+    if(!screen.history)return Promise.resolve()
+    if(screen.checkpoint)return screen.checkpoint
+    if(screen.historyTimer){clearTimeout(screen.historyTimer);screen.historyTimer=undefined}
+    const sequence=screen.history.head
+    screen.checkpoint=new Promise<void>(resolve=>screen.term.write('',()=>{
+      try{screen.history!.checkpoint({sequence,data:screen.serializer.serialize({scrollback:SCROLLBACK_LINES}),cols:screen.term.cols,rows:screen.term.rows})}
+      catch(error){this.historyFailed(id,error)}
+      resolve()
+    })).finally(()=>{screen.checkpoint=undefined})
+    return screen.checkpoint
+  }
+
+  async flushHistory():Promise<void>{await Promise.all([...this.screens].map(([id,screen])=>this.checkpointScreen(id,screen)))}
+
+  historyEntries(id:number){return this.historyRoot?TerminalHistory.entries(this.historyRoot,id):[]}
+
+  async historyText(id:number,epoch:string):Promise<string>{
+    if(!this.historyRoot)throw new Error('Histórico indisponível')
+    const recovered=new TerminalHistory(this.historyRoot,id,epoch).recover()
+    const term=new headless.Terminal({cols:recovered.snapshot?.cols??100,rows:recovered.snapshot?.rows??30,scrollback:SCROLLBACK_LINES,allowProposedApi:true})
+    try{
+      if(recovered.snapshot)await new Promise<void>(resolve=>term.write(recovered.snapshot!.data,resolve))
+      for(const event of recovered.events){if(event.type==='data')await new Promise<void>(resolve=>term.write(event.data,resolve));else term.resize(event.cols,event.rows)}
+      const buffer=term.buffer.active
+      return Array.from({length:buffer.length},(_,y)=>buffer.getLine(y)?.translateToString(true)??'').join('\n').slice(-2*1024*1024)
+    }finally{term.dispose()}
+  }
+
+  /** Replay output only. Terminal device queries are discarded while there is no live PTY. */
+  restoreHistory(pane:Pane):void {
+    if(!this.historyRoot||!pane.executionEpoch||this.screens.has(pane.id))return
+    try{
+      const history=new TerminalHistory(this.historyRoot,pane.id,pane.executionEpoch)
+      const recovered=history.recover()
+      if(!recovered.snapshot&&!recovered.events.length)return
+      const term=new headless.Terminal({cols:recovered.snapshot?.cols??100,rows:recovered.snapshot?.rows??30,scrollback:SCROLLBACK_LINES,allowProposedApi:true})
+      const serializer=new serialize.SerializeAddon();term.loadAddon(serializer)
+      if(recovered.snapshot)term.write(recovered.snapshot.data)
+      for(const event of recovered.events){if(event.type==='data')term.write(event.data);else term.resize(event.cols,event.rows)}
+      this.screens.set(pane.id,{term,serializer,history});this.panes.set(pane.id,{...pane,historyState:'durable'})
+    }catch(error){this.historyFailed(pane.id,error)}
   }
 
   /**
@@ -356,6 +502,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     const efforts = [...new Set(identity.efforts)]
     if (!models.length && !efforts.length) return
     if (JSON.stringify(models) === JSON.stringify(pane.reportedModels ?? []) && JSON.stringify(efforts) === JSON.stringify(pane.reportedEfforts ?? []) && pane.identityEvidence === identity.level) return
+    if (models.length && JSON.stringify(models) !== JSON.stringify(pane.reportedModels ?? [])) {pane.contextUsage = unavailableContext('model-changed');pane.contextPercent=null}
     // The observation is one source's frame: never combine new models with a stale effort.
     pane.reportedModels = models
     pane.reportedEfforts = efforts
@@ -365,11 +512,12 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   }
 
   /** Session totals the CLI reported. */
-  setUsage(id: number, usage: TokenUsage | null, contextPercent: number | null): void {
+  setUsage(id: number, usage: TokenUsage | null, contextPercent: number | null, context?: import('@orbit/protocol').ContextUsage): void {
     const pane = this.panes.get(id)
     if (!pane) return
     if (usage) pane.usage = usage
-    if (contextPercent !== null) pane.contextPercent = contextPercent
+    if (context) {pane.contextUsage = context;pane.contextPercent=context.percent}
+    else if (contextPercent !== null) pane.contextPercent = contextPercent
     this.emit('status', { ...pane }, pane.status)
   }
 
@@ -377,6 +525,8 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   setSession(id: number, sessionId: string): void {
     const pane = this.panes.get(id)
     if (!pane || pane.sessionId === sessionId) return
+    pane.contextUsage = unavailableContext('session-changed')
+    pane.contextPercent = null
     pane.sessionId = sessionId
     this.emit('status', { ...pane }, pane.status)
   }

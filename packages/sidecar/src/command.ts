@@ -72,7 +72,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
   if (launch.cli === 'gemini') {
     if (launch.systemSettingsPath) parts.push(`GEMINI_CLI_SYSTEM_SETTINGS_PATH=${shellQuote(launch.systemSettingsPath)}`)
     parts.push('gemini')
-    if (model) parts.push('-m', model)
+    if (model) parts.push('-m', model.includes('[') ? shellQuote(model) : model)
     // Its conversation id comes with every hook; a fixed --session-id would break the restart
     // Gemini does itself after the folder-trust question.
     if (resume) parts.push('--resume', resume)
@@ -81,7 +81,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
     if (prompt) parts.push('-i', prompt)
   } else if (launch.cli === 'antigravity') {
     parts.push('agy')
-    if (model) parts.push('--model', model)
+    if (model) parts.push('--model', model.includes('[') ? shellQuote(model) : model)
     if (effort) parts.push('--effort', effort)
     for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
     if (resume) parts.push('--conversation', resume)
@@ -90,7 +90,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
   } else if (launch.cli === 'claude') {
     parts.push('claude', '--dangerously-skip-permissions')
     if (resume) parts.push('--resume', resume)
-    if (model) parts.push('--model', model)
+    if (model) parts.push('--model', model.includes('[') ? shellQuote(model) : model)
     if (effort) parts.push('--effort', effort)
     for (const dir of launch.addDirs ?? []) parts.push('--add-dir', shellQuote(dir))
     if (launch.mcpConfigPath) parts.push('--mcp-config', shellQuote(launch.mcpConfigPath))
@@ -112,7 +112,7 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
     // Explicit read-only executions retain their sandbox and deny commands that need approval.
     if (launch.sandbox === 'read-only') parts.push('-s', 'read-only', '-a', 'never')
     else parts.push('--dangerously-bypass-approvals-and-sandbox')
-    if (model) parts.push('-m', model)
+    if (model) parts.push('-m', model.includes('[') ? shellQuote(model) : model)
     if (effort) parts.push('-c', shellQuote(`model_reasoning_effort="${effort}"`))
     // --add-dir requests writable roots; Codex rejects it in read-only sessions. The role already
     // carries absolute read references to workspace folders and attachments.

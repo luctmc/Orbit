@@ -1,3 +1,4 @@
+import {unavailableContext} from '../structuredContext.ts'
 import { closeSync, openSync, readSync, statSync } from 'node:fs'
 import { EFFORTS, MODEL_ID, type Effort } from '@orbit/protocol'
 import { fromCodexRollout, type UsageReport } from '../usage.ts'
@@ -46,6 +47,7 @@ export class CodexUsageReader {
             c.session = typeof p?.id === 'string' ? p.id : null
           }
           if (event.type === 'turn_context') {
+            if(c.report)c.report={...c.report,contextPercent:null,context:unavailableContext('codex:awaiting-turn-usage',stat.mtimeMs)}
             c.context = typeof p?.turn_id === 'string' && typeof p.model === 'string' && MODEL_ID.test(p.model) && EFFORTS.includes(p.effort)
             if (typeof p?.model === 'string' && MODEL_ID.test(p.model)) c.models.add(p.model)
             if (EFFORTS.includes(p?.effort)) c.efforts.add(p.effort)
@@ -57,7 +59,7 @@ export class CodexUsageReader {
           const t = p.info.total_token_usage
           if (!c.context) c.missingContext = true
           if (!['input_tokens', 'output_tokens', 'total_tokens', 'cached_input_tokens'].every(k => count(t[k])) || t.input_tokens + t.output_tokens !== t.total_tokens || t.cached_input_tokens > t.input_tokens || t.cache_write_input_tokens !== undefined && !count(t.cache_write_input_tokens)) { c.malformed = true; continue }
-          const report = fromCodexRollout(line)
+          const report = fromCodexRollout(line,stat.mtimeMs)
           if (c.report?.usage && report.usage && (['input', 'output', 'total', 'cacheRead'] as const).some(k => report.usage![k] < c!.report!.usage![k])) c.malformed = true
           // cache_write_input_tokens has serde(default) in the native protocol.
           if (report.observed) report.observed.cacheWrite = true

@@ -1,3 +1,4 @@
+export * from './plugins.ts'
 // Wire contract between the Orbit UI and the sidecar (JSON over one WebSocket).
 
 /** Isolated input translation; independent of agent routing and execution settings. */
@@ -163,7 +164,7 @@ export interface Mission {
   /** The squad a `squad` mission follows. */
   squadId: string | null
   /** Tokens and cost of every agent the mission has had (closed ones included). */
-  usage: TokenUsage
+  usage: TokenUsage & {costComplete?: boolean}
   /** Set when each agent works in its own branch (git worktree). */
   git: MissionGit | null
   /** The schedule that started it by itself, if any. */
@@ -450,6 +451,8 @@ export interface Pane {
   usage: TokenUsage | null
   /** How full the model's context window is, 0–100, when the CLI says. */
   contextPercent: number | null
+  historyState?: 'durable' | 'unavailable'
+  contextUsage?: ContextUsage
   pid: number | null
   exitCode: number | null
   createdAt: number
@@ -483,6 +486,26 @@ export interface MissionProgress {
     reason: string | null
     checkedAt: number | null
   }
+}
+
+/** Current occupied context is separate from cumulative billed/session tokens. */
+export interface ContextUsage {
+  kind: 'measured' | 'estimated' | 'unavailable'
+  usedTokens: number | null
+  capacityTokens: number | null
+  percent: number | null
+  categories: Array<{ name: string; tokens: number }>
+  source: string
+  observedAt: number
+}
+
+/** Partial known cost is a lower bound; it cannot certify budget coverage. */
+export function budgetStatus(usage: {total:number;costUsd:number|null;costComplete?:boolean}, budget:{tokens:number|null;costUsd:number|null}) {
+  const shares: number[] = []
+  if (budget.tokens) shares.push(usage.total / budget.tokens)
+  const cost = usage.costUsd === null ? 'unavailable' as const : usage.costComplete === true ? 'reported' as const : 'partial' as const
+  if (budget.costUsd && cost === 'reported') shares.push(usage.costUsd! / budget.costUsd)
+  return {share:shares.length ? Math.max(...shares) : null,cost,knownCostUsd:usage.costUsd}
 }
 
 /** Tokens an agent (or a mission, or a day) used. `total` counts every kind. */
@@ -577,6 +600,7 @@ export interface ModelInfo {
   description: string
   efforts: Effort[]
   defaultEffort: Effort | null
+  capabilities?: { effort: boolean | null; fast: boolean | null; auto: boolean | null }
 }
 
 export interface CliCatalog {
@@ -585,6 +609,11 @@ export interface CliCatalog {
   efforts: Effort[]
   /** `cli`: read from the installed CLI; `builtin`: Orbit's list, when the CLI cannot be asked. */
   source: 'cli' | 'builtin'
+  accountId?: string
+  origin?: string
+  reason?: string
+  observedAt?: number
+  expiresAt?: number
   /** The model the CLI uses when none is chosen, when Orbit can tell (Codex's config.toml). */
   defaultModel?: string | null
   /** Effective effort configured by the user, before the model's own default. */
@@ -596,9 +625,9 @@ export type Catalog = Record<AgentCliForRole, CliCatalog>
 /** Effort levels valid for this CLI and model. */
 export function effortsFor(catalog: Catalog | null, cli: AgentCli, model: string | null): readonly Effort[] {
   if (cli === 'shell') return []
-  if (!catalog) return EFFORTS
+  if (!catalog) return []
   const entry = catalog[cli]
-  return entry.models.find((m) => m.id === (model ?? entry.defaultModel))?.efforts ?? entry.efforts
+  return entry.models.find((m) => m.id === (model ?? entry.defaultModel))?.efforts ?? (model === null ? entry.efforts : [])
 }
 
 /** An installed agent CLI as Orbit sees it. */
@@ -975,7 +1004,12 @@ export type ClientMessage =
   /** Raw keystrokes from the terminal view. */
   | { type: 'pane.input'; paneId: number; data: string }
   /** A whole message typed elsewhere (the command bar): pasted, then submitted with Enter. */
-  | { type: 'pane.submit'; paneId: number; text: string; attachments?: string[]; requestId?: string; translationAccountId?: string; allowOriginal?: boolean }
+  | { type: 'app-plugins.list'; requestId:string }
+  | { type: 'app-plugins.configure'; requestId:string; key:string; hash:string; enabled:boolean; permissions:import('./plugins.ts').AppPluginPermission[] }
+  | { type: 'app-plugins.load'; requestId:string; key:string }
+  | { type: 'pane.history.get'; paneId:number; epoch?:string; requestId:string }
+  | { type: 'pane.queue.cancel'; paneId: number; targetRequestId: string; requestId: string }
+  | { type: 'pane.submit'; queueTimeoutMs?: number; dispatchTimeoutMs?: number; paneId: number; text: string; attachments?: string[]; requestId?: string; translationAccountId?: string; allowOriginal?: boolean }
   | { type: 'attachment.add'; paneId: number; requestId: string; name: string; mime: string; data: string }
   | { type: 'pane.conversation'; paneId: number }
   | { type: 'pane.resize'; paneId: number; cols: number; rows: number }
@@ -1043,6 +1077,7 @@ export type ServerMessage =
   | { type: 'mission.checked'; requestId: string; state: 'missing' | 'pending' | 'failed' | 'acked'; message: string; missionId?: string }
   | { type: 'workspace.saved'; requestId: string; workspace: Workspace }
   | { type: 'workspace.error'; requestId: string; message: string }
+  | { type: 'engine.runtime'; persistent: boolean; revision: string }
   | { type: 'engine.startup'; tasks: StartupTask[] }
   | { type: 'mission.progress'; requestId: string; progress: MissionProgress }
   | { type: 'mission.progress.error'; requestId: string; missionId: string; message: string }
@@ -1052,6 +1087,10 @@ export type ServerMessage =
   | { type: 'account.reset.error'; requestId: string; message: string }
   | { type: 'pane.spawned'; requestId: string; pane: Pane }
   | { type: 'pane.spawn.error'; requestId: string; message: string }
+  | { type: 'app-plugins'; requestId:string; plugins:import('./plugins.ts').AppPluginSummary[]; error?:string }
+  | { type: 'app-plugins.loaded'; requestId:string; plugin:import('./plugins.ts').LoadedAppPlugin|null; error?:string }
+  | { type: 'pane.history'; paneId:number; requestId:string; entries:Array<{epoch:string;updatedAt:number}>; text?:string; error?:string }
+  | { type: 'pane.queue.cancelled'; requestId:string; outcome:'cancelled'|'dispatched'|'missing'|'preparing'; message:string }
   | { type: 'pane.submitted'; requestId: string; paneId: number; executionEpoch?: string; acceptedAt?: number }
   | { type: 'pane.submit.error'; requestId: string; message: string; pending?: boolean }
   | { type: 'mission.created'; requestId: string; mission: Mission }
@@ -1077,7 +1116,7 @@ export type ServerMessage =
   | { type: 'settings.updated'; settings: OrbitSettings }
   | { type: 'proposals'; proposals: RoutingProposal[] }
   | { type: 'memory'; workspaceId: string; entries: MemoryEntry[] }
-  | { type: 'catalog'; catalog: Catalog }
+  | { type: 'catalog'; catalog: Catalog; accounts?: Record<string, CliCatalog> }
   | { type: 'usage.day'; day: UsageDay }
   | { type: 'limits'; limits: AccountLimits[] }
   | { type: 'cli.status'; clis: CliStatus[] }
@@ -1117,7 +1156,7 @@ export type ServerMessage =
 export const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/
 
 /** Model ids reach a shell command line, so only plain identifiers are accepted (`/` for providers' ids). */
-export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$/
+export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}(?:\[1m\])?$/
 /** Squad and role ids. */
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/
 

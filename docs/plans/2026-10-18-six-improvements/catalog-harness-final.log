@@ -1,0 +1,18 @@
+(node:63822) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:63823) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Claude parser preserves per-model capabilities, hides disabled rows, never invents effort [90m(1.049208ms)[39m[39m
+[32m✔ account catalog cache isolates accounts, joins probes, expires and invalidates [90m(0.192291ms)[39m[39m
+[32m✔ unavailable catalog and unknown model do not authorize universal effort [90m(0.064125ms)[39m[39m
+[32m✔ automatic seats use the available account own models and effort, never another account catalog [90m(3.414917ms)[39m[39m
+[32m✔ refresh timestamps preserve harness evidence revision; actual per-account capabilities change it [90m(2.265083ms)[39m[39m
+[32m✔ Claude pipeline pins the CLI process, not printf, and custom API backends never inherit native capabilities [90m(0.440792ms)[39m[39m
+[34mℹ tests 6[39m
+[34mℹ suites 0[39m
+[34mℹ pass 6[39m
+[34mℹ fail 0[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 160.05575[39m

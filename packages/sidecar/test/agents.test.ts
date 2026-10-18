@@ -60,7 +60,7 @@ test("Gemini's hooks are read as Claude Code's and answered in Gemini's terms", 
 test('Antigravity models come from `agy models`, whatever the decoration', () => {
   const catalog = parseAntigravityModels('Fetching available models...\nAvailable models:\n  * gemini-3.1-pro   Gemini 3.1 Pro\n  - claude-sonnet-5-5 | Claude Sonnet 5.5\n  gpt-oss-120b\n')
   assert.deepEqual(catalog.models.map((m) => [m.id, m.label]), [['gemini-3.1-pro', 'Gemini 3.1 Pro'], ['claude-sonnet-5-5', 'Claude Sonnet 5.5'], ['gpt-oss-120b', 'gpt-oss-120b']])
-  assert.deepEqual(catalog.models[0]!.efforts, ['low', 'medium', 'high', 'xhigh', 'max'])
+  assert.deepEqual(catalog.models[0]!.efforts, [], 'text model list does not establish effort support')
   assert.throws(() => parseAntigravityModels('Error: Please sign in to view available models.'))
 })
 

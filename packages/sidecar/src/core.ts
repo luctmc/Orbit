@@ -1,3 +1,6 @@
+import { catalogRevision as revisionOfCatalog } from './catalogRevision.ts'
+import { AppPlugins } from './appPlugins.ts'
+import { CatalogInvalidated, AccountCatalogs, accountCatalogKey, discoverAccountCatalog } from './accountCatalog.ts'
 import { InputJournal, inputFingerprint, translateCodex, UncertainTranslation, RESPONSE_LANGUAGE, type InputRecord, type Translate } from './inputLanguage.ts'
 
 /** Admission refused before account preparation or any PTY launch. */
@@ -11,7 +14,7 @@ import { geminiHook, geminiAnswer } from './adapters/gemini.ts'
 import { adapterCapabilities } from './adapters/types.ts'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ATTACHMENT_LIMITS, ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type MemoryEntry, type MemoryKind, MEMORY_KINDS, MEMORY_LIMITS, type Difficulty, type AgentSeat, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
+import { budgetStatus, ATTACHMENT_LIMITS, ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type MemoryEntry, type MemoryKind, MEMORY_KINDS, MEMORY_LIMITS, type Difficulty, type AgentSeat, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { Attachments } from './attachments.ts'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
@@ -41,7 +44,7 @@ import { CLAUDE_USAGE_COMMAND, parseClaudeUsage, usageText } from './claudeUsage
 import { LimitRefreshGate, parseCodexAccountLimits } from './accountLimits.ts'
 import { codexHome, findCodexRolloutById, codexSessionId, findCodexRollout, fromCodexRollout, fromClaudeStatus, readTail, type UsageReport } from './usage.ts'
 import { contractHash, helperRequestHash, normalizedAcceptance } from './activityLedger.ts'
-import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
+import { blankStatus, inspectCli, latestVersion, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
 import { claudeTranscript, claudeTurns, codexTurns, deleteClaudeConversation, tailTurns, turnsMarkdown, type Turn } from './transcripts.ts'
@@ -93,6 +96,7 @@ export type Broadcast = (message: ServerMessage) => void
 
 export interface CoreOptions {
   /** Tests inject an offline translator; production always uses isolated Codex. */
+  simulatedCatalog?: Catalog
   translate?: Translate
   /** Opt-in local benchmark measurement; never calls a model or stores message content. */
   measurements?: HarnessMeasurements
@@ -111,6 +115,7 @@ export interface CoreOptions {
 
 /** Orbit's domain logic: UI messages, MCP tool calls and hook reports all land here. */
 export class OrbitCore {
+  private readonly appPlugins:AppPlugins
   private readonly inputJournal: InputJournal
   private readonly translate: Translate
   private readonly inputInFlight = new Map<string, Promise<void>>()
@@ -135,7 +140,11 @@ export class OrbitCore {
   private readonly delegating = new Map<string, { requestHash: string; retryReason: string | null; opening: Promise<{ pane: Pane; receipt: string[] }> }>()
   private readonly run: Run
   /** Models and effort levels per CLI; null until first loaded. */
+  private readonly simulatedCatalog?: Catalog
   private catalog: Catalog | null = null
+  private accountCatalogs: Record<string, import('@orbit/protocol').CliCatalog> = {}
+  private readonly catalogCache = new AccountCatalogs()
+  private readonly catalogKeys = new Map<string, string>()
   private readonly clis = new Map<AgentCliForRole, CliStatus>(AGENT_CLIS.map((cli) => [cli, blankStatus(cli)]))
   /** Codex agent → its session file, once found. */
   private readonly codexRollouts = new Map<number, string>()
@@ -168,13 +177,17 @@ export class OrbitCore {
   /** Files Claude agents edited (real path → who, in order), from their PostToolUse hooks. */
   private readonly touched = new Map<string, Array<{ paneId: number; missionId: string }>>()
 
-  constructor({ dataDir, shell, broadcast, agentCommand, run, browser, measurements, benchmarkEagerContext, translate }: CoreOptions) {
+  constructor({ dataDir, shell, broadcast, agentCommand, run, browser, measurements, benchmarkEagerContext, translate, simulatedCatalog }: CoreOptions) {
     this.harnessMode = agentCommand ? 'simulated' : 'live'
+    if (simulatedCatalog && !agentCommand) throw new Error('Catálogo simulado requer agente substituto')
+    this.catalog = simulatedCatalog ?? null
+    this.simulatedCatalog = simulatedCatalog
     this.measurements = measurements
     this.benchmarkEagerContext = benchmarkEagerContext === true
     this.broadcast = broadcast
     this.run = run ?? loginShellRunner(shell)
     this.dataDir = dataDir
+    this.appPlugins=new AppPlugins(dataDir)
     this.inputJournal = new InputJournal(dataDir)
     this.translate = translate ?? translateCodex
     this.attachments = new Attachments(dataDir)
@@ -189,7 +202,9 @@ export class OrbitCore {
     this.browser.on('closed', (missionId) => this.broadcast({ type: 'browser.closed', missionId }))
     this.browser.on('frame', (missionId, data, width, height) => this.broadcast({ type: 'browser.frame', missionId, data, width, height }))
     removeAgentFiles(join(dataDir, 'panes'))
-    this.panes = new PaneManager(shell, agentCommand)
+    this.panes = new PaneManager(shell, agentCommand, join(dataDir,'terminal-history'))
+    this.panes.on('historyError',(id,error)=>this.broadcast({type:'error',message:`Histórico de #${id} indisponível: ${error instanceof Error ? error.message : String(error)}`}))
+    for(const pane of this.store.snapshot().panes)this.panes.restoreHistory(pane)
     this.panes.on('terminated', (id, epoch) => this.store.releaseExecution(id, epoch))
     this.panes.on('receiptError', () => { /* Keep the persisted notice pending for a later dispatch. */ })
     this.deliveryTimer = setInterval(() => this.dispatchDeliveries(), 2000)
@@ -249,14 +264,34 @@ export class OrbitCore {
       { type: 'browser.engine', name: this.browser.engine?.name ?? null },
       ...this.browser.states().map((browser): ServerMessage => ({ type: 'browser.state', browser })),
     ]
-    if (this.catalog) messages.push({ type: 'catalog', catalog: this.catalog })
+    if (this.catalog) messages.push({ type: 'catalog', catalog: this.catalog, accounts: this.accountCatalogs })
     return messages
   }
 
   /** Model catalogs, read from the CLIs in the background; agents can open before it arrives. */
   async refreshCatalog(): Promise<void> {
-    this.catalog = await loadCatalog(this.run)
-    this.broadcast({ type: 'catalog', catalog: this.catalog })
+    if (this.simulatedCatalog) { this.catalog = this.simulatedCatalog; this.broadcast({type:'catalog',catalog:this.catalog}); return }
+    this.catalogCache.invalidate()
+    await Promise.all(this.store.accounts().map(account => this.catalogForAccount(account)))
+    this.catalog = Object.fromEntries(AGENT_CLIS.map(cli => [cli, this.accountCatalogs[cli] ?? {source:'builtin',efforts:[],models:[],reason:'Catálogo indisponível'}])) as Catalog
+    this.broadcast({ type: 'catalog', catalog: this.catalog, accounts: this.accountCatalogs })
+  }
+
+  private async catalogForAccount(account: Account): Promise<import('@orbit/protocol').CliCatalog> {
+    const key = accountCatalogKey(account, this.accountFiles, this.clis.get(account.cli)?.version ?? null)
+    const item = await this.catalogCache.get(account, key, () => discoverAccountCatalog(account, this.accountFiles, this.run)).catch(error=>{if(error instanceof CatalogInvalidated&&this.store.account(account.id))return this.catalogForAccount(this.store.account(account.id)!);throw error})
+    if (this.store.account(account.id) && accountCatalogKey(account, this.accountFiles, this.clis.get(account.cli)?.version ?? null) !== key) return this.catalogForAccount(this.store.account(account.id)!)
+    // Removed accounts must never reappear from an in-flight probe.
+    if (this.store.account(account.id) && accountCatalogKey(account, this.accountFiles, this.clis.get(account.cli)?.version ?? null) === key) { this.accountCatalogs[account.id] = item; this.catalogKeys.set(account.id, key) }
+    return item
+  }
+
+  private currentAccountCatalog(account: Account): import('@orbit/protocol').CliCatalog {
+    const current = this.accountCatalogs[account.id]
+    const key = accountCatalogKey(account, this.accountFiles, this.clis.get(account.cli)?.version ?? null)
+    if (current && this.catalogKeys.get(account.id) === key && (current.expiresAt ?? 0) > Date.now()) return current
+    void this.catalogForAccount(account).then(() => { if (this.catalog) this.broadcast({ type: 'catalog', catalog: this.catalog, accounts: this.accountCatalogs }) }).catch(() => {})
+    return {source:'builtin',efforts:[],models:[],origin:'unavailable',reason:'Catálogo vencido ou alterado; atualização solicitada. Tente novamente antes de definir modelo/esforço.'}
   }
 
   private setCli(cli: AgentCliForRole, patch: Partial<CliStatus>): void {
@@ -301,7 +336,7 @@ export class OrbitCore {
     const found = await inspectCli(this.run, cli)
     const works = ok && found.installed && found.version !== null
     this.setCli(cli, { ...found, busy: null, ok: works, checkedAt: Date.now(), message: works ? `Atualizado para ${found.version}.` : output || 'A atualização falhou.' })
-    if (cli !== 'claude') await this.refreshCatalog()
+    await this.refreshCatalog()
   }
 
   // ---- git: a worktree and branch per agent ----
@@ -424,7 +459,7 @@ export class OrbitCore {
     const budget = mission.budget
     if (!budget || budget.exceeded) return mission
     const use = budgetUse(mission, budget)
-    if (use >= 1) {
+    if (use !== null && use >= 1) {
       const live = this.missionPanes(mission.id).filter((p) => p.cli !== 'shell' && this.panes.isAlive(p.id))
       // Esc stops the turn in Claude Code and in Codex; the hook then refuses Claude's next tools.
       for (const pane of live) {
@@ -435,7 +470,7 @@ export class OrbitCore {
       this.event(mission.id, 'budget', 'Orçamento esgotado', `A missão chegou a ${budgetText(mission, budget)}. ${live.length ? `${live.length} ${live.length === 1 ? 'agente foi interrompido' : 'agentes foram interrompidos'}; ` : ''}aumente o orçamento para continuar.`, null)
       return this.store.updateMission(mission.id, { budget: { ...budget, warned: true, exceeded: true } }) ?? mission
     }
-    if (use >= BUDGET_WARN_AT && !budget.warned) {
+    if (use !== null && use >= BUDGET_WARN_AT && !budget.warned) {
       this.event(mission.id, 'budget', `Orçamento em ${Math.floor(use * 100)}%`, `A missão está em ${budgetText(mission, budget)}.`, null)
       return this.store.updateMission(mission.id, { budget: { ...budget, warned: true } }) ?? mission
     }
@@ -1088,9 +1123,12 @@ export class OrbitCore {
       found = { loggedIn: null, message: error instanceof Error ? error.message : String(error) }
     }
     if (!this.store.account(accountId)) return // removed meanwhile
+    if (current && (found.loggedIn !== current.loggedIn || found.email !== current.email)) this.catalogCache.invalidate(accountId)
     if (account.kind === 'assinatura' && found.loggedIn !== false) await this.refreshAccountLimits(account)
     const loginPaneId = this.accountStatus.get(accountId)?.loginPaneId ?? null
     this.setAccountStatus(accountId, { ...found, checkedAt: Date.now(), busy: loginPaneId && this.panes.isAlive(loginPaneId) ? 'login' : null })
+    await this.catalogForAccount(account)
+    if (this.catalog) this.broadcast({ type: 'catalog', catalog: this.catalog, accounts: this.accountCatalogs })
   }
 
   /**
@@ -1185,6 +1223,8 @@ export class OrbitCore {
     this.accountFiles.prepare(account)
     if (key) this.accountFiles.saveKey(account, key)
     this.store.saveAccount(account)
+    this.catalogCache.invalidate(account.id)
+    delete this.accountCatalogs[account.id]
     this.broadcastAccounts()
     if (key && account.cli === 'codex') {
       // Codex keeps its own copy of the key, in the account's folder.
@@ -1202,6 +1242,8 @@ export class OrbitCore {
     const login = this.accountStatus.get(accountId)?.loginPaneId
     if (login) this.closePane(login)
     this.store.deleteAccount(accountId)
+    this.catalogCache.invalidate(accountId)
+    delete this.accountCatalogs[accountId]
     this.accountStatus.delete(accountId)
     this.broadcastAccounts()
     this.broadcast({ type: 'limits', limits: this.store.limits() })
@@ -1289,6 +1331,10 @@ export class OrbitCore {
   }
 
   /** A pane's screen for a view that just mounted (see the server's attach handling). */
+  refuseNewExecutions():void {this.stopping=true}
+
+  liveTerminalCount():number {return this.store.snapshot().panes.filter(p=>this.panes.isAlive(p.id)).length}
+
   paneSnapshot(paneId: number): Promise<PaneSnapshot | null> {
     return this.panes.snapshot(paneId)
   }
@@ -1362,8 +1408,12 @@ export class OrbitCore {
             this.inputJournal.save(pane.missionId, message.requestId!, record)
             if (pane.executionEpoch) this.measurements?.wakeup(pane.executionEpoch)
             resolve()
-          })
-          if (!queued) { clearTimeout(timer); reject(new Error('O terminal não confirmou o envio. Confira o pedido pendente.')) }
+          }, {requestId:message.requestId,queueTimeoutMs:message.queueTimeoutMs,dispatchTimeoutMs:message.dispatchTimeoutMs,rejected:error=>{
+            clearTimeout(timer)
+            if (!error.uncertain) record.state='failed'
+            record.error=error.message;this.inputJournal.save(pane.missionId,message.requestId!,record);reject(error)
+          }})
+          if (!queued) { clearTimeout(timer); if (record.state === 'submitting') record.state='failed'; reject(new Error(record.error ?? 'O terminal recusou o envio antes da colagem.')) }
           else if (pane.executionEpoch) this.measurements?.bytes(pane.executionEpoch, 'submittedBytes', text)
         })
       })
@@ -1631,6 +1681,41 @@ export class OrbitCore {
         reply({ type: 'pane.conversation', paneId: pane.id, turns: this.conversationOf(pane).slice(-60).map((t) => ({ ...t, text: t.text.slice(0, 12_000) })) })
         return
       }
+      case 'app-plugins.list':
+      case 'app-plugins.configure': {
+        try{
+          if(message.type==='app-plugins.configure')this.appPlugins.configure(message.key,message.hash,message.enabled,message.permissions)
+          const result={type:'app-plugins' as const,requestId:message.requestId,plugins:this.appPlugins.list()}
+          reply(result)
+          if(message.type==='app-plugins.configure')this.broadcast({...result,requestId:''})
+        }catch(error){reply({type:'app-plugins',requestId:message.requestId,plugins:[],error:error instanceof Error?error.message:String(error)})}
+        return
+      }
+      case 'app-plugins.load': {
+        try{reply({type:'app-plugins.loaded',requestId:message.requestId,plugin:this.appPlugins.load(message.key)})}
+        catch(error){reply({type:'app-plugins.loaded',requestId:message.requestId,plugin:null,error:error instanceof Error?error.message:String(error)})}
+        return
+      }
+      case 'pane.history.get': return (async()=>{
+        try {
+          if(!this.store.pane(message.paneId))throw new Error('Agente inexistente')
+          await this.panes.flushHistory()
+          const entries=this.panes.historyEntries(message.paneId)
+          if(message.epoch&&!entries.some(entry=>entry.epoch===message.epoch))throw new Error('Execução fora do histórico deste pane')
+          reply({type:'pane.history',paneId:message.paneId,requestId:message.requestId,entries,...(message.epoch?{text:await this.panes.historyText(message.paneId,message.epoch)}:{})})
+        }catch(error){reply({type:'pane.history',paneId:message.paneId,requestId:message.requestId,entries:[],error:error instanceof Error?error.message:String(error)})}
+      })()
+      case 'pane.queue.cancel': {
+        const pane=this.store.pane(message.paneId)
+        if (!pane) throw new Error('Agente inexistente')
+        let outcome=this.panes.cancelSubmit(pane.id,message.targetRequestId) as 'cancelled'|'dispatched'|'missing'|'preparing'
+        const record=this.inputJournal.get(pane.missionId,message.targetRequestId)
+        if(outcome==='missing' && record?.state==='acked')outcome='dispatched'
+        if(outcome==='missing' && this.inputInFlight.has(`${pane.missionId}/${message.targetRequestId}`))outcome='preparing'
+        const labels={cancelled:'Pedido cancelado na fila; rascunho preservado.',dispatched:'Texto já despachado. Cancelar a fila não desfaz o envio; interrompa o agente se necessário.',preparing:'Pedido em preparação; ainda não entrou na fila do terminal.',missing:'Pedido ausente da fila; confira o recibo antes de reenviar.'}
+        reply({type:'pane.queue.cancelled',requestId:message.requestId,outcome,message:labels[outcome]})
+        return
+      }
       case 'pane.submit':
         return this.submitInput(message, reply)
       case 'pane.resize':
@@ -1678,7 +1763,7 @@ export class OrbitCore {
         const limits = budgetLimits({ tokens: message.tokens, costUsd: message.costUsd })
         // A new limit is judged against what the mission already used: no warning twice.
         const budget = limits && { ...limits, warned: false, exceeded: false }
-        const updated = this.store.updateMission(mission.id, { budget: budget && { ...budget, warned: budgetUse(mission, budget) >= BUDGET_WARN_AT, exceeded: budgetUse(mission, budget) >= 1 } })
+        const updated = this.store.updateMission(mission.id, { budget: budget && { ...budget, warned: (budgetUse(mission, budget) ?? -1) >= BUDGET_WARN_AT, exceeded: (budgetUse(mission, budget) ?? -1) >= 1 } })
         if (updated) this.broadcast({ type: 'mission.updated', mission: updated })
         return
       }
@@ -1763,7 +1848,7 @@ export class OrbitCore {
         this.measurements?.wakeup(recipient.executionEpoch!)
         try { this.store.markNoticeAccepted(notice.id, recipient) }
         finally { this.sendingNotices.delete(key) }
-      })
+      }, {requestId:key,rejected:()=>this.sendingNotices.delete(key)})
       if (queued) this.measurements?.bytes(target.executionEpoch!, 'submittedBytes', noticeText(notice))
       if (!queued) this.sendingNotices.delete(key)
     }
@@ -1815,6 +1900,7 @@ export class OrbitCore {
       cli,
       adapter: adapterCapabilities(cli, this.clis.get(cli)?.version ?? null),
       source: this.catalog?.[cli].source ?? 'unavailable',
+      accounts: this.store.accounts().filter(a => a.cli === cli).map(a => ({ accountId: a.id, catalog: this.accountCatalogs[a.id] ?? null })),
       models: this.catalog?.[cli].models.map((m) => ({ ...m, description: m.description.slice(0, 240) })) ?? [],
       selection: ['simples', 'normal', 'dificil'].map((difficulty) => ({
         difficulty,
@@ -2039,6 +2125,8 @@ export class OrbitCore {
   /** When Orbit opens: the agents that were running come back in their conversations. */
   async resumeCrews(): Promise<void> {
     if (!this.store.settings().resumeOnStart) return
+    // Recovery must validate the account catalog before restoring explicit model/effort flags.
+    if (this.store.wasRunning.length) await this.refreshCatalog()
     const ids = this.store.wasRunning.splice(0)
     const panes = ids.map((id) => this.store.pane(id)).filter((p): p is Pane => Boolean(p && p.cli !== 'shell' && p.sessionId && this.store.paneSpec(p.id) && this.store.mission(p.missionId)?.status === 'active'))
     // Leads first, so helpers that deliver find them running.
@@ -2425,7 +2513,7 @@ export class OrbitCore {
     if (!pane) return
     if (report.limits) this.broadcast({ type: 'limits', limits: this.store.setLimits({ ...report.limits, accountId: pane.accountId ?? report.limits.cli }) })
     if (identity) this.panes.setReportedIdentity(paneId, identity)
-    if (!report.usage && report.contextPercent === null) return
+    if (!report.usage && report.contextPercent === null && !report.context) return
     let usage = report.usage
     if (usage && pane.cli !== 'shell') {
       const accounted = this.store.accountSessionUsage(pane, usage, source, Date.now(), { mode: this.harnessMode, origin: report.origin, observed: report.observed, reportedModels: identity?.models ?? [], reportedEffort: identity?.efforts.length === 1 ? identity.efforts[0]! : null, identityComplete: identity?.complete === true, identityLevel: identity?.level ?? 'unknown' })
@@ -2437,7 +2525,7 @@ export class OrbitCore {
         this.broadcast({ type: 'usage.day', day: added.day })
       }
     }
-    this.panes.setUsage(paneId, usage, report.contextPercent)
+    this.panes.setUsage(paneId, usage, report.contextPercent,report.context)
   }
 
   /** Codex has no hooks: read each live Codex agent's session file for its totals. */
@@ -2599,6 +2687,7 @@ export class OrbitCore {
     this.store.flush()
     this.shutdownTask = this.panes.waitForExit()
     await this.shutdownTask
+    await this.panes.flushHistory()
     // Exit listeners can schedule a final metadata save. Flush it before another Store opens
     // this directory, so an old debounce cannot overwrite the recovered state.
     this.store.flush()
@@ -2664,7 +2753,7 @@ export class OrbitCore {
     if (request.model && (typeof request.model !== 'string' || !MODEL_ID.test(request.model))) throw new Error('Modelo inválido: use letras, números, ponto, hífen, barra ou dois-pontos')
     if (request.effort && !EFFORTS.includes(request.effort)) throw new Error(`Esforço inválido: ${request.effort}`)
 
-    const catalogRevision = this.catalog ? createHash('sha256').update(JSON.stringify(this.catalog)).digest('hex') : null
+    const catalogRevision = this.catalog ? revisionOfCatalog(this.harnessMode==='live'?{default:this.catalog,accounts:this.accountCatalogs}:this.catalog) : null
     const harnessReadOnly = !!(input.readOnly || requiresSandbox || taskType?.readOnly || squadRole?.readOnly)
     const eligibleAccounts = harnessAccounts(this.store.accounts(), [...this.accountStatus.values()], this.store.limits())
     const harnessExplicit = !!(options.explicitCli || input.model || input.effort || input.accountId || input.squadRoleId || taskType?.automatic === false || (taskType && taskType.automatic !== true) || options.keep)
@@ -2675,17 +2764,17 @@ export class OrbitCore {
         ...options.harnessTask, readOnly: harnessReadOnly, requireReadOnlySandbox: requiresSandbox,
         constraintRevision: createHash('sha256').update(JSON.stringify({ routing, squadRole, allowed: mission.allowedClis, instructions: workspace.instructions, settings: this.store.settings() })).digest('hex'),
       }),
-      harnessCandidates(this.catalog, [...this.clis.values()], eligibleAccounts, mission.allowedClis, requiresSandbox),
+      harnessCandidates(this.catalog, [...this.clis.values()], eligibleAccounts, mission.allowedClis, requiresSandbox, this.harnessMode==='live'?account=>this.currentAccountCatalog(account):undefined,catalogRevision??undefined),
       harnessExplicit || taskType?.alt?.pinned ? [] : this.store.harnessEvidence(),
       { explicit: harnessExplicit },
     ) : undefined
     const work = request.role === 'crew' && !['operacao', 'documentacao'].includes(taskType?.id ?? '') ? designWork(`${taskType?.id ?? ''} ${input.title} ${input.task ?? ''}`) : null
     const automatic = !harnessExplicit && (!harness?.selected || work) && request.role === 'crew' && (taskType || work) && this.catalog
-      ? automaticTaskSeat({ catalog: this.catalog, preferred: { cli: request.cli as AgentCliForRole, model: request.model, effort: request.effort ?? null }, alternate: taskType?.alt, difficulty: options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal', design: work, allowed: mission.allowedClis.filter(cli => !requiresSandbox || adapterCapabilities(cli).supports.readOnlySandbox), rooms: cli => this.rooms(cli, this.liveByAccount()).filter(r => this.accountStatus.get(r.account.id)?.loggedIn === true && !this.accountStatus.get(r.account.id)?.busy) }) : null
+      ? automaticTaskSeat({ catalogForAccount: this.harnessMode === 'live' ? account => this.currentAccountCatalog(account) : undefined, catalog: this.catalog, preferred: { cli: request.cli as AgentCliForRole, model: request.model, effort: request.effort ?? null }, alternate: taskType?.alt, difficulty: options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal', design: work, allowed: mission.allowedClis.filter(cli => !requiresSandbox || adapterCapabilities(cli).supports.readOnlySandbox), rooms: cli => this.rooms(cli, this.liveByAccount()).filter(r => this.accountStatus.get(r.account.id)?.loggedIn === true && !this.accountStatus.get(r.account.id)?.busy) }) : null
     // Once a catalog is available, autonomous staffing needs a valid quota and compatible model.
     if (!harnessExplicit && request.role === 'crew' && (taskType || work) && !automatic && (!harness?.selected || work)) throw new Error('Roteamento automático: nenhuma conta com quota válida e modelo compatível. Atualize os limites em Contas ou escolha uma conta explicitamente.')
     const measured = work ? automatic : harness?.selected ?? automatic
-    if (measured) Object.assign(request, { cli: measured.cli, model: measured.model, effort: measured.effort })
+    if (measured) Object.assign(request, { cli: measured.cli, model: measured.model, effort: measured.effort, ...('accountId' in measured ? {accountId: measured.accountId} : {}) })
     if (harness) receipt.push(...harness.reasons)
     if (automatic) {
       const seat = taskType?.alt?.cli === automatic.cli ? taskType.alt : taskType
@@ -2696,6 +2785,11 @@ export class OrbitCore {
     // The maestro's seat: the CLI the mission allows and the account with the most room, moving to
     // the other CLI when every account of the first one is used up.
     let chosen: Account | null = null
+    const roomsForSeat=(cli:AgentCliForRole,live:Map<string,number>)=>this.rooms(cli,live).filter(room=>{
+      if(!measured||this.harnessMode!=='live')return true
+      const model=this.currentAccountCatalog(room.account).models.find(m=>m.id===request.model)
+      return !!model&&(!request.effort||model.efforts.includes(request.effort))
+    })
     if (request.cli !== 'shell' && !request.accountId) {
       const allowedHere = mission.allowedClis
       // The row's equivalent on another CLI, when the mission allows it.
@@ -2722,7 +2816,7 @@ export class OrbitCore {
       const live = this.liveByAccount()
       // Fair share: when the table's CLI is much busier than the equivalent's, the equivalent takes it.
       if (!measured && alt && !harnessExplicit && request.role !== 'lead' && request.cli !== alt.cli && taskType && request.cli === taskType.cli) {
-        const here = cliLoad(this.rooms(request.cli, live))
+        const here = cliLoad(roomsForSeat(request.cli, live))
         const there = cliLoad(this.rooms(alt.cli, live))
         if (there !== null && (here === null || here - there >= BALANCE_GAP)) {
           move(alt.cli, `${CLI_LABEL[request.cli]} com carga ${Math.round(here ?? 100)}, ${CLI_LABEL[alt.cli]} com ${Math.round(there)} (uso da conta + ${LIVE_WEIGHT} por agente rodando): foi para o equivalente da tabela`)
@@ -2735,14 +2829,14 @@ export class OrbitCore {
         const others = allowedHere.filter((c) => c !== request.cli && (!requiresSandbox || adapterCapabilities(c).supports.readOnlySandbox)).sort((a, b) => Number(b === alt?.cli) - Number(a === alt?.cli))
         // Exhaust subscriptions across allowed providers before using a paid API account.
         for (const other of others) {
-          const next = chooseAccount(this.rooms(other, live).filter(room => room.account.kind === 'assinatura'))
+          const next = chooseAccount(roomsForSeat(other, live).filter(room => room.account.kind === 'assinatura'))
           if (next.exhausted) continue
           move(other, `todas as contas do ${CLI_LABEL[request.cli]} estão no limite`)
           choice = next
           break
         }
         if (choice.exhausted) for (const other of others) {
-          const next = chooseAccount(this.rooms(other, live))
+          const next = chooseAccount(roomsForSeat(other, live))
           if (next.exhausted) continue
           move(other, 'nenhuma assinatura disponível; conta de API habilitada para uso automático')
           choice = next
@@ -2759,7 +2853,9 @@ export class OrbitCore {
     // The difficulty moves the seat within the chosen CLI: a cheaper model or a stronger one.
     if (chosen?.kind === 'api' && chosen.model && !input.model) request.model = chosen.model
     if (!measured && (!harnessExplicit || request.role === 'lead') && options.tier && request.cli !== 'shell' && !(chosen?.kind === 'api' && chosen.model)) {
-      const seat = seatForDifficulty(request.cli, request.model ?? null, request.effort ?? null, options.tier.difficulty, (model) => effortsFor(this.catalog, request.cli, model), this.catalog?.[request.cli])
+      const selectedCatalog = chosen && this.harnessMode !== 'simulated' ? this.currentAccountCatalog(chosen) : this.catalog?.[request.cli]
+      const selectionCatalog = selectedCatalog ? { ...this.catalog, [request.cli]: selectedCatalog } as Catalog : this.catalog
+      const seat = seatForDifficulty(request.cli, request.model ?? null, request.effort ?? null, options.tier.difficulty, (model) => effortsFor(selectionCatalog, request.cli, model), selectedCatalog)
       if (seat.changed) {
         request.model = seat.model
         request.effort = request.role === 'crew' ? input.effort ?? seat.effort : seat.effort
@@ -2770,8 +2866,10 @@ export class OrbitCore {
     if (input.effort && (!options.tier || request.role === 'crew')) request.effort = input.effort
     if (account && !request.model && account.model) request.model = account.model
     if (request.role === 'crew' && request.cli !== 'shell' && !mission.allowedClis.includes(request.cli)) throw new Error('A CLI efetiva não está permitida nesta missão')
-    // Each model accepts its own levels (Codex lists them; Claude takes low…max).
-    const allowed = effortsFor(this.catalog, request.cli, request.model)
+    const accountCatalog = account && this.harnessMode !== 'simulated' ? this.currentAccountCatalog(account) : request.cli === 'shell' ? null : this.catalog?.[request.cli]
+    const effectiveCatalog = request.cli !== 'shell' && accountCatalog ? { ...this.catalog, [request.cli]: accountCatalog } as Catalog : this.catalog
+    receipt.push(`catálogo: ${account?.id ?? 'sem conta'} · ${accountCatalog?.origin ?? accountCatalog?.source ?? 'indisponível'}${accountCatalog?.reason ? ` · ${accountCatalog.reason}` : ''}`)
+    const allowed = effortsFor(effectiveCatalog, request.cli, request.model)
     if (request.effort && request.cli !== 'shell' && !allowed.includes(request.effort)) {
       throw new Error(`Esforço "${EFFORT_LABEL[request.effort]}" não vale para ${request.model ?? `o modelo padrão do ${CLI_LABEL[request.cli]}`}; use ${allowed.map((e) => EFFORT_LABEL[e]).join(', ')}`)
     }
@@ -2987,7 +3085,7 @@ export class OrbitCore {
       // Same conversation: known now, not only when the CLI reports it again.
       if (resume && sessionId) {
         this.panes.setSession(opened.id, sessionId)
-        this.panes.setUsage(opened.id, pane.usage, pane.contextPercent)
+        this.panes.setUsage(opened.id, pane.usage, null)
       }
       if (pane.assignedBy !== null && this.pendingDeliveries(pane.missionId).some(d => d.paneId === pane.id)) {
         this.panes.setHandoff(opened.id, { status: pane.handoffStatus, assignedBy: pane.assignedBy })
@@ -3116,14 +3214,17 @@ function freshBudget(limits: { tokens: number | null; costUsd: number | null } |
 }
 
 /** How much of the budget is used: the larger of the token and the cost share. */
-function budgetUse(mission: Mission, budget: Pick<MissionBudget, 'tokens' | 'costUsd'>): number {
-  return Math.max(budget.tokens ? mission.usage.total / budget.tokens : 0, budget.costUsd ? (mission.usage.costUsd ?? 0) / budget.costUsd : 0)
+function budgetUse(mission: Mission, budget: Pick<MissionBudget, 'tokens' | 'costUsd'>): number | null {
+  const status = budgetStatus(mission.usage, budget)
+  // Even a partial known subtotal at/above the cap proves the cap has been reached.
+  if (budget.costUsd && mission.usage.costUsd !== null && mission.usage.costUsd >= budget.costUsd) return Math.max(1,status.share ?? 1)
+  return status.share
 }
 
 function budgetText(mission: Mission, budget: MissionBudget): string {
   const parts = []
   if (budget.tokens) parts.push(`${mission.usage.total.toLocaleString('pt-BR')} de ${budget.tokens.toLocaleString('pt-BR')} tokens`)
-  if (budget.costUsd) parts.push(`US$ ${(mission.usage.costUsd ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} de US$ ${budget.costUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`)
+  if (budget.costUsd) parts.push(`${mission.usage.costUsd === null ? 'Custo indisponível' : `US$ ${mission.usage.costUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} conhecido${mission.usage.costComplete ? '' : ' (parcial)'}`} de US$ ${budget.costUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`)
   return parts.join(' e ')
 }
 

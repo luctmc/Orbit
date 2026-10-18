@@ -1398,3 +1398,28 @@ button:disabled { cursor: not-allowed; }
   .composer__target .composer__recipient { font-size: 10px; }
   .composer__leader { display: none; }
 }
+
+/* Free splits retain flat keyed pane slots across every arrangement. */
+.pane-workbench[data-layout="livre"] { overflow: auto; display: flex; flex-direction: column; }
+.split-tools { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 2px; flex-shrink:0; }
+.split-tools label { display:flex; align-items:center; gap:8px; font-size:12px; }
+.split-tools select { max-width:100px; }
+.split-tools [role="status"] { font-size:12px; color:var(--text-muted); }
+.pane-workbench[data-layout="livre"] .pane-tiles { flex-shrink:0; }
+
+.app-plugin-entry { border-top:1px solid var(--border); padding:16px 0; }
+.app-plugin-entry h3 { margin:0 0 8px; }
+.app-plugin-commands { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.app-plugin-runtime { margin-top:16px; }
+
+.split-tools--narrow > label, .split-tools--narrow > button { display:none; }
+@media (max-width:520px) {
+  .mission__actions { gap:4px; }
+  .mission__layout button { padding-inline:8px; min-width:44px; font-size:11px; }
+}
+
+@media (max-width:520px) {
+  .composer { max-height:23vh; }
+  .pane-workbench--narrow { padding:4px; }
+  .split-tools--narrow { padding-block:4px; }
+}

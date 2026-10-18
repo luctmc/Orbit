@@ -90,3 +90,28 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Orca — six runtime improvements (2026-10-18)
+
+Pinned source and current upstream: bbdbe72eba26ede514134730eba580963e7839f3.
+`packages/sidecar/src/accountCatalog.ts` adapts the Claude `list_models` control request,
+per-model effort/fast/auto parsing, disabled-row rejection and default resolution from
+`src/shared/claude-model-list-probe.ts`. Orbit adds bounded input, its own protocol types,
+account cache and conservative fallbacks. Source hashes and reviewed files are retained in
+`docs/plans/2026-10-18-six-improvements/upstream/sources.json`.
+The complete Orca MIT license above applies to this adaptation. No Orca runtime dependency,
+branding or installed third-party plugin is included. Its plugin API remains experimental.
+
+`apps/desktop/src/orbit/splitTree.ts` adapts the binary split-tree representation and
+collapse-on-removal approach reviewed in Orca bbdbe72
+`src/shared/terminal-pane-layout-tree.ts`. Orbit independently implements validated numeric
+pane membership, minimum-size geometry, flat keyed rendering and narrow-window focus.
+Copyright (c) 2026 Lovecast Inc.; the complete MIT notice above is retained in the bundle.
+
+`packages/sidecar/src/appPlugins.ts` and `packages/protocol/src/plugins.ts` adapt the
+experimental versioned manifest/contribution/permission concepts reviewed in Orca bbdbe72
+`src/shared/plugins/plugin-manifest.ts`. Orbit defines a deliberately separate API:
+text panels, worker-local commands and sanitized status events, explicit hash-pinned grants,
+and no Node/native/filesystem/network authority. Its iframe/Web Worker host is an Orbit
+implementation, not a port of Orca's Node plugin worker. The MIT notice above applies to the
+manifest adaptation (Copyright (c) 2026 Lovecast Inc.). No third-party plugin is shipped.

@@ -48,7 +48,7 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
   const client = useOrbitClient()
   const progress = useMissionProgress(mission.id, active)
   const signal = missionSignal(mission, panes, progress.data, progress.connection, progress.error)
-  const { squads, browsers, workspaces, cards, events } = useOrbit()
+  const { squads, browsers, workspaces, cards, events, runtime } = useOrbit()
   const missionCards = cards.filter((c) => c.missionId === mission.id)
   const cardsDone = missionCards.filter((c) => c.column === 'feito').length
   const squad = squads.find((s) => s.id === mission.squadId)
@@ -131,6 +131,7 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
         <div className="mission__actions">
           <div className="segmented mission__layout" role="group" aria-label="Layout dos agentes">
             <button type="button" aria-pressed={layout === 'grade'} onClick={() => onLayout('grade')}>Grade</button>
+            <button type="button" aria-pressed={layout === 'livre'} onClick={() => onLayout('livre')}>Splits</button>
             <button type="button" aria-pressed={layout === 'foco'} onClick={() => onLayout('foco')}>Foco</button>
           </div>
           <ActionMenu label="Visualizar">
@@ -177,6 +178,7 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
         </div>
       </div>
 
+      {runtime?.persistent && <p className="note" role="status">Motor independente conectado · fechar a janela preserva os terminais. Encerre os agentes para parar suas execuções.</p>}
       <details className="mission-status" data-state={signal.state}>
         <summary><strong>{signal.title}</strong><span>{panes.filter(p => p.status === 'waiting').length ? `${panes.filter(p => p.status === 'waiting').length} pedindo atenção · ` : ''}Detalhes</span></summary>
         <div><p>{signal.detail}</p><button type="button" className="btn btn--ghost btn--sm" disabled={progress.connection !== 'open' || progress.loading} onClick={progress.refresh}>{progress.loading ? 'Conferindo…' : 'Conferir agora'}</button></div>

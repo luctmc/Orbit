@@ -1,0 +1,16 @@
+(node:92167) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:92168) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ bounded queue rejects overflow, cancels queued ID without typing and expires waiting requests [90m(22.811083ms)[39m[39m
+[32m✔ in-flight cancellation is explicit and cannot promise to undo an already pasted request [90m(0.210333ms)[39m[39m
+[32m✔ AbortSignal detaches after acceptance and dispatch deadline never acknowledges an expired Enter [90m(181.408ms)[39m[39m
+[32m✔ real WebSocket cancellation records terminal failure without typing or replay on the PTY [90m(226.066417ms)[39m[39m
+[34mℹ tests 4[39m
+[34mℹ suites 0[39m
+[34mℹ pass 4[39m
+[34mℹ fail 0[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 2053.408292[39m

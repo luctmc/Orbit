@@ -1,0 +1,30 @@
+(node:70990) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:70996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+file:///Users/lucas/Documents/GitHub/Orbit/packages/sidecar/test/structuredContext.test.ts:4
+import {budgetStatus} from '@orbit/protocol'
+        ^^^^^^^^^^^^
+SyntaxError: The requested module '@orbit/protocol' does not provide an export named 'budgetStatus'
+[90m    at #asyncInstantiate (node:internal/modules/esm/module_job:463:21)[39m
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
+[90m    at async ModuleJob.run (node:internal/modules/esm/module_job:561:5)[39m
+    at async node:internal/modules/esm/loader:650:26
+[90m    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:105:5)[39m
+
+Node.js v26.10.0
+[31m✖ packages/sidecar/test/structuredContext.test.ts [90m(127.57325ms)[39m[39m
+[34mℹ tests 1[39m
+[34mℹ suites 0[39m
+[34mℹ pass 0[39m
+[34mℹ fail 1[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 131.100291[39m
+
+[31m✖ failing tests:[39m
+
+test at packages/sidecar/test/structuredContext.test.ts:1:1
+[31m✖ packages/sidecar/test/structuredContext.test.ts [90m(127.57325ms)[39m[39m
+  [32m'test failed'[39m

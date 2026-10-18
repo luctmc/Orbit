@@ -1,3 +1,4 @@
+import { CATALOG_FIXTURE, seedCatalog } from './catalogFixture.ts'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, realpathSync } from 'node:fs'
@@ -33,7 +34,9 @@ test('agents are renamed, duplicated, reopened, and resumed even after Orbit res
     return { file: shell, args: ['-c', `exec ${shell}`] }
   }
   const start = async () => {
-    const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline, agentCommand: fake, browser: null })
+    const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline, agentCommand: fake, simulatedCatalog: CATALOG_FIXTURE, browser: null })
+  await server.initialized
+  seedCatalog(server.core)
     // PTY data is a stream. Force short frames so token lookup must survive chunk boundaries.
     const core = server.core as unknown as { broadcast: (message: ServerMessage) => void }
     const send = core.broadcast
@@ -45,7 +48,7 @@ test('agents are renamed, duplicated, reopened, and resumed even after Orbit res
     await server.initialized
     return server
   }
-  let server = await start()
+  let server = await start(); await server.initialized; seedCatalog(server.core)
   let ui = connect(server.port)
   try {
     await ui.opened
@@ -74,7 +77,7 @@ test('agents are renamed, duplicated, reopened, and resumed even after Orbit res
     ui.ws.close()
     await server.close()
     const before = launches.length
-    server = await start()
+    server = await start(); await server.initialized; seedCatalog(server.core)
     ui = connect(server.port)
     await ui.opened
     const { snapshot } = await ui.next('snapshot')
@@ -99,7 +102,7 @@ test('agents are renamed, duplicated, reopened, and resumed even after Orbit res
     await ui.next('settings.updated', (m) => m.settings.resumeOnStart === false)
     ui.ws.close()
     await server.close()
-    server = await start()
+    server = await start(); await server.initialized; seedCatalog(server.core)
     ui = connect(server.port)
     await ui.opened
     assert.equal((await ui.next('snapshot')).snapshot.panes.find((p) => p.id === lead.id)!.status, 'exited')

@@ -198,6 +198,7 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
         <button type="button" className="icon-btn" aria-label="Dispensar sugestão" onClick={() => { setDismissed(text); localInput.current?.focus() }}><CloseIcon size={14} /></button>
       </div>}
       {receipt && <p className="composer__receipt" role="status" title={`Pedido ${receipt.requestId}${receipt.executionEpoch ? ` · execução ${receipt.executionEpoch}` : ''}`}>Terminal de #{receipt.paneId} confirmou{receipt.acceptedAt ? ` às ${new Date(receipt.acceptedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''} · pedido {receipt.requestId.slice(0, 8)}<span> A resposta do agente aparece acima.</span></p>}
+      {(pending || sending) && <div><p role="status">Fila: até 32 pedidos / 256 KiB; espera e dispatch de até 5 s cada. Cancelar só remove pedidos ainda não colados.</p><button type="button" className="btn btn--ghost btn--sm" onClick={async()=>{try{const result=await client.cancelQueuedInput(draftKey,pane.id);setPending(client.inputPending(draftKey));setError(result.message)}catch(error){setError(error instanceof Error?error.message:String(error))}}}>Cancelar pedido na fila</button></div>}
       {pending && <p role="status">Confirmação pendente. Rascunho preservado; conferir consulta o mesmo pedido sem reenviar.</p>}
       </div>
       <div className="composer__actions">

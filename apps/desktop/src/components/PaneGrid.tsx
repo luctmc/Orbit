@@ -1,3 +1,4 @@
+import {reconcileTree,splitTree,resizeTree,treeGeometry,type SplitTree} from '../orbit/splitTree.ts'
 import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react'
 import { gridColumns, fitTracks, resizeTracks, trackSizes, type Columns, type Layout } from '../orbit/paneLayout.ts'
 
@@ -17,13 +18,17 @@ export function PaneGrid({ missionId, panes, selectedId, layout, columns }: {
   const box = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
+  const [height,setHeight]=useState(600)
+  const [savedTree,setSavedTree]=useState<unknown>(()=>{try{return JSON.parse(localStorage.getItem(`orbit.splits.${missionId}`)??'null')}catch{return null}})
+  const [moving,setMoving]=useState<number|null>(null)
+  const splitDrag=useRef<{pointer:number;id:string;axis:'x'|'y';start:number;ratio:number;available:number}|null>(null)
   const [sizes, setSizes] = useState<Sizes>(() => readSizes(missionId))
   const drag = useRef<{ pointer: number; axis: 'x' | 'y'; index: number; start: number; initial: number[]; available: number; key: string } | null>(null)
   const [dragging, setDragging] = useState(false)
   useEffect(() => {
     const element = box.current!
     const observer = new ResizeObserver(([entry]) => {
-      if (entry && entry.contentRect.width > 0) setWidth(entry.contentRect.width)
+      if (entry && entry.contentRect.width > 0) {setWidth(entry.contentRect.width);setHeight(entry.contentRect.height)}
     })
     observer.observe(element)
     return () => observer.disconnect()
@@ -32,8 +37,15 @@ export function PaneGrid({ missionId, panes, selectedId, layout, columns }: {
     if (dragging) return
     try { localStorage.setItem(`orbit.dividers.${missionId}`, JSON.stringify(sizes)) } catch { /* storage unavailable */ }
   }, [sizes, missionId, dragging])
-  const cols = layout === 'foco' ? 1 : gridColumns(width, panes.length, columns)
-  const rows = layout === 'foco' ? 1 : Math.max(1, Math.ceil(panes.length / cols))
+  const tree=reconcileTree(savedTree,panes.map(p=>p.id))
+  const treeKey=JSON.stringify(tree)
+  useEffect(()=>{if(tree)try{localStorage.setItem(`orbit.splits.${missionId}`,treeKey)}catch{}},[treeKey,missionId])
+  const narrow=layout==='livre'&&width>0&&width<640
+  const free=layout==='livre'&&!narrow&&tree!==null
+  const geometry=tree?treeGeometry(tree,width,Math.max(220,height-(box.current?.querySelector<HTMLElement>('.split-tools')?.offsetHeight??48))):null
+  const other=panes.some(p=>p.id===moving&&p.id!==selectedId)?moving:panes.find(p=>p.id!==selectedId)?.id??null
+  const cols = layout === 'foco'||narrow ? 1 : gridColumns(width, panes.length, columns)
+  const rows = layout === 'foco'||narrow ? 1 : Math.max(1, Math.ceil(panes.length / cols))
   const xKey = `x:${cols}`, yKey = `y:${cols}:${rows}`
   const x = fitTracks(trackSizes(sizes[xKey], cols), width - (cols - 1) * GAP, 240), y = trackSizes(sizes[yKey], rows)
   const template = (tracks: number[], minimum: number) => tracks.map(v => `minmax(${minimum}px, ${v}fr)`).join(` ${GAP}px `)
@@ -81,12 +93,20 @@ export function PaneGrid({ missionId, panes, selectedId, layout, columns }: {
         update(current.key, resizeTracks(current.initial, current.index, (current.axis === 'x' ? event.clientX : event.clientY) - current.start, current.available, min))
       }} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={finish} />
   }
-  return <div ref={box} className={`pane-workbench${dragging ? ' pane-workbench--resizing' : ''}`} data-layout={layout}>
-    <div ref={canvas} className="pane-tiles" style={{ gridTemplateColumns: template(x, 0), gridTemplateRows: template(y, 0), minHeight: layout === 'foco' ? 0 : rows * 300 + (rows - 1) * GAP }}>
-    {panes.map((pane, index) => <div key={pane.id} className="pane-slot" hidden={layout === 'foco' && pane.id !== selectedId}
-      style={{ gridColumn: layout === 'foco' ? 1 : index === panes.length - 1 ? `${index % cols * 2 + 1} / ${cols * 2}` : index % cols * 2 + 1, gridRow: layout === 'foco' ? 1 : Math.floor(index / cols) * 2 + 1 }}>
+  return <div ref={box} className={`pane-workbench${narrow?' pane-workbench--narrow':''}${dragging ? ' pane-workbench--resizing' : ''}`} data-layout={layout}>
+    {layout==='livre'&&<div className={`split-tools${narrow?' split-tools--narrow':''}`}><label>Pane a mover <select aria-label="Pane a mover" value={other??''} onChange={event=>setMoving(Number(event.target.value))}>{panes.filter(p=>p.id!==selectedId).map(p=><option key={p.id} value={p.id}>#{p.id}</option>)}</select></label><button type="button" className="btn btn--ghost btn--sm" disabled={!other||!selectedId} onClick={()=>{if(tree&&other&&selectedId)setSavedTree(splitTree(tree,selectedId,other,'x'))}}>Dividir à direita</button><button type="button" className="btn btn--ghost btn--sm" disabled={!other||!selectedId} onClick={()=>{if(tree&&other&&selectedId)setSavedTree(splitTree(tree,selectedId,other,'y'))}}>Dividir abaixo</button>{narrow&&<span role="status">Janela estreita: foco temporário. Splits salvos preservados.</span>}</div>}
+    <div ref={canvas} className="pane-tiles" style={free&&geometry?{display:'block',position:'relative',width:geometry.width,height:geometry.height,minHeight:geometry.height}:{gridTemplateColumns: template(x, 0), gridTemplateRows: template(y, 0), minHeight: narrow ? 212 : layout === 'foco' ? 0 : rows * 300 + (rows - 1) * GAP, ...(narrow?{height:'auto',flex:'1 0 212px'}:{})}}>
+    {panes.map((pane, index) => <div key={pane.id} className="pane-slot" hidden={(layout === 'foco'||narrow) && pane.id !== selectedId}
+      style={free&&geometry?{position:'absolute',left:geometry.leaves.find(leaf=>leaf.paneId===pane.id)?.left,top:geometry.leaves.find(leaf=>leaf.paneId===pane.id)?.top,width:geometry.leaves.find(leaf=>leaf.paneId===pane.id)?.width,height:geometry.leaves.find(leaf=>leaf.paneId===pane.id)?.height}:{ gridColumn: layout === 'foco'||narrow ? 1 : index === panes.length - 1 ? `${index % cols * 2 + 1} / ${cols * 2}` : index % cols * 2 + 1, gridRow: layout === 'foco'||narrow ? 1 : Math.floor(index / cols) * 2 + 1 }}>
       {pane.content}
     </div>)}
+    {free&&geometry?.dividers.map(divider=><div key={divider.id} className={`pane-divider pane-divider--${divider.axis}`} role="separator" tabIndex={0} aria-label="Redimensionar split" aria-orientation={divider.axis==='x'?'vertical':'horizontal'} aria-valuemin={10} aria-valuemax={90} aria-valuenow={Math.round(divider.ratio*100)}
+      style={{position:'absolute',left:divider.left,top:divider.top,width:divider.width,height:divider.height}}
+      onDoubleClick={()=>{if(tree)setSavedTree(resizeTree(tree,divider.id,.5))}}
+      onKeyDown={event=>{const negative=divider.axis==='x'?'ArrowLeft':'ArrowUp',positive=divider.axis==='x'?'ArrowRight':'ArrowDown';if(![negative,positive,'Home','End','Enter'].includes(event.key))return;event.preventDefault();if(tree)setSavedTree(resizeTree(tree,divider.id,event.key==='Enter'?.5:event.key==='Home'?.1:event.key==='End'?.9:divider.ratio+(event.key===negative?-.05:.05)))}}
+      onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);splitDrag.current={pointer:event.pointerId,id:divider.id,axis:divider.axis,start:divider.axis==='x'?event.clientX:event.clientY,ratio:divider.ratio,available:divider.available};setDragging(true)}}
+      onPointerMove={event=>{const drag=splitDrag.current;if(!drag||drag.pointer!==event.pointerId||!tree)return;setSavedTree(resizeTree(tree,drag.id,drag.ratio+((drag.axis==='x'?event.clientX:event.clientY)-drag.start)/drag.available))}}
+      onPointerUp={()=>{splitDrag.current=null;setDragging(false)}} onPointerCancel={()=>{splitDrag.current=null;setDragging(false)}} onLostPointerCapture={()=>{splitDrag.current=null;setDragging(false)}} />)}
     {layout === 'grade' && Array.from({ length: cols - 1 }, (_, i) => separator('x', i))}
     {layout === 'grade' && Array.from({ length: rows - 1 }, (_, i) => separator('y', i))}
     </div>

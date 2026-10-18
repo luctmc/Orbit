@@ -11,11 +11,13 @@ import { ClientTransport, CLIENT_HEARTBEAT_MS } from './clientTransport.ts'
 const MAX_BODY = 1024 * 1024
 
 export interface ServerOptions {
+  runtime?: {instanceId:string;revision:string;stop:()=>Promise<void>}
   port: number
   token: string
   allowedOrigins: string[]
   dataDir: string
   shell: string
+  simulatedCatalog?: CoreOptions['simulatedCatalog']
   agentCommand?: CoreOptions['agentCommand']
   measurements?: CoreOptions['measurements']
   benchmarkEagerContext?: CoreOptions['benchmarkEagerContext']
@@ -55,6 +57,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     dataDir: options.dataDir,
     shell: options.shell,
     agentCommand: options.agentCommand,
+    simulatedCatalog: options.simulatedCatalog,
     run: options.run,
     browser: options.browser,
     measurements: options.measurements,
@@ -85,6 +88,16 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
 
   let port = options.port
   const http: Server = createServer((req, res) => {
+    if (options.runtime && (req.url === '/runtime/status' || req.url === '/runtime/stop')) {
+      if (req.headers.origin || !tokenMatches(req.headers.authorization?.replace(/^Bearer /,'') ?? null,options.token)) {res.writeHead(401);res.end();return}
+      const live = core.liveTerminalCount()
+      if(req.url === '/runtime/status' && req.method === 'GET'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({instanceId:options.runtime.instanceId,revision:options.runtime.revision,live}));return}
+      if(req.url === '/runtime/stop' && req.method === 'POST'){
+        if(live){res.writeHead(409);res.end('Terminais ativos; encerramento recusado');return}
+        core.refuseNewExecutions();res.writeHead(202);res.end();setTimeout(()=>{void options.runtime!.stop()},20);return
+      }
+      res.writeHead(405);res.end();return
+    }
     const handler = (req.url ?? '').startsWith('/update/') ? handleUpdateRequest(core, port, options.token, req, res) : handleAgentRequest(core, port, req, res)
     handler.catch((error) => {
       if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain' })
@@ -110,6 +123,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     ws.on('pong', () => client.transport.pong())
     ws.on('error', () => client.transport.stop())
     for (const message of core.welcome()) send(ws, message)
+    if(options.runtime)send(ws,{type:'engine.runtime',persistent:true,revision:options.runtime.revision})
     send(ws, { type: 'engine.startup', tasks })
     ws.on('message', (raw) => {
       try {

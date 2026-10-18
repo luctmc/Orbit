@@ -1,0 +1,305 @@
+[
+  {
+    "cli": "claude",
+    "source": "cli",
+    "origin": "claude:list_models",
+    "models": [
+      {
+        "id": "opus",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "capabilities": {
+          "effort": true,
+          "fast": true,
+          "auto": true
+        }
+      },
+      {
+        "id": "sonnet",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "capabilities": {
+          "effort": true,
+          "fast": null,
+          "auto": true
+        }
+      },
+      {
+        "id": "fable",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "capabilities": {
+          "effort": true,
+          "fast": null,
+          "auto": true
+        }
+      },
+      {
+        "id": "haiku",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "capabilities": {
+          "effort": true,
+          "fast": null,
+          "auto": true
+        }
+      },
+      {
+        "id": "claude-haiku-4-5-20251001",
+        "efforts": [],
+        "capabilities": {
+          "effort": null,
+          "fast": null,
+          "auto": null
+        }
+      },
+      {
+        "id": "claude-sonnet-5",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "capabilities": {
+          "effort": true,
+          "fast": null,
+          "auto": true
+        }
+      },
+      {
+        "id": "claude-opus-5",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "capabilities": {
+          "effort": true,
+          "fast": true,
+          "auto": true
+        }
+      },
+      {
+        "id": "claude-fable-5",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "capabilities": {
+          "effort": true,
+          "fast": null,
+          "auto": true
+        }
+      },
+      {
+        "id": "claude-opus-4-8",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "capabilities": {
+          "effort": true,
+          "fast": true,
+          "auto": true
+        }
+      },
+      {
+        "id": "claude-opus-4-7",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "capabilities": {
+          "effort": true,
+          "fast": null,
+          "auto": true
+        }
+      },
+      {
+        "id": "claude-opus-4-6",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "max"
+        ],
+        "capabilities": {
+          "effort": true,
+          "fast": null,
+          "auto": true
+        }
+      },
+      {
+        "id": "claude-sonnet-4-6",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "max"
+        ],
+        "capabilities": {
+          "effort": true,
+          "fast": null,
+          "auto": true
+        }
+      }
+    ]
+  },
+  {
+    "cli": "codex",
+    "source": "cli",
+    "origin": "codex:debug-models",
+    "models": [
+      {
+        "id": "gpt-6.1-sol",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
+      },
+      {
+        "id": "gpt-6-astra",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
+      },
+      {
+        "id": "gpt-6-sol",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
+      },
+      {
+        "id": "gpt-6-luna",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "gpt-5.6-sol",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
+      },
+      {
+        "id": "gpt-5.6-terra",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
+      },
+      {
+        "id": "gpt-5.6-luna",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      }
+    ]
+  },
+  {
+    "cli": "gemini",
+    "source": "builtin",
+    "origin": "documented-aliases",
+    "reason": "A CLI não expõe listagem segura de modelos; disponibilidade por conta não confirmada.",
+    "models": [
+      {
+        "id": "auto",
+        "efforts": [],
+        "capabilities": {
+          "effort": null,
+          "fast": null,
+          "auto": null
+        }
+      },
+      {
+        "id": "pro",
+        "efforts": [],
+        "capabilities": {
+          "effort": null,
+          "fast": null,
+          "auto": null
+        }
+      },
+      {
+        "id": "flash",
+        "efforts": [],
+        "capabilities": {
+          "effort": null,
+          "fast": null,
+          "auto": null
+        }
+      }
+    ]
+  },
+  {
+    "cli": "antigravity",
+    "source": "builtin",
+    "origin": "documented-aliases",
+    "reason": "Descoberta indisponível (CLI, autenticação ou prazo); capacidades não confirmadas.",
+    "models": []
+  }
+]

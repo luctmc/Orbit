@@ -1,3 +1,4 @@
+import { seedCatalog } from './catalogFixture.ts'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
@@ -53,6 +54,8 @@ test('the lead changes hands without losing anything: briefing, notes, helpers a
   process.env.CLAUDE_CONFIG_DIR = claudeHome
   process.env.CODEX_HOME = mkdtempSync(join(tmpdir(), 'codex-home-'))
   const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir: mkdtempSync(join(tmpdir(), 'orbit-data-')), shell: '/bin/sh', run, agentCommand: fake, browser: null, scheduler: false })
+  await server.initialized
+  seedCatalog(server.core)
   const ui = connect(server.port)
   const clients: Client[] = []
   try {

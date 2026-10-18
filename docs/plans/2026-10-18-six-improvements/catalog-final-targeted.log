@@ -1,0 +1,36 @@
+(node:70623) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:70754) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Claude parser preserves per-model capabilities, hides disabled rows, never invents effort [90m(0.839ms)[39m[39m
+[32m✔ account catalog cache isolates accounts, joins probes, expires and invalidates [90m(0.202708ms)[39m[39m
+[32m✔ unavailable catalog and unknown model do not authorize universal effort [90m(0.066416ms)[39m[39m
+[32m✔ automatic seats use the available account own models and effort, never another account catalog [90m(5.391916ms)[39m[39m
+(node:70755) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ explicit squad CLI/model/effort reaches the launch and its durable decision receipt [90m(157.701708ms)[39m[39m
+[32m✔ required native read-only sandbox chooses a capable adapter and refuses incompatible explicit choices [90m(125.597708ms)[39m[39m
+[32m✔ a table edit during asynchronous classification cannot launch a stale decision [90m(88.005125ms)[39m[39m
+[32m✔ routing edits and proposals reject stale bases; accepting a proposal rolls back on disk failure [90m(80.863209ms)[39m[39m
+(node:70756) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ Gemini and Antigravity commands: model, folders, first prompt, resume, and the orbit command first on the PATH [90m(0.935958ms)[39m[39m
+[32m✔ a Gemini agent gets Orbit as a trusted MCP server and hooks in its own settings file; every agent gets the orbit command [90m(1.385ms)[39m[39m
+[32m✔ Gemini's hooks are read as Claude Code's and answered in Gemini's terms [90m(0.146542ms)[39m[39m
+[32m✔ Antigravity models come from `agy models`, whatever the decoration [90m(0.403292ms)[39m[39m
+[32m✔ Gemini agents run with a known conversation and Orbit rules through their hooks; the orbit command works as the agent [90m(736.449542ms)[39m[39m
+(node:70757) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ versions and install methods are read from what the shell reports [90m(0.415125ms)[39m[39m
+[32m✔ Codex's catalog keeps the listed models with their own effort levels [90m(0.426541ms)[39m[39m
+[32m✔ each install method updates its own way [90m(0.1595ms)[39m[39m
+[32m✔ the UI checks and updates the CLIs, and efforts are held to what each model accepts [90m(51.976458ms)[39m[39m
+[32m✔ Codex defaults report configured effort without confusing nested model settings [90m(1.620583ms)[39m[39m
+[34mℹ tests 18[39m
+[34mℹ suites 0[39m
+[34mℹ pass 18[39m
+[34mℹ fail 0[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 1013.124584[39m

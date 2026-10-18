@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { catalogRevision as revisionOf } from './catalogRevision.ts'
 import { ACCOUNT_FULL_PERCENT, AGENT_CLIS, type Account, type AccountLimits, type AccountStatus, type Catalog, type CliStatus, type HarnessCandidate } from '@orbit/protocol'
 import { adapterCapabilities } from './adapters/types.ts'
 
@@ -13,15 +13,15 @@ export function harnessAccounts(accounts: Account[], statuses: AccountStatus[], 
     return windows.length > 0 && windows.every(w => w && Number.isFinite(w.usedPercent) && w.usedPercent >= 0 && w.usedPercent < ACCOUNT_FULL_PERCENT && Number.isFinite(w.resetsAt) && w.resetsAt > now)
   })
 }
-export function harnessCandidates(catalog: Catalog | null, clis: CliStatus[], accounts: Account[], allowed: readonly string[], sandbox: boolean): HarnessCandidate[] {
+export function harnessCandidates(catalog: Catalog | null, clis: CliStatus[], accounts: Account[], allowed: readonly string[], sandbox: boolean, catalogForAccount?: (account:Account)=>import('@orbit/protocol').CliCatalog, revision?:string): HarnessCandidate[] {
   if (!catalog) return []
-  const catalogRevision = createHash('sha256').update(JSON.stringify(catalog)).digest('hex')
+  const catalogRevision = revision ?? revisionOf(catalog)
   return AGENT_CLIS.flatMap(cli => {
     const status = clis.find(s => s.cli === cli)
     if (!allowed.includes(cli) || !accounts.some(a => a.cli === cli) || !status?.installed || !status.version || status.busy || sandbox && !adapterCapabilities(cli).supports.readOnlySandbox) return []
     // Built-in catalogs are useful fallback hints, not confirmed native model/effort availability.
-    const current = catalog[cli]
-    if (current.source !== 'cli') return []
-    return current.models.flatMap(model => model.efforts.map(effort => ({ cli, model: model.id, effort, cliVersion: status.version!, catalogRevision })))
+    const catalogs = catalogForAccount ? accounts.filter(a=>a.cli===cli).map(catalogForAccount) : [catalog[cli]]
+    const seen=new Set<string>()
+    return catalogs.filter(current=>current.source==='cli').flatMap(current=>current.models.flatMap(model=>model.efforts.flatMap(effort=>{const key=model.id+'\0'+effort;if(seen.has(key))return [];seen.add(key);return [{cli,model:model.id,effort,cliVersion:status.version!,catalogRevision}]})))
   })
 }

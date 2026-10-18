@@ -1,3 +1,4 @@
+import { claudeContext, codexContext, unavailableContext } from './structuredContext.ts'
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +8,7 @@ import type { AccountLimits, RateWindow, TokenUsage } from '@orbit/protocol'
 export type ReportedLimits = Omit<AccountLimits, 'accountId'>
 
 export interface UsageReport {
+  context?: import('@orbit/protocol').ContextUsage
   origin?: 'claude-transcript-v1' | 'claude-context-only' | 'codex-session-total-v1'
   observed?: Partial<Record<keyof TokenUsage, boolean>>
   usage: TokenUsage | null
@@ -42,14 +44,16 @@ export function fromClaudeStatus(payload: unknown, now = Date.now()): UsageRepor
     ? { cli: 'claude', fiveHour: window(rate.five_hour, 300, true), weekly: window(rate.seven_day, 10080, true), plan: null, updatedAt: now }
     : null
   const complete = hasTokens && normalized.complete !== false
-  return { usage, origin: hasTokens ? 'claude-transcript-v1' : 'claude-context-only', observed: { input: complete, output: complete, total: complete, cacheRead: complete, cacheWrite: complete, costUsd: cost !== null }, contextPercent: typeof ctx.used_percentage === 'number' ? ctx.used_percentage : null, limits }
+  return { ...(p.context_window !== undefined ? {context:claudeContext(ctx,now)} : {}), usage, origin: hasTokens ? 'claude-transcript-v1' : 'claude-context-only', observed: { input: complete, output: complete, total: complete, cacheRead: complete, cacheWrite: complete, costUsd: cost !== null }, contextPercent: p.context_window !== undefined ? claudeContext(ctx,now).percent : null, limits }
 }
 
 /** The last `token_count` event of a Codex session file: session totals and account limits. */
 export function fromCodexRollout(text: string, now = Date.now()): UsageReport {
   const lines = text.split('\n')
+  let awaitingTurn=false
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i]!
+    if(line.includes('"turn_context"'))try{if(JSON.parse(line)?.type==='turn_context')awaitingTurn=true}catch{}
     if (!line.includes('"token_count"')) continue
     let event: any
     try {
@@ -66,14 +70,16 @@ export function fromCodexRollout(text: string, now = Date.now()): UsageReport {
       : null
     const context = payload.info?.model_context_window
     const last = payload.info?.last_token_usage
-    const contextPercent = context && last ? Math.min(100, Math.round((num(last.input_tokens) / context) * 100)) : null
+    const eventTime = typeof event.timestamp === 'string' ? Date.parse(event.timestamp) : NaN
+    const contextUsage = awaitingTurn ? unavailableContext('codex:awaiting-turn-usage',now) : codexContext(payload.info,Number.isFinite(eventTime) && eventTime <= now + 1000 ? eventTime : now)
+    const contextPercent = contextUsage.percent
     const rate = payload.rate_limits
     const observedAt = typeof event.timestamp === 'string' ? Date.parse(event.timestamp) : NaN
     const limits: ReportedLimits | null = rate
       ? { cli: 'codex', fiveHour: window(rate.primary, 300, true), weekly: window(rate.secondary, 10080, true), plan: typeof rate.plan_type === 'string' ? rate.plan_type : null, updatedAt: Number.isFinite(observedAt) && observedAt <= now + 1000 ? observedAt : now }
       : null
     const observed: UsageReport['observed'] = { input: typeof total?.input_tokens === 'number', output: typeof total?.output_tokens === 'number', cacheRead: typeof total?.cached_input_tokens === 'number', cacheWrite: typeof total?.cache_write_input_tokens === 'number', total: typeof total?.total_tokens === 'number', costUsd: false }
-    return { usage, observed, origin: 'codex-session-total-v1', contextPercent, limits }
+    return { usage, observed, origin: 'codex-session-total-v1', context:contextUsage, contextPercent, limits }
   }
   return { usage: null, contextPercent: null, limits: null }
 }
