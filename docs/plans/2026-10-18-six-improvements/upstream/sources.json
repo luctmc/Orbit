@@ -1,0 +1,66 @@
+{
+  "pinned": "bbdbe72eba26ede514134730eba580963e7839f3",
+  "head": "bbdbe72eba26ede514134730eba580963e7839f3",
+  "files": [
+    {
+      "commit": "bbdbe72eba26ede514134730eba580963e7839f3",
+      "path": "LICENSE",
+      "sha256": "ff1b611f80580d49f4b97e93a97b24eb050b0671b26b8afe16341fab699112f3",
+      "local": "docs/plans/2026-10-18-six-improvements/upstream/bbdbe72-LICENSE"
+    },
+    {
+      "commit": "bbdbe72eba26ede514134730eba580963e7839f3",
+      "path": "src/main/claude/claude-model-catalog-probe.ts",
+      "sha256": "e0f6422863786bb50c0e6ef06df6e89522db6077e0f6511559490f5da0547ba7",
+      "local": "docs/plans/2026-10-18-six-improvements/upstream/bbdbe72-src_main_claude_claude-model-catalog-probe.ts"
+    },
+    {
+      "commit": "bbdbe72eba26ede514134730eba580963e7839f3",
+      "path": "src/shared/claude-model-list-probe.ts",
+      "sha256": "59d7a5b2f795cfc2e66d3175906d4f1618f8c83dcfd8c924cfa87141e704978e",
+      "local": "docs/plans/2026-10-18-six-improvements/upstream/bbdbe72-src_shared_claude-model-list-probe.ts"
+    },
+    {
+      "commit": "bbdbe72eba26ede514134730eba580963e7839f3",
+      "path": "src/shared/claude-model-list-probe.test.ts",
+      "sha256": "fc6ae6a1b1f452e1f7092e848c5d8741b443c45648ad96f47e8a22cd1ba0ad12",
+      "local": "docs/plans/2026-10-18-six-improvements/upstream/bbdbe72-src_shared_claude-model-list-probe.test.ts"
+    },
+    {
+      "commit": "bbdbe72eba26ede514134730eba580963e7839f3",
+      "path": "src/shared/structured-agent-session-context-usage.ts",
+      "sha256": "f659f24f37a3c43ce80c1a60ccc2450df1264c89c4fd52b37e4d70fd08b3aada",
+      "local": "docs/plans/2026-10-18-six-improvements/upstream/bbdbe72-src_shared_structured-agent-session-context-usage.ts"
+    },
+    {
+      "commit": "bbdbe72eba26ede514134730eba580963e7839f3",
+      "path": "src/main/worker-thread-request-queue.ts",
+      "sha256": "40752cb0ec90212041e1d9e1a7ecb936d300a2112bda064b4af9b66564174e09",
+      "local": "docs/plans/2026-10-18-six-improvements/upstream/bbdbe72-src_main_worker-thread-request-queue.ts"
+    },
+    {
+      "commit": "bbdbe72eba26ede514134730eba580963e7839f3",
+      "path": "src/main/daemon/daemon-session-scrollback-window.ts",
+      "sha256": "f2d73aedc270a2ee12a540d7d5edff43453fe7925299982ca038f4545d2a719a",
+      "local": "docs/plans/2026-10-18-six-improvements/upstream/bbdbe72-src_main_daemon_daemon-session-scrollback-window.ts"
+    },
+    {
+      "commit": "bbdbe72eba26ede514134730eba580963e7839f3",
+      "path": "src/shared/terminal-pane-layout-tree.ts",
+      "sha256": "6049d7570020f2da2532230e60d00b4d1ba14751dbbcfcce048a84b3ac55fc96",
+      "local": "docs/plans/2026-10-18-six-improvements/upstream/bbdbe72-src_shared_terminal-pane-layout-tree.ts"
+    },
+    {
+      "commit": "bbdbe72eba26ede514134730eba580963e7839f3",
+      "path": "src/shared/plugins/plugin-manifest.ts",
+      "sha256": "432c24e4eddc8c2fc1fcf273597d91aa8b33d1b4f0f93152089f3a6faa049818",
+      "local": "docs/plans/2026-10-18-six-improvements/upstream/bbdbe72-src_shared_plugins_plugin-manifest.ts"
+    },
+    {
+      "commit": "bbdbe72eba26ede514134730eba580963e7839f3",
+      "path": "src/shared/plugins/plugin-capabilities.ts",
+      "sha256": "e9a7629bdbc515e5172e98103a64ba00ab74ace776c0fe577db1bc4aa0a1a1a9",
+      "local": "docs/plans/2026-10-18-six-improvements/upstream/bbdbe72-src_shared_plugins_plugin-capabilities.ts"
+    }
+  ]
+}

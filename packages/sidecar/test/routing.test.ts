@@ -1,3 +1,4 @@
+import { seedCatalog } from './catalogFixture.ts'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, realpathSync } from 'node:fs'
@@ -30,6 +31,8 @@ const fakeAgent = (launch: AgentLaunch, shell: string) => ({ file: shell, args: 
 test('an agentic lead routes helpers through the table; the table is saved and reset from the UI', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-data-'))
   const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline, agentCommand: fakeAgent })
+  await server.initialized
+  seedCatalog(server.core)
   const ui = connect(server.port)
   let mcp: Client | undefined
   try {

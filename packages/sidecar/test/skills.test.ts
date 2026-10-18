@@ -1,3 +1,4 @@
+import { seedCatalog } from './catalogFixture.ts'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
@@ -104,6 +105,8 @@ test('switching items off reaches running Claude agents through their hook, and 
   }
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-data-'))
   const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: async () => ({ code: 127, stdout: '', stderr: '' }), agentCommand: fake, browser: null })
+  await server.initialized
+  seedCatalog(server.core)
   const ui = connect(server.port)
   try {
     await ui.opened

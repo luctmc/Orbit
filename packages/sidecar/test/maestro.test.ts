@@ -1,3 +1,4 @@
+import { seedCatalog } from './catalogFixture.ts'
 import { test } from 'node:test'
 import { initRepository } from './gitFixture.ts'
 import assert from 'node:assert/strict'
@@ -67,6 +68,8 @@ test('the maestro picks CLI and account by itself, falls back when one is used u
   process.env.CODEX_HOME = mkdtempSync(join(tmpdir(), 'codex-home-'))
   process.env.CLAUDE_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'claude-home-'))
   const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run, agentCommand: fake, browser: null, scheduler: false })
+  await server.initialized
+  seedCatalog(server.core)
   const ui = connect(server.port)
   let mcp: Client | null = null
   try {

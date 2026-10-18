@@ -1,3 +1,4 @@
+import { seedCatalog } from './catalogFixture.ts'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, realpathSync, readFileSync } from 'node:fs'
@@ -11,6 +12,8 @@ test('delegations are idempotent across concurrent calls, completion, close and 
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-adaptive-'))
   const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh',
     run: async () => ({ code: 127, stdout: '', stderr: 'offline' }), browser: null, scheduler: false })
+  await server.initialized
+  seedCatalog(server.core)
   const ui = connect(server.port)
   try {
     await ui.opened
@@ -57,6 +60,8 @@ test('automatic leader, inferred helper seats, explicit overrides and attachment
   const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir: mkdtempSync(join(tmpdir(), 'orbit-wire-')), shell: '/bin/sh', browser: null, scheduler: false,
     run: async (command) => ({ code: 0, stdout: command.includes('auth status') ? '{"loggedIn":true,"authMethod":"claude.ai"}' : command.includes('login status') ? 'Logged in using ChatGPT' : '', stderr: '' }),
     agentCommand: (launch, shell) => { launched.push(launch); return { file: shell, args: ['-c', `exec ${shell}`] } } })
+  await server.initialized
+  seedCatalog(server.core)
   const ui = connect(server.port)
   try {
     await ui.opened
@@ -69,9 +74,8 @@ test('automatic leader, inferred helper seats, explicit overrides and attachment
     assert.equal(lead.effort, 'low', 'the leader of a simple command also avoids high effort')
     const helper = await server.core.spawnHelper(lead, { title: 'Run build', task: 'Execute npm run build', taskTypeId: 'operacao', model: null })
     assert.equal(helper.pane.effort, 'low', 'known kind still gets inferred difficulty')
-    const pinned = await server.core.spawnHelper(lead, { title: 'User model', task: 'Inspect checkout', taskTypeId: 'bug', cli: 'codex', model: 'user-custom-model', effort: 'high', readOnly: true })
-    assert.deepEqual([pinned.pane.cli, pinned.pane.model, pinned.pane.effort], ['codex', 'user-custom-model', 'high'])
-    assert.ok(launched.length >= 3)
+    await assert.rejects(server.core.spawnHelper(lead, { title: 'User model', task: 'Inspect checkout', taskTypeId: 'bug', cli: 'codex', model: 'user-custom-model', effort: 'high', readOnly: true }), /não vale/, 'unknown model cannot inherit another model effort')
+    assert.ok(launched.length >= 2)
     const bytes = Buffer.from([0, 255, 1, 42])
     ui.send({ type: 'attachment.add', paneId: lead.id, requestId: 'upload-1', name: 'image.png', mime: 'image/png', data: bytes.toString('base64') })
     const { attachment } = await ui.next('attachment.added', (m) => m.requestId === 'upload-1')

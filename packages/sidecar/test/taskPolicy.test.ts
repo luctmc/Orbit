@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { accountRooms, chooseAccount } from '../src/maestro.ts'
 import { automaticTaskSeat, designWork } from '../src/taskPolicy.ts'
-import { CLAUDE_CATALOG } from '../src/clis.ts'
+import { CLAUDE_FIXTURE as CLAUDE_CATALOG } from './catalogFixture.ts'
 import type { Account, AccountLimits, Catalog } from '@orbit/protocol'
 const now = Date.now()
 const account = (id: string, cli: Account['cli'] = 'codex'): Account => ({ id, cli, name: id, builtin: false, kind: 'assinatura', auto: true, keyHint: null, model: null, baseUrl: null, createdAt: 0 })

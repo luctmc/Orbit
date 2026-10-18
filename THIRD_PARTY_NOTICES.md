@@ -90,3 +90,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Orca — six runtime improvements (2026-10-18)
+
+Pinned source and current upstream: bbdbe72eba26ede514134730eba580963e7839f3.
+`packages/sidecar/src/accountCatalog.ts` adapts the Claude `list_models` control request,
+per-model effort/fast/auto parsing, disabled-row rejection and default resolution from
+`src/shared/claude-model-list-probe.ts`. Orbit adds bounded input, its own protocol types,
+account cache and conservative fallbacks. Source hashes and reviewed files are retained in
+`docs/plans/2026-10-18-six-improvements/upstream/sources.json`.
+The complete Orca MIT license above applies to this adaptation. No Orca runtime dependency,
+branding or installed third-party plugin is included. Its plugin API remains experimental.

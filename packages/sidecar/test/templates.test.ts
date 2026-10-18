@@ -1,3 +1,4 @@
+import { seedCatalog } from './catalogFixture.ts'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, realpathSync } from 'node:fs'
@@ -11,7 +12,7 @@ test('workspace instructions reach every agent, and templates start missions wit
   const dataDir = mkdtempSync(join(tmpdir(), 'orbit-data-'))
   const fake = (_launch: AgentLaunch, shell: string) => ({ file: shell, args: ['-c', `exec ${shell}`] })
   const start = () => startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline, agentCommand: fake, browser: null })
-  let server = await start()
+  let server = await start(); await server.initialized; seedCatalog(server.core)
   let ui = connect(server.port)
   try {
     await ui.opened
@@ -45,7 +46,7 @@ test('workspace instructions reach every agent, and templates start missions wit
     // Templates survive a restart, and can be deleted.
     ui.ws.close()
     await server.close()
-    server = await start()
+    server = await start(); await server.initialized; seedCatalog(server.core)
     ui = connect(server.port)
     const { snapshot } = await ui.next('snapshot')
     assert.deepEqual(snapshot.templates.map((t) => t.name), ['Correção com teste'])

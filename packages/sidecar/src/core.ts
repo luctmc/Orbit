@@ -1,3 +1,5 @@
+import { catalogRevision as revisionOfCatalog } from './catalogRevision.ts'
+import { CatalogInvalidated, AccountCatalogs, accountCatalogKey, discoverAccountCatalog } from './accountCatalog.ts'
 import { InputJournal, inputFingerprint, translateCodex, UncertainTranslation, RESPONSE_LANGUAGE, type InputRecord, type Translate } from './inputLanguage.ts'
 
 /** Admission refused before account preparation or any PTY launch. */
@@ -41,7 +43,7 @@ import { CLAUDE_USAGE_COMMAND, parseClaudeUsage, usageText } from './claudeUsage
 import { LimitRefreshGate, parseCodexAccountLimits } from './accountLimits.ts'
 import { codexHome, findCodexRolloutById, codexSessionId, findCodexRollout, fromCodexRollout, fromClaudeStatus, readTail, type UsageReport } from './usage.ts'
 import { contractHash, helperRequestHash, normalizedAcceptance } from './activityLedger.ts'
-import { blankStatus, inspectCli, latestVersion, loadCatalog, loginShellRunner, runUpdate, type Run } from './clis.ts'
+import { blankStatus, inspectCli, latestVersion, loginShellRunner, runUpdate, type Run } from './clis.ts'
 import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
 import { claudeTranscript, claudeTurns, codexTurns, deleteClaudeConversation, tailTurns, turnsMarkdown, type Turn } from './transcripts.ts'
@@ -93,6 +95,7 @@ export type Broadcast = (message: ServerMessage) => void
 
 export interface CoreOptions {
   /** Tests inject an offline translator; production always uses isolated Codex. */
+  simulatedCatalog?: Catalog
   translate?: Translate
   /** Opt-in local benchmark measurement; never calls a model or stores message content. */
   measurements?: HarnessMeasurements
@@ -135,7 +138,11 @@ export class OrbitCore {
   private readonly delegating = new Map<string, { requestHash: string; retryReason: string | null; opening: Promise<{ pane: Pane; receipt: string[] }> }>()
   private readonly run: Run
   /** Models and effort levels per CLI; null until first loaded. */
+  private readonly simulatedCatalog?: Catalog
   private catalog: Catalog | null = null
+  private accountCatalogs: Record<string, import('@orbit/protocol').CliCatalog> = {}
+  private readonly catalogCache = new AccountCatalogs()
+  private readonly catalogKeys = new Map<string, string>()
   private readonly clis = new Map<AgentCliForRole, CliStatus>(AGENT_CLIS.map((cli) => [cli, blankStatus(cli)]))
   /** Codex agent → its session file, once found. */
   private readonly codexRollouts = new Map<number, string>()
@@ -168,8 +175,11 @@ export class OrbitCore {
   /** Files Claude agents edited (real path → who, in order), from their PostToolUse hooks. */
   private readonly touched = new Map<string, Array<{ paneId: number; missionId: string }>>()
 
-  constructor({ dataDir, shell, broadcast, agentCommand, run, browser, measurements, benchmarkEagerContext, translate }: CoreOptions) {
+  constructor({ dataDir, shell, broadcast, agentCommand, run, browser, measurements, benchmarkEagerContext, translate, simulatedCatalog }: CoreOptions) {
     this.harnessMode = agentCommand ? 'simulated' : 'live'
+    if (simulatedCatalog && !agentCommand) throw new Error('Catálogo simulado requer agente substituto')
+    this.catalog = simulatedCatalog ?? null
+    this.simulatedCatalog = simulatedCatalog
     this.measurements = measurements
     this.benchmarkEagerContext = benchmarkEagerContext === true
     this.broadcast = broadcast
@@ -249,14 +259,34 @@ export class OrbitCore {
       { type: 'browser.engine', name: this.browser.engine?.name ?? null },
       ...this.browser.states().map((browser): ServerMessage => ({ type: 'browser.state', browser })),
     ]
-    if (this.catalog) messages.push({ type: 'catalog', catalog: this.catalog })
+    if (this.catalog) messages.push({ type: 'catalog', catalog: this.catalog, accounts: this.accountCatalogs })
     return messages
   }
 
   /** Model catalogs, read from the CLIs in the background; agents can open before it arrives. */
   async refreshCatalog(): Promise<void> {
-    this.catalog = await loadCatalog(this.run)
-    this.broadcast({ type: 'catalog', catalog: this.catalog })
+    if (this.simulatedCatalog) { this.catalog = this.simulatedCatalog; this.broadcast({type:'catalog',catalog:this.catalog}); return }
+    this.catalogCache.invalidate()
+    await Promise.all(this.store.accounts().map(account => this.catalogForAccount(account)))
+    this.catalog = Object.fromEntries(AGENT_CLIS.map(cli => [cli, this.accountCatalogs[cli] ?? {source:'builtin',efforts:[],models:[],reason:'Catálogo indisponível'}])) as Catalog
+    this.broadcast({ type: 'catalog', catalog: this.catalog, accounts: this.accountCatalogs })
+  }
+
+  private async catalogForAccount(account: Account): Promise<import('@orbit/protocol').CliCatalog> {
+    const key = accountCatalogKey(account, this.accountFiles, this.clis.get(account.cli)?.version ?? null)
+    const item = await this.catalogCache.get(account, key, () => discoverAccountCatalog(account, this.accountFiles, this.run)).catch(error=>{if(error instanceof CatalogInvalidated&&this.store.account(account.id))return this.catalogForAccount(this.store.account(account.id)!);throw error})
+    if (this.store.account(account.id) && accountCatalogKey(account, this.accountFiles, this.clis.get(account.cli)?.version ?? null) !== key) return this.catalogForAccount(this.store.account(account.id)!)
+    // Removed accounts must never reappear from an in-flight probe.
+    if (this.store.account(account.id) && accountCatalogKey(account, this.accountFiles, this.clis.get(account.cli)?.version ?? null) === key) { this.accountCatalogs[account.id] = item; this.catalogKeys.set(account.id, key) }
+    return item
+  }
+
+  private currentAccountCatalog(account: Account): import('@orbit/protocol').CliCatalog {
+    const current = this.accountCatalogs[account.id]
+    const key = accountCatalogKey(account, this.accountFiles, this.clis.get(account.cli)?.version ?? null)
+    if (current && this.catalogKeys.get(account.id) === key && (current.expiresAt ?? 0) > Date.now()) return current
+    void this.catalogForAccount(account).then(() => { if (this.catalog) this.broadcast({ type: 'catalog', catalog: this.catalog, accounts: this.accountCatalogs }) }).catch(() => {})
+    return {source:'builtin',efforts:[],models:[],origin:'unavailable',reason:'Catálogo vencido ou alterado; atualização solicitada. Tente novamente antes de definir modelo/esforço.'}
   }
 
   private setCli(cli: AgentCliForRole, patch: Partial<CliStatus>): void {
@@ -301,7 +331,7 @@ export class OrbitCore {
     const found = await inspectCli(this.run, cli)
     const works = ok && found.installed && found.version !== null
     this.setCli(cli, { ...found, busy: null, ok: works, checkedAt: Date.now(), message: works ? `Atualizado para ${found.version}.` : output || 'A atualização falhou.' })
-    if (cli !== 'claude') await this.refreshCatalog()
+    await this.refreshCatalog()
   }
 
   // ---- git: a worktree and branch per agent ----
@@ -1088,9 +1118,12 @@ export class OrbitCore {
       found = { loggedIn: null, message: error instanceof Error ? error.message : String(error) }
     }
     if (!this.store.account(accountId)) return // removed meanwhile
+    if (current && (found.loggedIn !== current.loggedIn || found.email !== current.email)) this.catalogCache.invalidate(accountId)
     if (account.kind === 'assinatura' && found.loggedIn !== false) await this.refreshAccountLimits(account)
     const loginPaneId = this.accountStatus.get(accountId)?.loginPaneId ?? null
     this.setAccountStatus(accountId, { ...found, checkedAt: Date.now(), busy: loginPaneId && this.panes.isAlive(loginPaneId) ? 'login' : null })
+    await this.catalogForAccount(account)
+    if (this.catalog) this.broadcast({ type: 'catalog', catalog: this.catalog, accounts: this.accountCatalogs })
   }
 
   /**
@@ -1185,6 +1218,8 @@ export class OrbitCore {
     this.accountFiles.prepare(account)
     if (key) this.accountFiles.saveKey(account, key)
     this.store.saveAccount(account)
+    this.catalogCache.invalidate(account.id)
+    delete this.accountCatalogs[account.id]
     this.broadcastAccounts()
     if (key && account.cli === 'codex') {
       // Codex keeps its own copy of the key, in the account's folder.
@@ -1202,6 +1237,8 @@ export class OrbitCore {
     const login = this.accountStatus.get(accountId)?.loginPaneId
     if (login) this.closePane(login)
     this.store.deleteAccount(accountId)
+    this.catalogCache.invalidate(accountId)
+    delete this.accountCatalogs[accountId]
     this.accountStatus.delete(accountId)
     this.broadcastAccounts()
     this.broadcast({ type: 'limits', limits: this.store.limits() })
@@ -1815,6 +1852,7 @@ export class OrbitCore {
       cli,
       adapter: adapterCapabilities(cli, this.clis.get(cli)?.version ?? null),
       source: this.catalog?.[cli].source ?? 'unavailable',
+      accounts: this.store.accounts().filter(a => a.cli === cli).map(a => ({ accountId: a.id, catalog: this.accountCatalogs[a.id] ?? null })),
       models: this.catalog?.[cli].models.map((m) => ({ ...m, description: m.description.slice(0, 240) })) ?? [],
       selection: ['simples', 'normal', 'dificil'].map((difficulty) => ({
         difficulty,
@@ -2664,7 +2702,7 @@ export class OrbitCore {
     if (request.model && (typeof request.model !== 'string' || !MODEL_ID.test(request.model))) throw new Error('Modelo inválido: use letras, números, ponto, hífen, barra ou dois-pontos')
     if (request.effort && !EFFORTS.includes(request.effort)) throw new Error(`Esforço inválido: ${request.effort}`)
 
-    const catalogRevision = this.catalog ? createHash('sha256').update(JSON.stringify(this.catalog)).digest('hex') : null
+    const catalogRevision = this.catalog ? revisionOfCatalog(this.harnessMode==='live'?{default:this.catalog,accounts:this.accountCatalogs}:this.catalog) : null
     const harnessReadOnly = !!(input.readOnly || requiresSandbox || taskType?.readOnly || squadRole?.readOnly)
     const eligibleAccounts = harnessAccounts(this.store.accounts(), [...this.accountStatus.values()], this.store.limits())
     const harnessExplicit = !!(options.explicitCli || input.model || input.effort || input.accountId || input.squadRoleId || taskType?.automatic === false || (taskType && taskType.automatic !== true) || options.keep)
@@ -2675,17 +2713,17 @@ export class OrbitCore {
         ...options.harnessTask, readOnly: harnessReadOnly, requireReadOnlySandbox: requiresSandbox,
         constraintRevision: createHash('sha256').update(JSON.stringify({ routing, squadRole, allowed: mission.allowedClis, instructions: workspace.instructions, settings: this.store.settings() })).digest('hex'),
       }),
-      harnessCandidates(this.catalog, [...this.clis.values()], eligibleAccounts, mission.allowedClis, requiresSandbox),
+      harnessCandidates(this.catalog, [...this.clis.values()], eligibleAccounts, mission.allowedClis, requiresSandbox, this.harnessMode==='live'?account=>this.currentAccountCatalog(account):undefined,catalogRevision??undefined),
       harnessExplicit || taskType?.alt?.pinned ? [] : this.store.harnessEvidence(),
       { explicit: harnessExplicit },
     ) : undefined
     const work = request.role === 'crew' && !['operacao', 'documentacao'].includes(taskType?.id ?? '') ? designWork(`${taskType?.id ?? ''} ${input.title} ${input.task ?? ''}`) : null
     const automatic = !harnessExplicit && (!harness?.selected || work) && request.role === 'crew' && (taskType || work) && this.catalog
-      ? automaticTaskSeat({ catalog: this.catalog, preferred: { cli: request.cli as AgentCliForRole, model: request.model, effort: request.effort ?? null }, alternate: taskType?.alt, difficulty: options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal', design: work, allowed: mission.allowedClis.filter(cli => !requiresSandbox || adapterCapabilities(cli).supports.readOnlySandbox), rooms: cli => this.rooms(cli, this.liveByAccount()).filter(r => this.accountStatus.get(r.account.id)?.loggedIn === true && !this.accountStatus.get(r.account.id)?.busy) }) : null
+      ? automaticTaskSeat({ catalogForAccount: this.harnessMode === 'live' ? account => this.currentAccountCatalog(account) : undefined, catalog: this.catalog, preferred: { cli: request.cli as AgentCliForRole, model: request.model, effort: request.effort ?? null }, alternate: taskType?.alt, difficulty: options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal', design: work, allowed: mission.allowedClis.filter(cli => !requiresSandbox || adapterCapabilities(cli).supports.readOnlySandbox), rooms: cli => this.rooms(cli, this.liveByAccount()).filter(r => this.accountStatus.get(r.account.id)?.loggedIn === true && !this.accountStatus.get(r.account.id)?.busy) }) : null
     // Once a catalog is available, autonomous staffing needs a valid quota and compatible model.
     if (!harnessExplicit && request.role === 'crew' && (taskType || work) && !automatic && (!harness?.selected || work)) throw new Error('Roteamento automático: nenhuma conta com quota válida e modelo compatível. Atualize os limites em Contas ou escolha uma conta explicitamente.')
     const measured = work ? automatic : harness?.selected ?? automatic
-    if (measured) Object.assign(request, { cli: measured.cli, model: measured.model, effort: measured.effort })
+    if (measured) Object.assign(request, { cli: measured.cli, model: measured.model, effort: measured.effort, ...('accountId' in measured ? {accountId: measured.accountId} : {}) })
     if (harness) receipt.push(...harness.reasons)
     if (automatic) {
       const seat = taskType?.alt?.cli === automatic.cli ? taskType.alt : taskType
@@ -2696,6 +2734,11 @@ export class OrbitCore {
     // The maestro's seat: the CLI the mission allows and the account with the most room, moving to
     // the other CLI when every account of the first one is used up.
     let chosen: Account | null = null
+    const roomsForSeat=(cli:AgentCliForRole,live:Map<string,number>)=>this.rooms(cli,live).filter(room=>{
+      if(!measured||this.harnessMode!=='live')return true
+      const model=this.currentAccountCatalog(room.account).models.find(m=>m.id===request.model)
+      return !!model&&(!request.effort||model.efforts.includes(request.effort))
+    })
     if (request.cli !== 'shell' && !request.accountId) {
       const allowedHere = mission.allowedClis
       // The row's equivalent on another CLI, when the mission allows it.
@@ -2722,7 +2765,7 @@ export class OrbitCore {
       const live = this.liveByAccount()
       // Fair share: when the table's CLI is much busier than the equivalent's, the equivalent takes it.
       if (!measured && alt && !harnessExplicit && request.role !== 'lead' && request.cli !== alt.cli && taskType && request.cli === taskType.cli) {
-        const here = cliLoad(this.rooms(request.cli, live))
+        const here = cliLoad(roomsForSeat(request.cli, live))
         const there = cliLoad(this.rooms(alt.cli, live))
         if (there !== null && (here === null || here - there >= BALANCE_GAP)) {
           move(alt.cli, `${CLI_LABEL[request.cli]} com carga ${Math.round(here ?? 100)}, ${CLI_LABEL[alt.cli]} com ${Math.round(there)} (uso da conta + ${LIVE_WEIGHT} por agente rodando): foi para o equivalente da tabela`)
@@ -2735,14 +2778,14 @@ export class OrbitCore {
         const others = allowedHere.filter((c) => c !== request.cli && (!requiresSandbox || adapterCapabilities(c).supports.readOnlySandbox)).sort((a, b) => Number(b === alt?.cli) - Number(a === alt?.cli))
         // Exhaust subscriptions across allowed providers before using a paid API account.
         for (const other of others) {
-          const next = chooseAccount(this.rooms(other, live).filter(room => room.account.kind === 'assinatura'))
+          const next = chooseAccount(roomsForSeat(other, live).filter(room => room.account.kind === 'assinatura'))
           if (next.exhausted) continue
           move(other, `todas as contas do ${CLI_LABEL[request.cli]} estão no limite`)
           choice = next
           break
         }
         if (choice.exhausted) for (const other of others) {
-          const next = chooseAccount(this.rooms(other, live))
+          const next = chooseAccount(roomsForSeat(other, live))
           if (next.exhausted) continue
           move(other, 'nenhuma assinatura disponível; conta de API habilitada para uso automático')
           choice = next
@@ -2759,7 +2802,9 @@ export class OrbitCore {
     // The difficulty moves the seat within the chosen CLI: a cheaper model or a stronger one.
     if (chosen?.kind === 'api' && chosen.model && !input.model) request.model = chosen.model
     if (!measured && (!harnessExplicit || request.role === 'lead') && options.tier && request.cli !== 'shell' && !(chosen?.kind === 'api' && chosen.model)) {
-      const seat = seatForDifficulty(request.cli, request.model ?? null, request.effort ?? null, options.tier.difficulty, (model) => effortsFor(this.catalog, request.cli, model), this.catalog?.[request.cli])
+      const selectedCatalog = chosen && this.harnessMode !== 'simulated' ? this.currentAccountCatalog(chosen) : this.catalog?.[request.cli]
+      const selectionCatalog = selectedCatalog ? { ...this.catalog, [request.cli]: selectedCatalog } as Catalog : this.catalog
+      const seat = seatForDifficulty(request.cli, request.model ?? null, request.effort ?? null, options.tier.difficulty, (model) => effortsFor(selectionCatalog, request.cli, model), selectedCatalog)
       if (seat.changed) {
         request.model = seat.model
         request.effort = request.role === 'crew' ? input.effort ?? seat.effort : seat.effort
@@ -2770,8 +2815,10 @@ export class OrbitCore {
     if (input.effort && (!options.tier || request.role === 'crew')) request.effort = input.effort
     if (account && !request.model && account.model) request.model = account.model
     if (request.role === 'crew' && request.cli !== 'shell' && !mission.allowedClis.includes(request.cli)) throw new Error('A CLI efetiva não está permitida nesta missão')
-    // Each model accepts its own levels (Codex lists them; Claude takes low…max).
-    const allowed = effortsFor(this.catalog, request.cli, request.model)
+    const accountCatalog = account && this.harnessMode !== 'simulated' ? this.currentAccountCatalog(account) : request.cli === 'shell' ? null : this.catalog?.[request.cli]
+    const effectiveCatalog = request.cli !== 'shell' && accountCatalog ? { ...this.catalog, [request.cli]: accountCatalog } as Catalog : this.catalog
+    receipt.push(`catálogo: ${account?.id ?? 'sem conta'} · ${accountCatalog?.origin ?? accountCatalog?.source ?? 'indisponível'}${accountCatalog?.reason ? ` · ${accountCatalog.reason}` : ''}`)
+    const allowed = effortsFor(effectiveCatalog, request.cli, request.model)
     if (request.effort && request.cli !== 'shell' && !allowed.includes(request.effort)) {
       throw new Error(`Esforço "${EFFORT_LABEL[request.effort]}" não vale para ${request.model ?? `o modelo padrão do ${CLI_LABEL[request.cli]}`}; use ${allowed.map((e) => EFFORT_LABEL[e]).join(', ')}`)
     }

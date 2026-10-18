@@ -8,6 +8,8 @@ import { fixture } from './r2Fixture.ts'
 test('explicit squad CLI/model/effort reaches the launch and its durable decision receipt', async () => {
   const { core, lead, root } = await fixture()
   try {
+    await seedRoutingQuota(core)
+    ;(core as any).catalog.codex.models.push({id:'user-pinned-model',label:'User model',description:'Synthetic',efforts:['high'],defaultEffort:null})
     core.handle({ type: 'mission.create', workspaceId: core.store.mission(lead.missionId)!.workspaceId, title: 'Squad', objective: '', mode: 'squad', squadId: 'caca-bugs', lead: { cli: 'shell', model: null, title: 'Lead' } })
     const boss = core.store.snapshot().panes.find(p => p.role === 'lead' && p.missionId !== lead.missionId)!
     const { pane, receipt } = await core.spawnHelper(boss, { title: 'Inspect', task: 'Inspect synthetic source', squadRoleId: 'revisor', cli: 'codex', model: 'user-pinned-model', effort: 'high' })

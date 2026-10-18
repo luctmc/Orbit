@@ -10,10 +10,23 @@ export function designWork(text: string): DesignWork {
 
 /** Seats are drawn from the local catalog. Quota is per account, never per provider. */
 export function automaticTaskSeat(input: {
+  catalogForAccount?: (account: AccountRoom['account']) => import('@orbit/protocol').CliCatalog
   catalog: Catalog; preferred: AgentSeat; alternate?: AgentSeat | null; difficulty: Difficulty;
   design: DesignWork; allowed: AgentCliForRole[]; rooms: (cli: AgentCliForRole) => AccountRoom[];
-}): AgentSeat | null {
+}): (AgentSeat & { accountId?: string }) | null {
   const { catalog, preferred, alternate, difficulty, design, allowed, rooms } = input
+  if (input.catalogForAccount) {
+    const candidates = allowed.flatMap(cli => rooms(cli).flatMap(room => {
+      const current = input.catalogForAccount!(room.account)
+      if (current.source !== 'cli') return []
+      const seat = automaticTaskSeat({...input, catalogForAccount: undefined, catalog: {...catalog,[cli]:current},allowed:[cli],rooms:()=>[room]})
+      const load = cliLoad([room])
+      return seat && load !== null ? [{...seat,accountId:room.account.id,load}] : []
+    }))
+    candidates.sort((a,b)=>a.load-b.load || Number(b.cli===preferred.cli)-Number(a.cli===preferred.cli) || a.accountId.localeCompare(b.accountId))
+    const best = candidates[0]
+    return best ? {cli:best.cli,model:best.model,effort:best.effort,accountId:best.accountId} : null
+  }
   const clis = design === 'motion' ? ['claude'] as const : design ? ['claude', 'codex'] as const : [preferred.cli, ...(alternate ? [alternate.cli] : [])]
   const candidates = [...new Set(clis)].flatMap(cli => {
     if (!allowed.includes(cli)) return []

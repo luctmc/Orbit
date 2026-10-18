@@ -16,6 +16,7 @@ export interface ServerOptions {
   allowedOrigins: string[]
   dataDir: string
   shell: string
+  simulatedCatalog?: CoreOptions['simulatedCatalog']
   agentCommand?: CoreOptions['agentCommand']
   measurements?: CoreOptions['measurements']
   benchmarkEagerContext?: CoreOptions['benchmarkEagerContext']
@@ -55,6 +56,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     dataDir: options.dataDir,
     shell: options.shell,
     agentCommand: options.agentCommand,
+    simulatedCatalog: options.simulatedCatalog,
     run: options.run,
     browser: options.browser,
     measurements: options.measurements,

@@ -1,0 +1,5 @@
+import type { CliCatalog, Catalog } from '@orbit/protocol'
+/** Synthetic capabilities for deterministic tests; never a provider support declaration. */
+export const CLAUDE_FIXTURE: CliCatalog={source:'cli',origin:'deterministic-test',efforts:['low','medium','high','xhigh','max'],models:['opus','sonnet','haiku','fable','claude-opus-5-5','claude-sonnet-5-5','claude-haiku-5-5','claude-fable-5-1'].map(id=>({id,label:id,description:'Synthetic test model',efforts:['low','medium','high','xhigh','max'],defaultEffort:null}))}
+export const CATALOG_FIXTURE: Catalog={claude:CLAUDE_FIXTURE,codex:{source:'cli',origin:'deterministic-test',efforts:['low','medium','high','xhigh','max','ultra'],models:['gpt-6.1-sol','gpt-6-luna','gpt-6-astra','gpt-6.1'].map(id=>({id,label:id,description:'Synthetic test model',efforts:['low','medium','high','xhigh','max','ultra'],defaultEffort:'medium'}))},gemini:{source:'builtin',efforts:[],models:[]},antigravity:{source:'builtin',efforts:[],models:[]}}
+export function seedCatalog(core:import('../src/core.ts').OrbitCore){(core as unknown as {catalog:Catalog}).catalog=structuredClone(CATALOG_FIXTURE)}

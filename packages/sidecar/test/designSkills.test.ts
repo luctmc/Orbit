@@ -47,7 +47,7 @@ test('Codex under a Codex lead receives real design skill bodies and a writable 
     const item = skill('project-design', 'Frontend design', realpathSync(f.root))
     const internal = f.core as any
     internal.catalogItems = [item]
-    const { CLAUDE_CATALOG } = await import('../src/clis.ts')
+    const { CLAUDE_FIXTURE: CLAUDE_CATALOG } = await import('./catalogFixture.ts')
     internal.catalog = { claude: CLAUDE_CATALOG, codex: { source: 'cli', efforts: ['medium','high'], models: [{ id: 'gpt-6.1-sol', label: 'Sol', description: '', efforts: ['medium','high'], defaultEffort: 'medium' }] }, gemini: { source: 'builtin', efforts: [], models: [] }, antigravity: { source: 'builtin', efforts: [], models: [] } }
     const { pane } = await f.core.spawnHelper(lead, { title: 'Frontend', task: 'Implemente frontend no projeto', cli: 'codex', model: 'gpt-6.1-sol', effort: 'medium' })
     const context = JSON.parse(readFileSync(join(f.root, 'data/panes', String(pane.id), 'context.json'), 'utf8'))

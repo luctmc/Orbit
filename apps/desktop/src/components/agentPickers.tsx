@@ -76,7 +76,8 @@ const CUSTOM = '__outro__'
  * its default first, then each model with its name, and "outro modelo" for any id. `compact`
  * leaves out the description line (tables).
  */
-export function ModelSelect({ id, cli, value, onChange, label, disabled, compact = false, className }: {
+export function ModelSelect({ id, cli, value, onChange, label, disabled, compact = false, className, accountId }: {
+  accountId?: string | null
   id: string
   cli: AgentCli
   value: string | null
@@ -86,7 +87,8 @@ export function ModelSelect({ id, cli, value, onChange, label, disabled, compact
   compact?: boolean
   className?: string
 }) {
-  const { catalog } = useOrbit()
+  const { catalog: globalCatalog, accountCatalogs } = useOrbit()
+  const catalog = cli !== 'shell' && accountId ? (globalCatalog && accountCatalogs?.[accountId] ? { ...globalCatalog, [cli]: accountCatalogs[accountId] } : null) : globalCatalog
   const models = modelOptions(catalog, cli)
   const known = value === null || models.some((m) => m.id === value)
   const [typing, setTyping] = useState(!known)
@@ -96,7 +98,7 @@ export function ModelSelect({ id, cli, value, onChange, label, disabled, compact
   if (cli === 'shell') return null
   const info = catalog?.[cli].models.find((m) => m.id === value)
   const fallback = catalog?.[cli].models.find((m) => m.id === catalog[cli].defaultModel)
-  const source = catalog?.[cli].source === 'cli' ? `lista lida do ${CLI_NAME[cli]} instalado` : 'lista do Orbit'
+  const source = catalog?.[cli].source === 'cli' ? `lista da conta · ${catalog[cli].origin ?? CLI_NAME[cli]}` : `fallback · ${catalog?.[cli].origin ?? 'indisponível'}`
   return (
     <div className={`model-select${className ? ` ${className}` : ''}`}>
       {label && <label className="sr-only" htmlFor={id}>{label}</label>}
@@ -118,7 +120,7 @@ export function ModelSelect({ id, cli, value, onChange, label, disabled, compact
       {!compact && (
         <p className="note model-select__note">
           {typing ? 'Qualquer id que a CLI aceite.' : value === null ? `O que o ${CLI_NAME[cli]} usa quando ninguém escolhe.` : info?.description || info?.label || value}
-          {' '}<span className="muted">({models.length ? `${models.length} modelos, ${source}` : 'a CLI não informou a lista; escolha o padrão ou digite um id'})</span>
+          {' '}<span className="muted">{catalog?.[cli].reason} ({models.length ? `${models.length} modelos, ${source}` : 'a CLI não informou a lista; escolha o padrão ou digite um id'})</span>
         </p>
       )}
     </div>
@@ -126,8 +128,9 @@ export function ModelSelect({ id, cli, value, onChange, label, disabled, compact
 }
 
 /** The levels this CLI and model accept, and the model's own default when the catalog knows it. */
-export function useEfforts(cli: AgentCli, model: string | null): { allowed: readonly Effort[]; modelDefault: Effort | null } {
-  const { catalog } = useOrbit()
+export function useEfforts(cli: AgentCli, model: string | null, accountId?: string | null): { allowed: readonly Effort[]; modelDefault: Effort | null } {
+  const { catalog: globalCatalog, accountCatalogs } = useOrbit()
+  const catalog = cli !== 'shell' && accountId ? (globalCatalog && accountCatalogs?.[accountId] ? { ...globalCatalog, [cli]: accountCatalogs[accountId] } : null) : globalCatalog
   const allowed = effortsFor(catalog, cli, model)
   const modelDefault = cli === 'shell' || !catalog ? null : (model === null ? catalog[cli].defaultEffort : null) ?? catalog[cli].models.find((m) => m.id === (model ?? catalog[cli].defaultModel))?.defaultEffort ?? null
   return { allowed, modelDefault }
@@ -136,17 +139,17 @@ export function useEfforts(cli: AgentCli, model: string | null): { allowed: read
 /** Drops an effort the newly chosen CLI or model does not accept. */
 function useKeepValid(value: Effort | null, allowed: readonly Effort[], onChange: (e: Effort | null) => void) {
   useEffect(() => {
-    if (value && allowed.length && !allowed.includes(value)) onChange(null)
+    if (value && !allowed.includes(value)) onChange(null)
   }, [value, allowed, onChange])
 }
 
 const defaultLabel = (modelDefault: Effort | null) => (modelDefault ? `padrão (${EFFORT_LABEL[modelDefault]})` : 'padrão')
 
 /** Segmented choice, for forms. */
-export function EffortChoice({ cli, model, value, onChange }: { cli: AgentCli; model: string | null; value: Effort | null; onChange: (e: Effort | null) => void }) {
-  const { allowed, modelDefault } = useEfforts(cli, model)
+export function EffortChoice({ cli, model, value, onChange, accountId }: { accountId?: string | null; cli: AgentCli; model: string | null; value: Effort | null; onChange: (e: Effort | null) => void }) {
+  const { allowed, modelDefault } = useEfforts(cli, model, accountId)
   useKeepValid(value, allowed, onChange)
-  if (allowed.length === 0) return cli === 'shell' ? null : <p className="note">O {CLI_NAME[cli]} não tem nível de esforço: o modelo decide sozinho quanto pensar.</p>
+  if (allowed.length === 0) return cli === 'shell' ? null : <p className="note">O {CLI_NAME[cli]} não informou esforços compatíveis para este modelo/conta. Será usado o padrão da CLI.</p>
   return (
     <div className="segmented segmented--wrap" role="group" aria-label="Esforço">
       <button type="button" aria-pressed={value === null} onClick={() => onChange(null)}>{defaultLabel(modelDefault)}</button>

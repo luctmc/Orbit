@@ -577,6 +577,7 @@ export interface ModelInfo {
   description: string
   efforts: Effort[]
   defaultEffort: Effort | null
+  capabilities?: { effort: boolean | null; fast: boolean | null; auto: boolean | null }
 }
 
 export interface CliCatalog {
@@ -585,6 +586,11 @@ export interface CliCatalog {
   efforts: Effort[]
   /** `cli`: read from the installed CLI; `builtin`: Orbit's list, when the CLI cannot be asked. */
   source: 'cli' | 'builtin'
+  accountId?: string
+  origin?: string
+  reason?: string
+  observedAt?: number
+  expiresAt?: number
   /** The model the CLI uses when none is chosen, when Orbit can tell (Codex's config.toml). */
   defaultModel?: string | null
   /** Effective effort configured by the user, before the model's own default. */
@@ -596,9 +602,9 @@ export type Catalog = Record<AgentCliForRole, CliCatalog>
 /** Effort levels valid for this CLI and model. */
 export function effortsFor(catalog: Catalog | null, cli: AgentCli, model: string | null): readonly Effort[] {
   if (cli === 'shell') return []
-  if (!catalog) return EFFORTS
+  if (!catalog) return []
   const entry = catalog[cli]
-  return entry.models.find((m) => m.id === (model ?? entry.defaultModel))?.efforts ?? entry.efforts
+  return entry.models.find((m) => m.id === (model ?? entry.defaultModel))?.efforts ?? (model === null ? entry.efforts : [])
 }
 
 /** An installed agent CLI as Orbit sees it. */
@@ -1077,7 +1083,7 @@ export type ServerMessage =
   | { type: 'settings.updated'; settings: OrbitSettings }
   | { type: 'proposals'; proposals: RoutingProposal[] }
   | { type: 'memory'; workspaceId: string; entries: MemoryEntry[] }
-  | { type: 'catalog'; catalog: Catalog }
+  | { type: 'catalog'; catalog: Catalog; accounts?: Record<string, CliCatalog> }
   | { type: 'usage.day'; day: UsageDay }
   | { type: 'limits'; limits: AccountLimits[] }
   | { type: 'cli.status'; clis: CliStatus[] }
@@ -1117,7 +1123,7 @@ export type ServerMessage =
 export const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/
 
 /** Model ids reach a shell command line, so only plain identifiers are accepted (`/` for providers' ids). */
-export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$/
+export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}(?:\[1m\])?$/
 /** Squad and role ids. */
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/
 

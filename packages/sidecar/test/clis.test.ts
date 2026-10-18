@@ -36,7 +36,7 @@ test("Codex's catalog keeps the listed models with their own effort levels", () 
   assert.deepEqual(catalog.efforts, ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
   const both = { claude: CLAUDE_CATALOG, codex: catalog, gemini: GEMINI_CATALOG, antigravity: ANTIGRAVITY_FALLBACK }
   assert.deepEqual(effortsFor(both, 'codex', 'gpt-6-luna'), ['low', 'medium'])
-  assert.deepEqual(effortsFor(both, 'claude', 'opus'), ['low', 'medium', 'high', 'xhigh', 'max'])
+  assert.deepEqual(effortsFor(both, 'claude', 'opus'), [], 'fallback has no verified per-model effort')
   assert.deepEqual(effortsFor(both, 'shell', null), [])
 })
 

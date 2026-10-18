@@ -47,13 +47,13 @@ function AgentFields({ value, onChange, label = 'Agente', shell = true }: { valu
       {value.cli !== 'shell' && (
         <div className="field">
           <label htmlFor={`${id}-model`}>Modelo</label>
-          <ModelSelect id={`${id}-model`} cli={value.cli} value={value.model || null} onChange={(model) => onChange({ ...latest.current, model: model ?? '' })} />
+          <ModelSelect id={`${id}-model`} cli={value.cli} accountId={value.accountId} value={value.model || null} onChange={(model) => onChange({ ...latest.current, model: model ?? '' })} />
         </div>
       )}
       {value.cli !== 'shell' && (
         <fieldset className="field">
           <legend>Esforço</legend>
-          <EffortChoice cli={value.cli} model={value.model || null} value={value.effort} onChange={setEffort} />
+          <EffortChoice accountId={value.accountId} cli={value.cli} model={value.model || null} value={value.effort} onChange={setEffort} />
         </fieldset>
       )}
 

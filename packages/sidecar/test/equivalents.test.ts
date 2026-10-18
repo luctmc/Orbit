@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { DEFAULT_ROUTING, normalizeRouting } from '../src/routing.ts'
 import { automaticTaskSeat } from '../src/taskPolicy.ts'
-import { CLAUDE_CATALOG } from '../src/clis.ts'
+import { CLAUDE_FIXTURE as CLAUDE_CATALOG } from './catalogFixture.ts'
 import type { Catalog, AgentSeat } from '@orbit/protocol'
 
 const catalog: Catalog = { claude: CLAUDE_CATALOG, codex: { source: 'cli', defaultModel: 'gpt-6.1-sol', defaultEffort: 'high', efforts: ['low','medium','high'], models: ['gpt-6.1-sol','gpt-6-luna'].map(id => ({ id, label: id, description: '', efforts: ['low','medium','high'], defaultEffort: 'medium' })) }, gemini: { source: 'builtin', efforts: [], models: [] }, antigravity: { source: 'builtin', efforts: [], models: [] } }

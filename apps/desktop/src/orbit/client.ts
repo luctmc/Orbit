@@ -16,6 +16,7 @@ export interface OrbitState {
   /** Leads' suggestions for the task table, pending and decided. */
   proposals: RoutingProposal[]
   /** Models and effort levels per CLI; null until the sidecar has read them. */
+  accountCatalogs?: Record<string, import('@orbit/protocol').CliCatalog>
   catalog: Catalog | null
   clis: CliStatus[]
   /** Tokens per day and CLI, as the agents reported them. */
@@ -428,7 +429,7 @@ export class OrbitClient {
         this.update({ settings: message.settings })
         return
       case 'catalog':
-        this.update({ catalog: message.catalog })
+        this.update({ catalog: message.catalog, accountCatalogs: message.accounts ?? {} })
         return
       case 'cli.status':
         this.update({ clis: message.clis })

@@ -112,26 +112,14 @@ export async function runUpdate(run: Run, status: CliStatus): Promise<{ ok: bool
 
 // ---- model catalogs ----
 
-const CLAUDE_EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
-
-/** Claude Code cannot list its models; these are the aliases it documents and the current ids. */
+/** Documented aliases only. Availability and capabilities require the account probe. */
 export const CLAUDE_CATALOG: CliCatalog = {
-  source: 'builtin',
-  efforts: CLAUDE_EFFORTS,
-  models: [
-    ['opus', 'Opus (alias do mais recente)'],
-    ['sonnet', 'Sonnet (alias do mais recente)'],
-    ['haiku', 'Haiku (alias do mais recente)'],
-    ['fable', 'Fable (alias do mais recente)'],
-    ['claude-opus-5-5', 'Claude Opus 5.5'],
-    ['claude-sonnet-5-5', 'Claude Sonnet 5.5'],
-    ['claude-haiku-5-5', 'Claude Haiku 5.5'],
-    ['claude-fable-5-1', 'Claude Fable 5.1'],
-  ].map(([id, label]) => ({ id: id!, label: label!, description: '', efforts: CLAUDE_EFFORTS, defaultEffort: null })),
+ source: 'builtin', origin: 'documented-aliases', reason: 'Catálogo da conta ainda não confirmado', efforts: [],
+ models: ['opus','sonnet','haiku'].map(id => ({id,label:id,description:'Alias documentado; disponibilidade não confirmada',efforts:[],defaultEffort:null})),
 }
 
 /** Used until (or if) `codex debug models` answers. */
-export const CODEX_FALLBACK: CliCatalog = { source: 'builtin', efforts: ['low', 'medium', 'high'], models: [] }
+export const CODEX_FALLBACK: CliCatalog = { source: 'builtin', efforts: [], models: [] }
 
 interface RawCodexModel {
   slug?: string
@@ -162,25 +150,11 @@ export function parseCodexCatalog(json: string): CliCatalog {
   return { source: 'cli', efforts: union, models }
 }
 
-/** Gemini CLI has no model list command: its aliases and the ids it ships with. No effort levels. */
-export const GEMINI_CATALOG: CliCatalog = {
-  source: 'builtin',
-  efforts: [],
-  models: [
-    ['auto', 'Automático (o Gemini escolhe por tarefa)'],
-    ['pro', 'Pro (alias do mais recente)'],
-    ['flash', 'Flash (alias do mais recente)'],
-    ['flash-lite', 'Flash-Lite (alias do mais recente)'],
-    ['gemini-3.1-pro-preview', 'Gemini 3.1 Pro (prévia)'],
-    ['gemini-3.5-flash', 'Gemini 3.5 Flash'],
-    ['gemini-3-flash-preview', 'Gemini 3 Flash (prévia)'],
-    ['gemini-2.5-pro', 'Gemini 2.5 Pro'],
-    ['gemini-2.5-flash', 'Gemini 2.5 Flash'],
-  ].map(([id, label]) => ({ id: id!, label: label!, description: '', efforts: [], defaultEffort: null })),
-}
+/** Documented aliases; the account adapter labels these as unconfirmed suggestions. */
+export const GEMINI_CATALOG: CliCatalog = { source:'builtin', origin:'documented-aliases', efforts:[], models:['auto','pro','flash'].map(id=>({id,label:id,description:'Disponibilidade não confirmada',efforts:[],defaultEffort:null})) }
 
 /** Antigravity's levels (agy --effort); its models come from `agy models` once signed in. */
-const ANTIGRAVITY_EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
+const ANTIGRAVITY_EFFORTS: Effort[] = []
 export const ANTIGRAVITY_FALLBACK: CliCatalog = { source: 'builtin', efforts: ANTIGRAVITY_EFFORTS, models: [] }
 
 /**
@@ -213,19 +187,11 @@ export function codexDefaults(home = process.env.CODEX_HOME ?? join(homedir(), '
 
 export function codexDefaultModel(home?: string): string | null { return codexDefaults(home).defaultModel }
 
+
+/** Compatibility entry for native benchmarks: discover built-in accounts through adapters. */
 export async function loadCatalog(run: Run): Promise<Catalog> {
-  const ask = async (command: string, parse: (out: string) => CliCatalog, fallback: CliCatalog) => {
-    const result = await run(command, 60_000)
-    if (result.code !== 0) return fallback
-    try {
-      return parse(result.stdout)
-    } catch {
-      return fallback
-    }
-  }
-  const [codex, antigravity] = await Promise.all([
-    ask('codex debug models', parseCodexCatalog, CODEX_FALLBACK),
-    ask('agy models', parseAntigravityModels, ANTIGRAVITY_FALLBACK),
-  ])
-  return { claude: CLAUDE_CATALOG, codex: { ...codex, ...codexDefaults() }, gemini: GEMINI_CATALOG, antigravity }
+  const { AccountFiles, BUILTIN_ACCOUNTS } = await import('./accounts.ts')
+  const { discoverAccountCatalog } = await import('./accountCatalog.ts')
+  const files = new AccountFiles(join(homedir(), '.orbit'))
+  return Object.fromEntries(await Promise.all(BUILTIN_ACCOUNTS.map(async account => [account.cli, await discoverAccountCatalog(account, files, run)]))) as Catalog
 }
