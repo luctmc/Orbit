@@ -274,8 +274,13 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   async snapshot(id: number): Promise<PaneSnapshot | null> {
     const screen = this.screens.get(id)
     if (!screen) return null
-    await new Promise<void>((resolve) => screen.term.write('', resolve))
-    return { data: screen.serializer.serialize({ scrollback: SCROLLBACK_LINES }), cols: screen.term.cols, rows: screen.term.rows }
+    // Capture inside the parser callback. Awaiting only the marker lets xterm parse later
+    // writes in the same batch before our continuation; the snapshot would then contain bytes
+    // that attach also retained for live delivery, duplicating output after reconnect.
+    return new Promise<PaneSnapshot>((resolve, reject) => screen.term.write('', () => {
+      try { resolve({ data: screen.serializer.serialize({ scrollback: SCROLLBACK_LINES }), cols: screen.term.cols, rows: screen.term.rows }) }
+      catch (error) { reject(error) }
+    }))
   }
 
   /** The last `lines` rendered lines of the pane, as plain text. */

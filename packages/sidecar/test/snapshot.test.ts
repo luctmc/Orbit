@@ -91,3 +91,28 @@ test('a closed pane has no snapshot; an exited one keeps its last screen', async
     await server.close()
   }
 })
+
+test('snapshot serializes at its parser boundary, before later output in the same xterm batch', async () => {
+  const { PaneManager } = await import('../src/panes.ts')
+  const { default: serialize } = await import('@xterm/addon-serialize')
+  const manager = new PaneManager('/bin/sh')
+  const term = new headless.Terminal({ cols: 80, rows: 24, allowProposedApi: true })
+  const serializer = new serialize.SerializeAddon()
+  term.loadAddon(serializer)
+  // A real xterm mirror, with no process timing involved in this exact parser interleaving.
+  ;(manager as any).screens.set(1, { term, serializer })
+  try {
+    term.write('BEFORE_BOUNDARY\r\n')
+    const pending = manager.snapshot(1)
+    term.write('AFTER_BOUNDARY 界 🙂\r\n')
+    const snapshot = await pending
+    assert(snapshot)
+    assert.match(snapshot.data, /BEFORE_BOUNDARY/)
+    assert.doesNotMatch(snapshot.data, /AFTER_BOUNDARY/)
+    await new Promise<void>(resolve => term.write('', resolve))
+    assert.match(manager.screenText(1, 100), /AFTER_BOUNDARY 界 🙂/)
+    const restored = await render(snapshot.cols, snapshot.rows, snapshot.data + 'AFTER_BOUNDARY 界 🙂\r\n')
+    assert.equal(lines(restored).split('AFTER_BOUNDARY').length - 1, 1)
+    restored.dispose()
+  } finally { term.dispose() }
+})
