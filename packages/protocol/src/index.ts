@@ -450,6 +450,7 @@ export interface Pane {
   usage: TokenUsage | null
   /** How full the model's context window is, 0–100, when the CLI says. */
   contextPercent: number | null
+  historyState?: 'durable' | 'unavailable'
   contextUsage?: ContextUsage
   pid: number | null
   exitCode: number | null
@@ -1002,6 +1003,7 @@ export type ClientMessage =
   /** Raw keystrokes from the terminal view. */
   | { type: 'pane.input'; paneId: number; data: string }
   /** A whole message typed elsewhere (the command bar): pasted, then submitted with Enter. */
+  | { type: 'pane.history.get'; paneId:number; epoch?:string; requestId:string }
   | { type: 'pane.queue.cancel'; paneId: number; targetRequestId: string; requestId: string }
   | { type: 'pane.submit'; queueTimeoutMs?: number; dispatchTimeoutMs?: number; paneId: number; text: string; attachments?: string[]; requestId?: string; translationAccountId?: string; allowOriginal?: boolean }
   | { type: 'attachment.add'; paneId: number; requestId: string; name: string; mime: string; data: string }
@@ -1071,6 +1073,7 @@ export type ServerMessage =
   | { type: 'mission.checked'; requestId: string; state: 'missing' | 'pending' | 'failed' | 'acked'; message: string; missionId?: string }
   | { type: 'workspace.saved'; requestId: string; workspace: Workspace }
   | { type: 'workspace.error'; requestId: string; message: string }
+  | { type: 'engine.runtime'; persistent: boolean; revision: string }
   | { type: 'engine.startup'; tasks: StartupTask[] }
   | { type: 'mission.progress'; requestId: string; progress: MissionProgress }
   | { type: 'mission.progress.error'; requestId: string; missionId: string; message: string }
@@ -1080,6 +1083,7 @@ export type ServerMessage =
   | { type: 'account.reset.error'; requestId: string; message: string }
   | { type: 'pane.spawned'; requestId: string; pane: Pane }
   | { type: 'pane.spawn.error'; requestId: string; message: string }
+  | { type: 'pane.history'; paneId:number; requestId:string; entries:Array<{epoch:string;updatedAt:number}>; text?:string; error?:string }
   | { type: 'pane.queue.cancelled'; requestId:string; outcome:'cancelled'|'dispatched'|'missing'|'preparing'; message:string }
   | { type: 'pane.submitted'; requestId: string; paneId: number; executionEpoch?: string; acceptedAt?: number }
   | { type: 'pane.submit.error'; requestId: string; message: string; pending?: boolean }

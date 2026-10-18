@@ -1,3 +1,5 @@
+import { join } from 'node:path'
+import { TerminalHistory, HISTORY_LIMITS } from './terminalHistory.ts'
 import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import pty, { type IPty } from 'node-pty'
@@ -14,7 +16,7 @@ const SUBMIT_DELAY_MS = 120
 /** A native startup hook can precede its input listener and restored terminal paint. */
 const DELIVERY_QUIET_MS = 1200
 /** Scrollback kept by the screen mirror and handed to views. */
-const SCROLLBACK_LINES = 3000
+const SCROLLBACK_LINES = HISTORY_LIMITS.scrollbackLines
 
 /**
  * Mirror of a pane's terminal, always at the PTY's size. It is what views start from (serialized)
@@ -23,6 +25,9 @@ const SCROLLBACK_LINES = 3000
 interface Screen {
   term: InstanceType<typeof headless.Terminal>
   serializer: InstanceType<typeof serialize.SerializeAddon>
+  history?: TerminalHistory
+  historyTimer?: NodeJS.Timeout
+  checkpoint?: Promise<void>
 }
 
 export const SUBMIT_LIMITS = {maxQueued:32,maxQueuedBytes:256*1024,maxMessageBytes:128*1024,queueTimeoutMs:5000,dispatchTimeoutMs:5000} as const
@@ -74,6 +79,7 @@ export interface PaneManagerEvents {
   exit: [pane: Pane]
   terminated: [paneId: number, epoch: string]
   receiptError: [error: unknown]
+  historyError: [paneId:number,error:unknown]
 }
 
 export interface SpawnInput {
@@ -99,11 +105,13 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   private readonly exits = new Map<number, Set<Promise<void>>>()
   /** Agents with a question for the person: they stay "waiting" until the person answers. */
   private readonly asking = new Set<number>()
+  private readonly historyRoot?: string
   private readonly shell: string
   private readonly command: (launch: AgentLaunch, shell: string) => PaneCommand
 
-  constructor(shell: string, command: (launch: AgentLaunch, shell: string) => PaneCommand = buildCommand) {
+  constructor(shell: string, command: (launch: AgentLaunch, shell: string) => PaneCommand = buildCommand, historyRoot?: string) {
     super()
+    this.historyRoot = historyRoot
     this.shell = shell
     this.command = command
   }
@@ -141,10 +149,13 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       exitCode: null,
       createdAt: Date.now(),
     }
+    const oldScreen=this.screens.get(id)
+    if(oldScreen)void this.checkpointScreen(id,oldScreen).finally(()=>oldScreen.term.dispose())
     const term = new headless.Terminal({ cols, rows, scrollback: SCROLLBACK_LINES, allowProposedApi: true })
     const serializer = new serialize.SerializeAddon()
     term.loadAddon(serializer)
     const screen: Screen = { term, serializer }
+    if (this.historyRoot && pane.executionEpoch) { try {screen.history=new TerminalHistory(this.historyRoot,id,pane.executionEpoch);pane.historyState='durable'}catch(error){pane.historyState='unavailable';this.emit('historyError',id,error)} }
     const live: LivePane = { pty: proc, idleTimer: null, hookDriven, queue: [], submitTimer: null, closing: false, terminationTimers: [], lastOutputAt: null }
     this.live.set(id, live)
     this.screens.set(id, screen)
@@ -164,7 +175,9 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     proc.onData((data) => {
       if (!current()) return
       live.lastOutputAt = Date.now()
+      try {screen.history?.append({type:'data',data})}catch(error){this.historyFailed(id,error)}
       screen.term.write(data)
+      this.scheduleCheckpoint(id,screen)
       this.emit('data', id, data)
       if (!live.hookDriven) this.markActive(id, live)
     })
@@ -181,6 +194,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
       if (!pending.size) this.exits.delete(id)
       stopped()
       if (!current()) return
+      void this.checkpointScreen(id,screen)
       this.live.delete(id)
       this.asking.delete(id)
       Object.assign(pane, { status: 'exited', attention: null, choices: null, pid: null, exitCode })
@@ -305,7 +319,9 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     const r = Math.floor(rows)
     if (c === screen.term.cols && r === screen.term.rows) return
     live.pty.resize(c, r)
+    try{screen.history?.append({type:'resize',cols:c,rows:r})}catch(error){this.historyFailed(id,error)}
     screen.term.resize(c, r)
+    this.scheduleCheckpoint(id,screen)
     this.emit('resized', id, c, r)
   }
 
@@ -333,9 +349,68 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     this.kill(id)
     this.live.delete(id)
     this.asking.delete(id)
-    this.screens.get(id)?.term.dispose()
+    const screen=this.screens.get(id)
+    if(screen?.historyTimer)clearTimeout(screen.historyTimer)
+    if(screen)void this.checkpointScreen(id,screen).finally(()=>screen.term.dispose())
     this.screens.delete(id)
     this.panes.delete(id)
+  }
+
+  private historyFailed(id:number,error:unknown):void {
+    const pane=this.panes.get(id)
+    if(pane?.historyState==='unavailable')return
+    if(pane){pane.historyState='unavailable';this.emit('status',{...pane},pane.status)}
+    this.emit('historyError',id,error)
+  }
+
+  private scheduleCheckpoint(id:number,screen:Screen):void {
+    if(!screen.history||screen.historyTimer)return
+    screen.historyTimer=setTimeout(()=>{screen.historyTimer=undefined;void this.checkpointScreen(id,screen)},HISTORY_LIMITS.checkpointMs)
+    screen.historyTimer.unref()
+  }
+
+  private checkpointScreen(id:number,screen:Screen):Promise<void> {
+    if(!screen.history)return Promise.resolve()
+    if(screen.checkpoint)return screen.checkpoint
+    if(screen.historyTimer){clearTimeout(screen.historyTimer);screen.historyTimer=undefined}
+    const sequence=screen.history.head
+    screen.checkpoint=new Promise<void>(resolve=>screen.term.write('',()=>{
+      try{screen.history!.checkpoint({sequence,data:screen.serializer.serialize({scrollback:SCROLLBACK_LINES}),cols:screen.term.cols,rows:screen.term.rows})}
+      catch(error){this.historyFailed(id,error)}
+      resolve()
+    })).finally(()=>{screen.checkpoint=undefined})
+    return screen.checkpoint
+  }
+
+  async flushHistory():Promise<void>{await Promise.all([...this.screens].map(([id,screen])=>this.checkpointScreen(id,screen)))}
+
+  historyEntries(id:number){return this.historyRoot?TerminalHistory.entries(this.historyRoot,id):[]}
+
+  async historyText(id:number,epoch:string):Promise<string>{
+    if(!this.historyRoot)throw new Error('Histórico indisponível')
+    const recovered=new TerminalHistory(this.historyRoot,id,epoch).recover()
+    const term=new headless.Terminal({cols:recovered.snapshot?.cols??100,rows:recovered.snapshot?.rows??30,scrollback:SCROLLBACK_LINES,allowProposedApi:true})
+    try{
+      if(recovered.snapshot)await new Promise<void>(resolve=>term.write(recovered.snapshot!.data,resolve))
+      for(const event of recovered.events){if(event.type==='data')await new Promise<void>(resolve=>term.write(event.data,resolve));else term.resize(event.cols,event.rows)}
+      const buffer=term.buffer.active
+      return Array.from({length:buffer.length},(_,y)=>buffer.getLine(y)?.translateToString(true)??'').join('\n').slice(-2*1024*1024)
+    }finally{term.dispose()}
+  }
+
+  /** Replay output only. Terminal device queries are discarded while there is no live PTY. */
+  restoreHistory(pane:Pane):void {
+    if(!this.historyRoot||!pane.executionEpoch||this.screens.has(pane.id))return
+    try{
+      const history=new TerminalHistory(this.historyRoot,pane.id,pane.executionEpoch)
+      const recovered=history.recover()
+      if(!recovered.snapshot&&!recovered.events.length)return
+      const term=new headless.Terminal({cols:recovered.snapshot?.cols??100,rows:recovered.snapshot?.rows??30,scrollback:SCROLLBACK_LINES,allowProposedApi:true})
+      const serializer=new serialize.SerializeAddon();term.loadAddon(serializer)
+      if(recovered.snapshot)term.write(recovered.snapshot.data)
+      for(const event of recovered.events){if(event.type==='data')term.write(event.data);else term.resize(event.cols,event.rows)}
+      this.screens.set(pane.id,{term,serializer,history});this.panes.set(pane.id,{...pane,historyState:'durable'})
+    }catch(error){this.historyFailed(pane.id,error)}
   }
 
   /**

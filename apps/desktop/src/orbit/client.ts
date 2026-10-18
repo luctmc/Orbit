@@ -3,6 +3,7 @@ import type { Account, AccountLimits, AccountStatus, Card, Catalog, CatalogItem,
 export interface OrbitState {
   /** Transport open alone does not make an empty inventory authoritative. */
   snapshotReady?: boolean
+  runtime?: {persistent:boolean;revision:string}
   startup?: import('@orbit/protocol').StartupTask[]
   connection: 'connecting' | 'open' | 'closed'
   workspaces: Workspace[]
@@ -371,7 +372,7 @@ export class OrbitClient {
       for (const answer of [...this.answers]) answer(message)
       return
     }
-    if (message.type === 'mission.created' || message.type === 'mission.create.error' || message.type.startsWith('account.reset.') || message.type === 'pane.spawned' || message.type === 'pane.spawn.error' || message.type.startsWith('mission.progress') || message.type.startsWith('attachment.') || message.type === 'pane.queue.cancelled' || message.type === 'pane.submitted' || message.type === 'pane.submit.error' || message.type === 'pane.conversation' || message.type.startsWith('files.') || message.type.startsWith('git.') || message.type.startsWith('report') || message.type === 'ledger') {
+    if (message.type === 'mission.created' || message.type === 'mission.create.error' || message.type.startsWith('account.reset.') || message.type === 'pane.spawned' || message.type === 'pane.spawn.error' || message.type.startsWith('mission.progress') || message.type.startsWith('attachment.') || message.type === 'pane.history' || message.type === 'pane.queue.cancelled' || message.type === 'pane.submitted' || message.type === 'pane.submit.error' || message.type === 'pane.conversation' || message.type.startsWith('files.') || message.type.startsWith('git.') || message.type.startsWith('report') || message.type === 'ledger') {
       for (const answer of [...this.answers]) answer(message)
       return
     }
@@ -437,6 +438,9 @@ export class OrbitClient {
       case 'settings.updated':
         this.update({ settings: message.settings })
         return
+      case 'engine.runtime':
+        this.update({runtime:{persistent:message.persistent,revision:message.revision}})
+        break
       case 'catalog':
         this.update({ catalog: message.catalog, accountCatalogs: message.accounts ?? {} })
         return

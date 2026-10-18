@@ -8,6 +8,7 @@ export function ExecutionConfig({ pane }: { pane: Pane }) {
   const config = pane.executionConfig
   return <details className="execution-config">
     <summary>Modelo e esforço · rastrear decisão</summary>
+    {pane.historyState && <p>{pane.historyState === 'durable' ? 'Histórico local persistente · até 16.000 linhas por execução.' : 'Histórico local indisponível nesta execução.'}</p>}
     <dl>
       <div><dt>Solicitado</dt><dd>{config ? `${config.decision.requested.cli ? CLI_LABEL[config.decision.requested.cli] : 'Roteamento automático'} · ${selection(config.decision.requested.model, config.decision.requested.effort)}` : 'Execução histórica sem recibo'}</dd></div>
       <div><dt>Resolvido</dt><dd>{config ? `${CLI_LABEL[config.decision.effective.cli]} · ${selection(config.decision.effective.model, config.decision.effective.effort)}` : selection(pane.model, pane.effort)}</dd></div>

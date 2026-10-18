@@ -59,7 +59,7 @@ export class CodexUsageReader {
           const t = p.info.total_token_usage
           if (!c.context) c.missingContext = true
           if (!['input_tokens', 'output_tokens', 'total_tokens', 'cached_input_tokens'].every(k => count(t[k])) || t.input_tokens + t.output_tokens !== t.total_tokens || t.cached_input_tokens > t.input_tokens || t.cache_write_input_tokens !== undefined && !count(t.cache_write_input_tokens)) { c.malformed = true; continue }
-          const report = fromCodexRollout(line)
+          const report = fromCodexRollout(line,stat.mtimeMs)
           if (c.report?.usage && report.usage && (['input', 'output', 'total', 'cacheRead'] as const).some(k => report.usage![k] < c!.report!.usage![k])) c.malformed = true
           // cache_write_input_tokens has serde(default) in the native protocol.
           if (report.observed) report.observed.cacheWrite = true

@@ -6,6 +6,7 @@ import { CLI_LABEL, costText, EFFORT_LABEL, pathText, STATUS, tokensText } from 
 import { CloseIcon, MoreIcon } from './icons.tsx'
 import { providerIdentity } from '../orbit/providerIdentity.ts'
 import { ProviderMark } from './ProviderMark.tsx'
+import { TerminalHistoryDialog } from './TerminalHistoryDialog.tsx'
 import { ExecutionConfig } from './ExecutionConfig.tsx'
 import { Conversation } from './Conversation.tsx'
 import { Terminal } from './LazyTerminal.tsx'
@@ -22,7 +23,7 @@ const HANDOFF_CHIP: Record<PaneHandoff, { label: string; tone: string; title: st
 }
 
 /** The agent's ⋯ menu: rename, resume or reopen, duplicate, copy its number, close. */
-function PaneMenu({ pane, onRename, onDelete, onClose, onSelect, onToggleView, chat, anchor }: { anchor: RefObject<HTMLButtonElement | null>; onSelect: () => void; onToggleView: () => void; chat: boolean; pane: Pane; onRename: () => void; onDelete: () => void; onClose: () => void }) {
+function PaneMenu({ pane, onRename, onDelete, onClose, onSelect, onToggleView, onHistory, chat, anchor }: { onHistory:()=>void; anchor: RefObject<HTMLButtonElement | null>; onSelect: () => void; onToggleView: () => void; chat: boolean; pane: Pane; onRename: () => void; onDelete: () => void; onClose: () => void }) {
   const client = useOrbitClient()
   const account = useOrbit().accounts.find(a => a.id === pane.accountId)
   const identity = providerIdentity(pane, account)
@@ -70,6 +71,7 @@ function PaneMenu({ pane, onRename, onDelete, onClose, onSelect, onToggleView, c
         <hr />
       </>}
       {pane.cli !== 'shell' && <button type="button" role="menuitem" onClick={act(onToggleView)}>{chat ? 'Ver terminal' : 'Ver conversa'}</button>}
+      <button type="button" role="menuitem" onClick={act(onHistory)}>Histórico das execuções…</button>
       <button type="button" role="menuitem" onClick={act(onRename)}>Renomear</button>
       {canResume && <button type="button" role="menuitem" onClick={act(() => client.send({ type: 'pane.restart', paneId: pane.id, resume: true }))}>{alive ? 'Reiniciar na mesma conversa' : 'Retomar conversa'}</button>}
       {pane.cli !== 'shell' && <button type="button" role="menuitem" onClick={act(() => client.send({ type: 'pane.restart', paneId: pane.id, resume: false }))}>{alive ? 'Reiniciar em conversa nova' : 'Reabrir em conversa nova'}</button>}
@@ -114,6 +116,7 @@ export function PaneView({ pane, selected, onSelect, suggestions = [], suggestio
   const menuButton = useRef<HTMLButtonElement>(null)
   const closeMenu = useCallback(() => { setMenu(false); menuButton.current?.focus() }, [])
   const [renaming, setRenaming] = useState(false)
+  const [historyOpen,setHistoryOpen]=useState(false)
   const [deleting, setDeleting] = useState(false)
 
   return (
@@ -130,7 +133,7 @@ export function PaneView({ pane, selected, onSelect, suggestions = [], suggestio
           <button ref={menuButton} type="button" className="icon-btn" aria-label={`Ações de #${pane.id}`} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>
             <MoreIcon size={15} />
           </button>
-          {menu && <PaneMenu pane={pane} onRename={() => setRenaming(true)} onDelete={() => setDeleting(true)} onClose={closeMenu} onSelect={() => { setChat(false); onSelect(); requestAnimationFrame(() => paneRef.current?.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')?.focus()) }} onToggleView={() => setChat(open => !open)} chat={chat} anchor={menuButton} />}
+          {menu && <PaneMenu onHistory={()=>setHistoryOpen(true)} pane={pane} onRename={() => setRenaming(true)} onDelete={() => setDeleting(true)} onClose={closeMenu} onSelect={() => { setChat(false); onSelect(); requestAnimationFrame(() => paneRef.current?.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')?.focus()) }} onToggleView={() => setChat(open => !open)} chat={chat} anchor={menuButton} />}
         </div>
         <button type="button" className="icon-btn" aria-label={alive ? `Encerrar agente ${pane.id}` : `Fechar agente ${pane.id}`} onClick={() => client.send({ type: 'pane.close', paneId: pane.id })}>
           <CloseIcon size={14} />
@@ -147,6 +150,7 @@ export function PaneView({ pane, selected, onSelect, suggestions = [], suggestio
           <button type="button" className="btn btn--sm btn--ghost" onClick={() => client.send({ type: 'pane.restart', paneId: pane.id, resume: false })}>Conversa nova</button>
         </div>
       )}
+      {historyOpen && <TerminalHistoryDialog pane={pane} onClose={()=>setHistoryOpen(false)} />}
       {deleting && <DeleteAgentDialog pane={pane} onClose={() => setDeleting(false)} />}
     </section>
   )

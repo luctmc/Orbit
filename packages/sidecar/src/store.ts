@@ -153,6 +153,7 @@ export class Store {
       pane.branch ??= null
       pane.usage ??= null
       pane.contextPercent = null
+      if(pane.contextUsage)pane.contextUsage={kind:'unavailable',usedTokens:null,capacityTokens:null,percent:null,categories:[],source:'runtime-restarted',observedAt:Date.now()}
       if (pane.status !== 'exited') {
         this.wasRunning.push(pane.id)
         Object.assign(pane, { status: 'exited', pid: null })

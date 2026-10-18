@@ -199,7 +199,9 @@ export class OrbitCore {
     this.browser.on('closed', (missionId) => this.broadcast({ type: 'browser.closed', missionId }))
     this.browser.on('frame', (missionId, data, width, height) => this.broadcast({ type: 'browser.frame', missionId, data, width, height }))
     removeAgentFiles(join(dataDir, 'panes'))
-    this.panes = new PaneManager(shell, agentCommand)
+    this.panes = new PaneManager(shell, agentCommand, join(dataDir,'terminal-history'))
+    this.panes.on('historyError',(id,error)=>this.broadcast({type:'error',message:`Histórico de #${id} indisponível: ${error instanceof Error ? error.message : String(error)}`}))
+    for(const pane of this.store.snapshot().panes)this.panes.restoreHistory(pane)
     this.panes.on('terminated', (id, epoch) => this.store.releaseExecution(id, epoch))
     this.panes.on('receiptError', () => { /* Keep the persisted notice pending for a later dispatch. */ })
     this.deliveryTimer = setInterval(() => this.dispatchDeliveries(), 2000)
@@ -1326,6 +1328,10 @@ export class OrbitCore {
   }
 
   /** A pane's screen for a view that just mounted (see the server's attach handling). */
+  refuseNewExecutions():void {this.stopping=true}
+
+  liveTerminalCount():number {return this.store.snapshot().panes.filter(p=>this.panes.isAlive(p.id)).length}
+
   paneSnapshot(paneId: number): Promise<PaneSnapshot | null> {
     return this.panes.snapshot(paneId)
   }
@@ -1672,6 +1678,15 @@ export class OrbitCore {
         reply({ type: 'pane.conversation', paneId: pane.id, turns: this.conversationOf(pane).slice(-60).map((t) => ({ ...t, text: t.text.slice(0, 12_000) })) })
         return
       }
+      case 'pane.history.get': return (async()=>{
+        try {
+          if(!this.store.pane(message.paneId))throw new Error('Agente inexistente')
+          await this.panes.flushHistory()
+          const entries=this.panes.historyEntries(message.paneId)
+          if(message.epoch&&!entries.some(entry=>entry.epoch===message.epoch))throw new Error('Execução fora do histórico deste pane')
+          reply({type:'pane.history',paneId:message.paneId,requestId:message.requestId,entries,...(message.epoch?{text:await this.panes.historyText(message.paneId,message.epoch)}:{})})
+        }catch(error){reply({type:'pane.history',paneId:message.paneId,requestId:message.requestId,entries:[],error:error instanceof Error?error.message:String(error)})}
+      })()
       case 'pane.queue.cancel': {
         const pane=this.store.pane(message.paneId)
         if (!pane) throw new Error('Agente inexistente')
@@ -2092,6 +2107,8 @@ export class OrbitCore {
   /** When Orbit opens: the agents that were running come back in their conversations. */
   async resumeCrews(): Promise<void> {
     if (!this.store.settings().resumeOnStart) return
+    // Recovery must validate the account catalog before restoring explicit model/effort flags.
+    if (this.store.wasRunning.length) await this.refreshCatalog()
     const ids = this.store.wasRunning.splice(0)
     const panes = ids.map((id) => this.store.pane(id)).filter((p): p is Pane => Boolean(p && p.cli !== 'shell' && p.sessionId && this.store.paneSpec(p.id) && this.store.mission(p.missionId)?.status === 'active'))
     // Leads first, so helpers that deliver find them running.
@@ -2652,6 +2669,7 @@ export class OrbitCore {
     this.store.flush()
     this.shutdownTask = this.panes.waitForExit()
     await this.shutdownTask
+    await this.panes.flushHistory()
     // Exit listeners can schedule a final metadata save. Flush it before another Store opens
     // this directory, so an old debounce cannot overwrite the recovered state.
     this.store.flush()
