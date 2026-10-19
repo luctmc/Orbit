@@ -178,6 +178,12 @@ export class AccountFiles {
     if (account.cli === 'gemini' && account.kind === 'api' && this.hasKey(account)) env.GEMINI_API_KEY = readFileSync(this.keyPath(account), 'utf8').trim()
     if (account.cli === 'claude' && account.kind === 'api') {
       if (account.baseUrl) env.ANTHROPIC_BASE_URL = account.baseUrl
+      if (account.baseUrl === 'https://openrouter.ai/api') {
+        env.ANTHROPIC_API_KEY = ''
+        env.ANTHROPIC_AUTH_TOKEN = ''
+        // Bearer authentication is required by OpenRouter; only this isolated child receives it.
+        if (this.hasKey(account)) env.ANTHROPIC_AUTH_TOKEN = readFileSync(this.keyPath(account), 'utf8').trim()
+      }
       if (account.model) {
         env.ANTHROPIC_MODEL = account.model
         // Claude Code's aliases and background calls go to the provider's model too.
@@ -187,14 +193,14 @@ export class AccountFiles {
     return env
   }
 
-  /** Claude API accounts read the key through `apiKeyHelper`, so it never sits in the environment. */
+  /** Native API accounts use apiKeyHelper; OpenRouter requires an isolated bearer environment. */
   apiKeyHelper(account: Account): string | undefined {
-    return account.cli === 'claude' && account.kind === 'api' ? `cat ${shellQuote(this.keyPath(account))}` : undefined
+    return account.cli === 'claude' && account.kind === 'api' && account.baseUrl !== 'https://openrouter.ai/api' ? `cat ${shellQuote(this.keyPath(account))}` : undefined
   }
 
   /** `VAR='…' ` prefix for running the CLI as this account in a shell command. */
   envPrefix(account: Account): string {
-    return Object.entries(this.env(account)).map(([k, v]) => `${k}=${shellQuote(v)} `).join('')
+    return Object.entries(this.env(account)).map(([k, v]) => k === 'ANTHROPIC_AUTH_TOKEN' ? `${k}=\"$(cat ${shellQuote(this.keyPath(account))})\" ` : `${k}=${shellQuote(v)} `).join('')
   }
 
   /** Logs a Codex API account in with its key, read from the file (never on the command line). */

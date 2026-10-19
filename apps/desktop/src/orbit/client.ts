@@ -39,6 +39,7 @@ export interface OrbitState {
   cards: Card[]
   templates: MissionTemplate[]
   schedules: Schedule[]
+  providerSetups?: Array<Extract<ServerMessage, { type: 'provider.setup.result' }>>
   lastError: string | null
 }
 
@@ -368,7 +369,12 @@ export class OrbitClient {
   }
 
   private receive(message: ServerMessage): void {
-    if (message.type === 'mission.checked' || message.type === 'workspace.saved' || message.type === 'workspace.error') {
+    if (message.type === 'provider.setup.result') {
+      this.update({ providerSetups: upsert(this.state.providerSetups ?? [], message, item => item.provider) })
+      for (const answer of [...this.answers]) answer(message)
+      return
+    }
+    if ( message.type === 'account.catalog.result' || message.type === 'mission.checked' || message.type === 'workspace.saved' || message.type === 'workspace.error') {
       for (const answer of [...this.answers]) answer(message)
       return
     }
@@ -418,7 +424,7 @@ export class OrbitClient {
         this.update({ panes: upsert(this.state.panes, message.pane, (p) => p.id) })
         return
       case 'pane.removed':
-        this.update({ panes: this.state.panes.filter((p) => p.id !== message.paneId) })
+        this.update({ panes: this.state.panes.filter((p) => p.id !== message.paneId), providerSetups: this.state.providerSetups?.filter(s => s.paneId !== message.paneId) })
         return
       case 'event.added':
         this.update({ events: [...this.state.events, message.event] })

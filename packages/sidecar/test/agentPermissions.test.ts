@@ -35,7 +35,7 @@ test('WebSocket and real PTYs write/execute on legacy recovery, retaining sessio
   writeFileSync(join(root,'codex'), `#!${process.execPath}\nconst fs=require('node:fs'); const cp=require('node:child_process'); const a=process.argv.slice(2);if(a[0]==='mcp'){console.log(JSON.stringify([{name:'orbit',enabled:true}]));process.exit(0)}if(!a.includes('--dangerously-bypass-approvals-and-sandbox')){console.log('CAPABILITY_DENIED');process.exit(13)}fs.writeFileSync('write-proof.txt','writable');cp.execFileSync(process.execPath,['-e',"require('node:fs').writeFileSync('exec-proof.txt','executed')"]);console.log('CAPABILITY_OK '+JSON.stringify({resume:a.includes('resume'),session:a.includes('${session}'),legacy:a.some(x=>x==='read-only'),upgrade:a.some(x=>x.includes('earlier Orbit read-only')),replayed:a.some(x=>x.includes('ORIGINAL_ASSIGNMENT'))}));process.stdin.resume();\n`,{mode:0o700})
   const launches:AgentLaunch[]=[]
   const start=async()=>{
-    const server=await startServer({port:0,token:TOKEN,allowedOrigins:[ORIGIN],dataDir,shell:'/bin/sh',run:offline,simulatedCatalog:CATALOG_FIXTURE,browser:null,
+    const server=await startServer({port:0,token:TOKEN,allowedOrigins:[ORIGIN],dataDir,shell:'/bin/sh',run: async command => command.endsWith('codex login status') ? { code: 0, stdout: 'Logged in using ChatGPT', stderr: '' } : offline(),simulatedCatalog:CATALOG_FIXTURE,browser:null,
       agentCommand:launch=>{launches.push(launch);return buildCommand({...launch,binDir:root},'/bin/sh')}})
     await server.initialized;seedCatalog(server.core);server.core.store.saveAccount({...server.core.store.account('codex')!,id:'codex-2',builtin:false,name:'Fixture account 2'});return server
   }
@@ -72,7 +72,7 @@ test('WebSocket and real PTYs write/execute on legacy recovery, retaining sessio
 
 test('all mission roles and legacy requests launch writable while keeping assignment scheduling distinct', async () => {
   const launches: AgentLaunch[] = []
-  const server = await startServer({port:0,token:'test-permissions-token',allowedOrigins:[],dataDir:mkdtempSync(join(tmpdir(),'orbit-permissions-')),shell:'/bin/sh',run:offline,simulatedCatalog:CATALOG_FIXTURE,browser:null,
+  const server = await startServer({port:0,token:'test-permissions-token',allowedOrigins:[],dataDir:mkdtempSync(join(tmpdir(),'orbit-permissions-')),shell:'/bin/sh',run: async command => command.endsWith('codex login status') ? { code: 0, stdout: 'Logged in using ChatGPT', stderr: '' } : offline(),simulatedCatalog:CATALOG_FIXTURE,browser:null,
     agentCommand:launch => { launches.push(launch); return {file:'/bin/sh',args:['-c','exec /bin/sh']} }})
   await server.initialized; seedCatalog(server.core)
   try {

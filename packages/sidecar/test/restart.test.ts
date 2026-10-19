@@ -34,7 +34,7 @@ test('agents are renamed, duplicated, reopened, and resumed even after Orbit res
     return { file: shell, args: ['-c', `exec ${shell}`] }
   }
   const start = async () => {
-    const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline, agentCommand: fake, simulatedCatalog: CATALOG_FIXTURE, browser: null })
+    const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: async command => command.endsWith('claude auth status') ? { code: 0, stdout: JSON.stringify({ loggedIn: true, authMethod: 'fixture' }), stderr: '' } : command.endsWith('codex login status') ? { code: 0, stdout: 'Logged in using ChatGPT', stderr: '' } : offline(), agentCommand: fake, simulatedCatalog: CATALOG_FIXTURE, browser: null })
   await server.initialized
   seedCatalog(server.core)
     // PTY data is a stream. Force short frames so token lookup must survive chunk boundaries.

@@ -94,6 +94,13 @@ test('Gemini agents run with a known conversation and Orbit rules through their 
     assert.deepEqual(mission.allowedClis, ['claude', 'gemini'])
     const { pane: lead } = await ui.next('pane.updated', (m) => m.pane.role === 'lead')
 
+    // A disconnected explicit account is refused without replacement; then provide synthetic login.
+    const beforeGemini = launches.length
+    ui.send({ type: 'pane.spawn', requestId: 'disconnected-gemini', request: { missionId: mission.id, role: 'crew', cli: 'gemini', model: 'flash', title: 'Unavailable', accountId: 'gemini' } })
+    assert.match((await ui.next('pane.spawn.error', m => m.requestId === 'disconnected-gemini')).message, /não está conectada/)
+    assert.equal(launches.length, beforeGemini)
+    const status = (server.core as any).accountStatus.get('gemini')
+    ;(server.core as any).accountStatus.set('gemini', { ...status, loggedIn: true })
     // A Gemini helper, chosen by hand; its conversation id arrives with its first hook.
     ui.send({ type: 'pane.spawn', request: { missionId: mission.id, role: 'crew', cli: 'gemini', model: 'flash', title: 'Gêmeo', task: 'Revise o README', accountId: 'gemini' } })
     const { pane: helper } = await ui.next('pane.updated', (m) => m.pane.cli === 'gemini')

@@ -1,21 +1,22 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { OrbitCore } from '../src/core.ts'
 import { helperRequestHash } from '../src/activityLedger.ts'
 import { offline, seedRoutingQuota } from './helpers.ts'
 
-async function fixture(leadCli: 'shell' | 'codex' = 'shell') {
+async function fixture(leadCli: 'shell' | 'codex' = 'shell', mode: 'livre' | 'agentica' | 'squad' = 'livre', translate?: import('../src/inputLanguage.ts').Translate) {
   const root = mkdtempSync(join(tmpdir(), 'orbit-account-delegation-'))
-  const core = new OrbitCore({ dataDir: join(root, 'data'), shell: '/bin/sh', browser: null, broadcast: () => {}, run: offline,
-    agentCommand: () => ({ file: '/bin/sh', args: ['-c', 'while read line; do :; done'] }) })
+  const launches: import('../src/command.ts').AgentLaunch[] = []
+  const core = new OrbitCore({ dataDir: join(root, 'data'), shell: '/bin/sh', browser: null, broadcast: () => {}, run: offline, translate,
+    agentCommand: launch => { launches.push(launch); return { file: '/bin/sh', args: ['-c', 'while read line; do :; done'] } } })
   core.setEndpoint('http://127.0.0.1:1')
   await core.handle({ type: 'workspace.open', path: root })
-  await core.handle({ type: 'mission.create', workspaceId: core.store.snapshot().workspaces[0]!.id, title: 'Accounts', objective: '', mode: 'livre', lead: { cli: leadCli, accountId: leadCli === 'codex' ? 'codex' : null, model: null, title: 'Lead' } })
+  await core.handle({ type: 'mission.create', workspaceId: core.store.snapshot().workspaces[0]!.id, title: 'Accounts', objective: '', mode, ...(mode === 'squad' ? { squadId: 'caca-bugs' } : {}), lead: { cli: leadCli, accountId: leadCli === 'codex' ? 'codex' : null, model: null, title: 'Lead' } })
   await seedRoutingQuota(core)
-  return { core, lead: core.store.snapshot().panes.find(p => p.role === 'lead')! }
+  return { core, root, launches, lead: core.store.snapshot().panes.find(p => p.role === 'lead')! }
 }
 const input = { title: 'Inspect file', task: 'Read a synthetic file', model: null, activityId: 'T2' }
 
@@ -144,4 +145,100 @@ test('only accepted independent verification closes exact worker and retains res
     assert.equal(typeof await state.panes.historyText(pane.id, pane.executionEpoch!), 'string')
     assert.equal(state.panes.isAlive(lead.id), true, 'coordinator remains available')
   } finally { await core.shutdown() }
+})
+
+
+for (const mode of ['livre', 'agentica', 'squad'] as const) test(`new work default in ${mode} across separate projects forwards translation and attachments once`, async () => {
+  let translations = 0
+  const f = await fixture('codex', mode, async () => { translations++; return 'Read the attached synthetic file' })
+  try {
+    const answers: any[] = []
+    await f.core.handle({ type: 'attachment.add', paneId: f.lead.id, requestId: 'upload', name: 'synthetic.txt', mime: 'text/plain', data: Buffer.from('synthetic').toString('base64') }, m => answers.push(m))
+    const attachment = answers[0].attachment
+    const message = { type: 'pane.submit' as const, paneId: f.lead.id, text: 'Leia o arquivo anexo', translationAccountId: 'codex', requestId: 'same-user-id-across-projects', attachments: [attachment.id] }
+    await f.core.handle(message, m => answers.push(m))
+    assert.equal(answers[1].type, 'pane.submitted', JSON.stringify(answers[1]))
+    assert.notEqual(answers[1].paneId, f.lead.id)
+    const task = readFileSync(f.launches.at(-1)!.taskPath!, 'utf8')
+    assert.match(task, /^Read the attached synthetic file/)
+    assert.equal(task.split(attachment.path).length - 1, 1)
+    assert.equal(f.core.store.pane(answers[1].paneId)!.accountId, 'codex')
+    const count = f.launches.length
+    await f.core.handle(message, m => answers.push(m))
+    assert.equal(f.launches.length, count)
+    assert.equal(translations, 1)
+    assert.deepEqual(answers[2], answers[1])
+  } finally { await f.core.shutdown() }
+})
+
+test('recovery joins only selected status check, serializes restart and preserves rejected login attempts', async () => {
+  const f = await fixture()
+  try {
+    const { pane } = await f.core.spawnHelper(f.lead, { ...input, cli: 'codex', accountId: 'codex' })
+    f.core.hookReport(pane.id, { hook_event_name: 'SessionStart', session_id: '12345678-1234-1234-1234-123456789abc' })
+    const state = f.core as any
+    state.panes.report(pane.id, 'idle', null)
+    const deferred = new Map<string, (value: any) => void>()
+    state.accountFiles.check = (_run: any, account: any) => new Promise(resolve => deferred.set(account.id, resolve))
+    const selected = f.core.checkAccount('codex'), unrelated = f.core.checkAccount('claude')
+    const count = f.launches.length
+    const recovering = f.core.resumeHelper(f.lead, pane.id, 'Continue the synthetic task')
+    await assert.rejects(f.core.resumeHelper(f.lead, pane.id, 'Do not duplicate'), /já está retomando/)
+    assert.equal(f.launches.length, count)
+    deferred.get('codex')!({ loggedIn: true })
+    await selected
+    const resumed = await recovering
+    assert.equal(f.launches.length, count + 1)
+    assert.notEqual(resumed.executionEpoch, pane.executionEpoch)
+    assert.equal(resumed.sessionId, '12345678-1234-1234-1234-123456789abc')
+    assert.ok(deferred.has('claude'), 'other account did not block selected recovery')
+    deferred.get('claude')!({ loggedIn: true }); await unrelated
+    state.panes.report(pane.id, 'idle', null)
+    state.accountStatus.set('codex', { ...state.accountStatus.get('codex'), busy: 'login' })
+    await assert.rejects(f.core.resumeHelper(f.lead, pane.id, 'Do not replace login'), /ocupada/)
+    assert.equal(f.core.store.pane(pane.id)!.executionEpoch, resumed.executionEpoch)
+    assert.equal(state.panes.isAlive(pane.id), true)
+    state.accountStatus.set('codex', { ...state.accountStatus.get('codex'), busy: null, loggedIn: false })
+    await assert.rejects(f.core.resumeHelper(f.lead, pane.id, 'Do not replace disconnected'), /não está conectada/)
+    assert.equal(f.core.store.pane(pane.id)!.sessionId, resumed.sessionId)
+    assert.equal(f.launches.length, count + 1)
+  } finally { await f.core.shutdown() }
+})
+
+test('stale status response cannot authenticate a changed or deleted account', async () => {
+  const f = await fixture()
+  try {
+    const state = f.core as any
+    const original = f.core.store.account('codex')!
+    const account = { ...original, id: 'synthetic-extra', name: 'Before', builtin: false }
+    f.core.store.saveAccount(account)
+    let release!: (value: any) => void
+    state.accountFiles.check = () => new Promise(resolve => { release = resolve })
+    const checking = f.core.checkAccount(account.id)
+    f.core.store.saveAccount({ ...account, model: 'changed-model' })
+    release({ loggedIn: true, email: 'old-fixture@example.invalid' }); await checking
+    assert.equal(state.accountStatus.get(account.id).loggedIn, null)
+    assert.equal(state.accountStatus.get(account.id).email, null)
+    const deleted = f.core.checkAccount(account.id)
+    f.core.store.deleteAccount(account.id)
+    state.accountStatus.delete(account.id)
+    release({ loggedIn: true }); await deleted
+    assert.equal(state.accountStatus.has(account.id), false)
+  } finally { await f.core.shutdown() }
+})
+
+test('old acceptance never closes a resumed execution', async () => {
+  const f = await fixture()
+  try {
+    const { pane } = await f.core.spawnHelper(f.lead, { ...input, cli: 'codex', accountId: 'codex' })
+    f.core.hookReport(pane.id, { hook_event_name: 'SessionStart', session_id: '12345678-1234-1234-1234-123456789abc' })
+    const delivery = f.core.handoff(f.core.store.pane(pane.id)!, { summary: 'Synthetic first execution', evidence: 'Synthetic observation' })
+    const inspection = f.core.inspectResult(f.lead, delivery.resultId)
+    ;(f.core as any).panes.report(pane.id, 'idle', null)
+    const resumed = await f.core.resumeHelper(f.lead, pane.id, 'Continue with a new verification step')
+    try { f.core.verifyResult(f.lead, { inspectionId: inspection.id, verdict: 'accepted', summary: 'Old snapshot', checks: [{ command: 'synthetic observation', exitCode: 0, summary: 'Old execution observed' }], criteria: [] }) } catch (error) { assert.match(String(error), /atual|tentativa|revisão|contrat|integração/i) }
+    await new Promise(r => setTimeout(r, 50))
+    assert.equal(f.core.store.pane(pane.id)!.executionEpoch, resumed.executionEpoch)
+    assert.equal((f.core as any).panes.isAlive(pane.id), true)
+  } finally { await f.core.shutdown() }
 })

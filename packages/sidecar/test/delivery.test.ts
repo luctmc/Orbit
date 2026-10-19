@@ -91,10 +91,10 @@ test('helpers always report back: forced handoff, structured status, interrupt, 
 
     // A Claude helper ends its turn without delivering: asked once, then Orbit delivers for it.
     const opened = await asLead('agent_spawn', { title: 'Banco', task: 'Crie a tabela de clientes', agent: 'claude' })
-    const helperId = Number(/#(\d+) Banco/.exec(opened.text)![1])
+    let helperId = Number(/#(\d+) Banco/.exec(opened.text)![1])
     assert.equal(pane(helperId).assignedBy, lead.id)
-    const helperToken = await tokenOf(helperId)
-    const asHelper = await mcpAs(helperToken)
+    let helperToken = await tokenOf(helperId)
+    let asHelper = await mcpAs(helperToken)
     const blocked = await hook(helperToken, { hook_event_name: 'Stop', stop_hook_active: false })
     assert.equal(blocked.decision, 'block')
     assert.match(blocked.reason, /handoff_submit/)
@@ -130,6 +130,12 @@ test('helpers always report back: forced handoff, structured status, interrupt, 
     const ready = (await ui.next('mission.updated', (m) => m.mission.id === mission.id && m.mission.readyAt !== null)).mission
     assert.equal(ready.readySummary, `Cadastro feito por #${helperId}`)
     await ui.next('event.added', (m) => m.event.kind === 'mission.ready')
+
+    // The independently accepted execution closes; later work must use a fresh visible CLI.
+    await ui.next('pane.updated', m => m.pane.id === helperId && m.pane.status === 'exited')
+    helperId = Number(/#(\d+) Banco/.exec((await asLead('agent_spawn', { title: 'Banco', task: 'Prepare a new synthetic table handoff', agent: 'claude' })).text)![1])
+    helperToken = await tokenOf(helperId)
+    asHelper = await mcpAs(helperToken)
 
     // New work after "ready" reopens the mission. A handoff can go to another agent, who then owes one.
     const reviewerId = Number(/#(\d+) Revisor/.exec((await asLead('agent_spawn', { title: 'Revisor', task: 'Revise o que #N mandar', agent: 'codex', readOnly: true })).text)![1])

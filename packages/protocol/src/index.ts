@@ -1050,6 +1050,8 @@ export type ClientMessage =
   /** Ask each CLI about its accounts' logins again. */
   | { type: 'account.reset'; accountId: string; requestId: string; creditId: string; confirmed: true }
   | { type: 'account.check' }
+  | { type: 'provider.setup'; provider: 'antigravity' | 'grok' | 'opencode' | 'hermes'; action: 'install' | 'connect'; requestId: string }
+  | { type: 'account.catalog.refresh'; accountId: string; requestId: string }
   | { type: 'limits.refresh' }
   /** Opens a terminal running the CLI's login for this account. */
   | { type: 'account.login'; accountId: string }
@@ -1077,6 +1079,8 @@ export interface StartupTask {
 }
 
 export type ServerMessage =
+  | { type: 'provider.setup.result'; requestId: string; provider: string; phase: 'running' | 'succeeded' | 'failed'; paneId?: number; message: string }
+  | { type: 'account.catalog.result'; requestId: string; accountId: string; ok: boolean; message: string; catalog?: CliCatalog }
   | { type: 'mission.checked'; requestId: string; state: 'missing' | 'pending' | 'failed' | 'acked'; message: string; missionId?: string }
   | { type: 'workspace.saved'; requestId: string; workspace: Workspace }
   | { type: 'workspace.error'; requestId: string; message: string }
