@@ -40,6 +40,7 @@ const agentView = (p: Pane) => ({
   agent: p.cli,
   toolProfile: p.toolProfile ?? 'inherit',
   model: p.model,
+  accountId: p.accountId,
   status: p.status,
   attention: p.attention,
   delivered: p.deliveredAt !== null,
@@ -49,13 +50,14 @@ const agentView = (p: Pane) => ({
 })
 
 const ACCEPT = z.array(z.string().min(1).max(300)).max(8).optional().describe('Acceptance criteria: what must hold for the delivery to count. The helper can only deliver done by answering each one')
+const ACCOUNT_FIELD = z.string().min(1).max(160).optional().describe('Exact account id from accounts_status (for example codex for this Mac). Pins the account and its CLI without fallback; omit for automatic selection.')
 const ADMISSION_FIELDS = {
   dependsOn: z.array(z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/)).max(16).optional().describe('Existing activity ids with accepted results required before launch. For a review of an unaccepted result, put its resultId in task instead: depending on its own acceptance creates a cycle. Refused requests are not queued. New prerequisite results/revisions invalidate downstream acceptance.'),
   requireReadOnlySandbox: z.boolean().optional().describe('Legacy compatibility field: requests inspection scope; never changes the default writable process permissions or provider.'),
   readOnly: z.boolean().optional().describe('Describe inspection-only assignment scope. Native file and command capabilities remain enabled by the default Orbit policy.'),
 }
 
-type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: AgentCliForRole; model?: string; effort?: Effort; accept?: string[]; folder?: string; difficulty?: Difficulty; retryReason?: string; activityId?: string; dependsOn?: string[]; requireReadOnlySandbox?: boolean; readOnly?: boolean }
+type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: AgentCliForRole; accountId?: string; model?: string; effort?: Effort; accept?: string[]; folder?: string; difficulty?: Difficulty; retryReason?: string; activityId?: string; dependsOn?: string[]; requireReadOnlySandbox?: boolean; readOnly?: boolean }
 
 /** In a workspace with several folders, a helper can start in the one its work is in. */
 function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
@@ -65,7 +67,7 @@ function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
 
 /** Opens a helper and returns its line of the reply: number, title and the receipt. */
 async function openHelper(core: OrbitCore, caller: Pane, h: HelperInput): Promise<string> {
-  const { pane, receipt } = await core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null, difficulty: h.difficulty ?? null, retryReason: h.retryReason, activityId: h.activityId, dependsOn: h.dependsOn, requireReadOnlySandbox: h.requireReadOnlySandbox, readOnly: h.readOnly })
+  const { pane, receipt } = await core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, accountId: h.accountId, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null, difficulty: h.difficulty ?? null, retryReason: h.retryReason, activityId: h.activityId, dependsOn: h.dependsOn, requireReadOnlySandbox: h.requireReadOnlySandbox, readOnly: h.readOnly })
   return `#${pane.id} ${pane.title}\n${receipt.map((line) => `  ▸ ${line}`).join('\n')}`
 }
 
@@ -182,6 +184,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       agent: z.enum(AGENT_CLIS as unknown as [AgentCliForRole, ...AgentCliForRole[]]).optional().describe(agentic ? 'Only if the user asked for a specific CLI; otherwise Orbit picks from the table and the load' : 'Which CLI to use without a role or kind (default: claude)'),
       model: z.string().regex(MODEL_ID).optional().describe('Only if the user asked for a specific model'),
       effort: z.enum(EFFORTS as [Effort, ...Effort[]]).optional().describe('Only if the user asked. Claude: low…max; Codex: depends on the model (low to ultra)'),
+      accountId: ACCOUNT_FIELD,
       accept: ACCEPT,
       difficulty: z.enum(['simples', 'normal', 'dificil']).optional().describe('simples (small and obvious) goes to the CLI\'s cheaper model; dificil (long reasoning, many files, unknown cause) to the stronger one or more effort; default: inferred locally from scope and risk'),
       activityId: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/).optional().describe('Stable activity id, e.g. T12 from the board. Reuse it across paraphrases and retries to prevent duplicate work.'),
@@ -192,7 +195,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     const open = (h: HelperInput) => openHelper(core, caller, h)
 
     server.registerTool('agent_spawn', {
-      description: 'Opens a helper in a terminal the user sees, already with its task. Orbit picks the CLI, model, effort and the account with the most room from the kind of work and the load on each CLI, and returns a receipt saying what it chose and why. The helper delivers with handoff_submit, and the result reaches your terminal on its own as "[Orbit] Retorno de #N": after delegating, end your turn and wait.',
+      description: 'Opens a helper in a terminal the user sees, already with its task. An explicit accountId pins the account; otherwise Orbit picks the CLI, model, effort and the account with the most room from the kind of work and the load on each CLI, and returns a receipt saying what it chose and why. The helper delivers with handoff_submit, and the result reaches your terminal on its own as "[Orbit] Retorno de #N": after delegating, end your turn and wait.',
       inputSchema: helperFields,
     }, guarded(async (h: HelperInput) => `Aberto:\n${await open(h)}\n\nAgora encerre o turno: o retorno chega sozinho.`))
 
@@ -341,6 +344,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
         title: z.string().max(120).optional(),
         task: z.string().min(1).max(20000).describe('The part of the task, self-contained: context, files, what to deliver, how to verify it'),
         kind: z.enum(kinds.map((t) => t.id) as [string, ...string[]]).optional().describe(`Kind of work (${kinds.map((t) => t.id).join(', ')}); without it Orbit classifies`),
+        accountId: ACCOUNT_FIELD,
         accept: ACCEPT,
         activityId: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/).optional().describe('Stable activity id, e.g. T12 from the board. Reuse it across paraphrases and retries to prevent duplicate work.'),
         retryReason: z.string().min(1).max(600).optional().describe('Concrete reason for repeating an existing activity'),

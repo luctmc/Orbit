@@ -187,6 +187,7 @@ export function AccountSelect({ id, cli, value, onChange }: { id: string; cli: A
     const windows = l ? [l.fiveHour, l.weekly].map(w => limitWindowView(w, l, now)) : []
     const known = windows.filter(w => w.used !== null)
     const used = known.length ? Math.max(...known.map(w => w.used!)) : null
+    if (status?.busy) return ' — verificando ou entrando'
     if (status?.loggedIn === false) return ' — não logada'
     return used === null ? ' — limite não confirmado' : ` — ${Math.round(used)}% usado${l?.refreshError ? ' (falha ao atualizar)' : ''}`
   }
@@ -196,8 +197,9 @@ export function AccountSelect({ id, cli, value, onChange }: { id: string; cli: A
       <select id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}>
         <option value="">Automática (a com mais folga)</option>
         {value && !mine.some(a => a.id === value) && <option value={value}>Conta removida ou indisponível — escolha outra</option>}
-        {mine.map((a) => <option key={a.id} value={a.id}>{accountLabel(a, a.cli)}{a.builtin ? ' (deste Mac)' : a.kind === 'api' ? ' (chave de API)' : ''}{describe(a.id)}</option>)}
+        {mine.map((a) => <option key={a.id} value={a.id} disabled={!!accountStatuses.find(s => s.accountId === a.id)?.busy || accountStatuses.find(s => s.accountId === a.id)?.loggedIn === false || (a.kind === 'api' && !a.keyHint)}>{accountLabel(a, a.cli)}{a.builtin ? ' (deste Mac)' : a.kind === 'api' ? ' (chave de API)' : ''}{describe(a.id)}</option>)}
       </select>
+      <p className="note">A conta escolhida será usada sem substituição. Contas fora da seleção automática também podem ser escolhidas aqui.</p>
     </div>
   )
 }

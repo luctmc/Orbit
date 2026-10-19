@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { startServer } from '../src/server.ts'
-import { connect, ORIGIN, TOKEN, offline } from './helpers.ts'
+import { connect, ORIGIN, TOKEN, offline, seedRoutingQuota } from './helpers.ts'
 import type { AgentLaunch } from '../src/command.ts'
 import type { EventEmitter } from 'node:events'
 
@@ -226,4 +226,42 @@ test('authenticated finalization accepts only the lead final integration review 
     assert.equal(updated.mission.readySummary, complete.completion.summary)
     await ui.next('event.added', m => m.event.id === complete.completion.eventId && m.event.kind === 'mission.ready')
   } finally { for (const client of clients) await client.close(); ui.ws.close(); await server.close() }
+})
+
+
+test('MCP single, batch and sub-helper dispatch retain exact account without fallback', async () => {
+  const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir: mkdtempSync(join(tmpdir(), 'orbit-account-mcp-')), shell: '/bin/sh', run: offline, browser: null,
+    agentCommand: () => ({ file: '/bin/sh', args: ['-c', 'while read line; do :; done'] }) })
+  const clients: Client[] = []
+  try {
+    await server.initialized
+    await server.core.handle({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-account-ws-'))) })
+    await server.core.handle({ type: 'mission.create', allowOriginal: true, workspaceId: server.core.store.snapshot().workspaces[0]!.id, title: 'Accounts', objective: '', mode: 'agentica', lead: { cli: 'shell', model: null, title: 'Lead' } })
+    await seedRoutingQuota(server.core)
+    const lead = server.core.store.snapshot().panes.find(p => p.role === 'lead')!
+    const connectPane = async (id: number) => {
+      const token = [...(server.core as unknown as { paneTokens: Map<string, number> }).paneTokens].find(([, pane]) => pane === id)![0]
+      const client = await mcpClient(server.port, token); clients.push(client); return client
+    }
+    const leadMcp = await connectPane(lead.id)
+    const single = await leadMcp.callTool({ name: 'agent_spawn', arguments: { task: 'Inspect synthetic fixture one', accountId: 'codex', activityId: 'ONE' } })
+    assert.notEqual(single.isError, true, textOf(single))
+    const first = server.core.store.snapshot().panes.find(p => p.role === 'crew')!
+    assert.equal(first.accountId, 'codex')
+    const batch = await leadMcp.callTool({ name: 'agent_spawn_many', arguments: { helpers: [
+      { task: 'Inspect synthetic fixture two', accountId: 'codex', activityId: 'TWO' },
+      { task: 'Invalid explicit account', accountId: 'missing', activityId: 'BAD' },
+    ] } })
+    assert.match(textOf(batch), /Conta desconhecida/)
+    assert.match(textOf(batch), /conta efetiva:.*\(codex\)/)
+    const crewMcp = await connectPane(first.id)
+    const sub = await crewMcp.callTool({ name: 'agent_spawn', arguments: { task: 'Inspect synthetic independent subfixture', accountId: 'codex', activityId: 'SUB' } })
+    assert.notEqual(sub.isError, true, textOf(sub))
+    assert.ok(server.core.store.snapshot().panes.filter(p => p.role === 'crew').every(p => p.cli === 'codex' && p.accountId === 'codex'))
+    const before = server.core.store.snapshot().panes.length
+    await leadMcp.callTool({ name: 'agent_spawn', arguments: { task: 'Inspect synthetic fixture one', accountId: 'codex', activityId: 'ONE' } })
+    assert.equal(server.core.store.snapshot().panes.length, before)
+    const status = JSON.parse(textOf(await leadMcp.callTool({ name: 'accounts_status', arguments: {} })))
+    assert.ok(status.find((row: any) => row.cli === 'codex').accounts.some((a: any) => a.accountId === 'codex'))
+  } finally { for (const client of clients) await client.close(); await server.close() }
 })

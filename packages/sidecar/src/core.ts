@@ -84,7 +84,7 @@ const MAX_CHILDREN = 2
 const RESUME_NOTE = 'O Orbit foi reaberto. Continue a tarefa de onde parou e, ao terminar, entregue com handoff_submit.'
 
 export interface HelperRequest {
-  title: string; task: string; cli?: AgentCli; model: string | null; effort?: Effort | null
+  title: string; task: string; cli?: AgentCli; accountId?: string | null; model: string | null; effort?: Effort | null
   squadRoleId?: string | null; taskTypeId?: string | null; accept?: string[]; folder?: string | null
   difficulty?: Difficulty | null; retryReason?: string; activityId?: string
   dependsOn?: string[]
@@ -1293,14 +1293,24 @@ export class OrbitCore {
       const rooms = this.rooms(cli, live)
       return {
         cli,
-        accounts: rooms.map((r) => ({
-          account: r.account.builtin ? `${CLI_LABEL[cli]} deste Mac` : r.account.name,
-          kind: r.account.kind,
-          used: r.used === null ? 'sem leitura ainda' : `${Math.round(r.used)}%`,
-          agentsNow: r.live,
-          full: r.full,
-          backIn: r.resetsAt ? untilText(r.resetsAt) : null,
-        })),
+        accounts: this.store.accounts().filter(a => a.cli === cli).map(account => {
+          const room = rooms.find(r => r.account.id === account.id)
+          const status = this.accountStatus.get(account.id)
+          const unavailable = status?.busy ? 'Verificação ou login em andamento' : status?.loggedIn === false || (account.kind === 'api' && !account.keyHint) ? 'Conta não conectada' : null
+          return {
+            accountId: account.id,
+            account: account.builtin ? `${CLI_LABEL[cli]} deste Mac` : account.name,
+            kind: account.kind,
+            automatic: account.auto,
+            selectable: unavailable === null,
+            unavailable,
+            loginConfirmed: status?.loggedIn === true,
+            used: room?.used == null ? 'sem leitura ainda' : `${Math.round(room.used)}%`,
+            agentsNow: live.get(account.id) ?? 0,
+            full: room?.full ?? null,
+            backIn: room?.resetsAt ? untilText(room.resetsAt) : null,
+          }
+        }),
         canOpen: !chooseAccount(rooms).exhausted,
       }
     })
@@ -1313,6 +1323,9 @@ export class OrbitCore {
       const account = this.store.account(requested)
       if (!account) throw new Error('Conta desconhecida')
       if (account.cli !== cli) throw new Error(`A conta ${account.name} é do ${CLI_LABEL[account.cli]}, não do ${CLI_LABEL[cli]}`)
+      const status = this.accountStatus.get(account.id)
+      if (status?.busy) throw new Error(`A conta ${account.name} está ocupada verificando ou fazendo login; aguarde.`)
+      if (status?.loggedIn === false || (account.kind === 'api' && !account.keyHint)) throw new Error(`A conta ${account.name} não está conectada; entre nela antes de abrir o agente. Nenhuma outra conta foi usada.`)
       return account
     }
     return pickAccount(cli, this.store.accounts(), this.statuses(), this.store.limits())
@@ -1927,6 +1940,13 @@ export class OrbitCore {
   async spawnHelper(caller: Pane, input: HelperRequest): Promise<{ pane: Pane; receipt: string[] }> {
     this.assertCurrent(caller)
     this.activeMission(caller.missionId)
+    if (input.accountId) {
+      const account = this.store.account(input.accountId)
+      if (!account) throw new Error('Conta desconhecida')
+      if (input.cli && input.cli !== account.cli) throw new Error('A conta escolhida não pertence à CLI solicitada')
+      this.accountFor(account.cli, account.id)
+      input = { ...input, cli: account.cli }
+    }
     // Receipts expose the ledger id; accepting it here keeps a resumed leader on the same work.
     const identified = input.activityId && this.store.activity(caller.missionId, input.activityId)
     const key = identified ? identified.key : this.delegationKey(input)
@@ -1984,7 +2004,7 @@ export class OrbitCore {
   private async openHelper(caller: Pane, input: HelperRequest, attempt: { id: string; paneId: number }): Promise<{ pane: Pane; receipt: string[] }> {
     const receipt: string[] = []
     const policyRevision = routingRevision(this.store.routing())
-    let decisionSource: DecisionReceipt['source'] = input.cli || input.model || input.effort ? 'explicit' : 'rule'
+    let decisionSource: DecisionReceipt['source'] = input.cli || input.model || input.effort || input.accountId ? 'explicit' : 'rule'
     const mission = this.activeMission(caller.missionId)
     if (caller.role === 'crew') {
       const slots = this.childSlots(caller)
@@ -2830,6 +2850,7 @@ export class OrbitCore {
       }
     }
     const account = chosen ?? this.accountFor(request.cli, request.accountId)
+    if (account) receipt.push(`conta efetiva: ${account.name} (${account.id})${input.accountId ? ' · escolha explícita, sem substituição' : ' · automática'}`)
     if (input.effort && (!options.tier || request.role === 'crew')) request.effort = input.effort
     if (account && !request.model && account.model) request.model = account.model
     if (request.role === 'crew' && request.cli !== 'shell' && !mission.allowedClis.includes(request.cli)) throw new Error('A CLI efetiva não está permitida nesta missão')
