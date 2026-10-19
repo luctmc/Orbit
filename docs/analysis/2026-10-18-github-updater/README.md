@@ -7,3 +7,7 @@ O daemon instalado respondeu ao manifesto real com 200/v0.2.31. A regressão nov
 Validação dev real: `node docs/analysis/2026-10-18-github-updater/verify-live.ts`. O script abre uma ponte descartável com token aleatório para o daemon existente, busca pelo gh, baixa o arquivo pela URL devolvida e verifica assinatura de arquivo e comentário com a chave pública empacotada. Não imprime tokens nem usa chave privada. Resultado em live.json. PIDs/instanceId e dois processos ativos do motor permaneceram intactos; nada foi interrompido.
 
 Regressões: `node --test packages/sidecar/test/updates.test.ts packages/sidecar/test/runtimeDaemon.test.ts`; typecheck global e suíte pelo fluxo obrigatório agent:finish. Os logs red/green/typecheck registram a validação inicial. Integração, publicação e instalação são gates separados; recibo final registra seus resultados reais.
+
+## Segundo bloqueio encontrado na validação nativa
+
+F-166: instalar um build diferente com PTYs vivos fazia ensureRuntimeDaemon rejeitar o motor e derrubar a ponte. Fix aebf5c9 conserva a identidade e revisão reais do motor v1 autenticado durante o trabalho; próxima abertura sem PTYs aplica a troca segura. A regressão verifica identidade/PID/revisão/histórico preservados e a troca posterior sem terminais. O novo build local foi instalado no mesmo caminho e a UI nativa reconectou e consultou GitHub com sucesso (native-bootstrap.txt). F-165: fix 45f86ab.
