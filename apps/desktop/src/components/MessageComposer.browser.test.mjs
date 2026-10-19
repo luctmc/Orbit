@@ -174,3 +174,64 @@ test('compact composer preserves routing, keyboard and tools in the real browser
     console.log('Passed: widths1698/1440/1024/768/375; native controls; modes; Enter/Shift+Enter; disclosures; language opt-in; file picker/paste/remove/send; speech boundary; recipient/draft isolation; Tab suggestions; shell; pending/disconnected; real mission status/menu/attention; actual account names/ID fallback at desktop/narrow.')
   } finally { await host.close('composer-qa'); host.shutdown(); await server.close(); await rm(scratch, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 }) }
 })
+
+test('review-required mission states remain visible and actionable while valid current review stays compact', { timeout: 120_000 }, async () => {
+  const engine = findBrowser()
+  assert.ok(engine, 'An installed Chromium browser is required for this opt-in check')
+  const scratch = await mkdtemp(join(tmpdir(), 'orbit-review-alert-test-'))
+  const server = await createServer({ root, configFile: false, server: { host: '127.0.0.1', port: 0 }, esbuild: { jsx: 'automatic' } })
+  const host = new BrowserHost(scratch, engine)
+  const stage = process.env.COMPOSER_REVIEW_PHASE || 'after'
+  const checks = []
+  const mission = 'review-alert-qa'
+  try {
+    await server.listen()
+    const address = server.httpServer.address()
+    const evaluate = expression => host.evaluate(host.tabs.get(mission), expression)
+    const wait = async expression => {
+      for (let i = 0; i < 80; i++) { if (await evaluate(expression)) return; await new Promise(r => setTimeout(r, 50)) }
+      assert.fail(`Timed out: ${expression}`)
+    }
+    const cases = [
+      ['stale', 'Revisão final precisa ser conferida', true],
+      ['unknown', 'Revisão final precisa ser conferida', true],
+      ['awaiting-validation', 'Entrega aguardando revisão', true],
+      ['unverified-accepted', 'Entrega aguardando revisão', true],
+      ['invalid-accepted', 'Entrega aguardando revisão', true],
+      ['valid-current', 'Revisada, aguardando conclusão', false],
+    ]
+    for (const width of [1280, 375]) {
+      for (const [state, title, required] of cases) {
+        await host.navigate(mission, `http://127.0.0.1:${address.port}/docs/plans/2026-10-18-orbit-compact-task-composer/fixture.html?mission&focus&review=${state}`, 'test')
+        await host.send(host.tabs.get(mission), 'Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: false })
+        await wait(`document.querySelector('.mission-insight > strong')?.textContent === ${JSON.stringify(title)}`)
+        const result = await evaluate(`({
+          attentionVisible: Boolean(document.querySelector('.mission-attention')?.checkVisibility()),
+          detailsOpen: document.querySelector('.mission-insight').closest('details').open,
+          status: document.querySelector('.mission-insight > strong').textContent,
+          reason: document.querySelector('.mission-insight > p').textContent,
+          overflow: document.documentElement.scrollWidth > innerWidth,
+          dom: document.body.innerText,
+        })`)
+        if (state === 'stale') {
+          await writeFile(join(evidence, `review-${stage}-${width}-dom.txt`), result.dom)
+          await writeFile(join(evidence, `review-${stage}-${width}.png`), Buffer.from(await host.screenshot(mission), 'base64'))
+        }
+        let actionOpensActivities = false
+        if (result.attentionVisible) {
+          await host.click(mission, { selector: '.mission-attention button' }, 'test')
+          actionOpensActivities = await evaluate('Boolean(document.querySelector(".activity-panel"))')
+        }
+        checks.push({ width, state, required, ...result, actionOpensActivities })
+      }
+    }
+    await writeFile(join(evidence, `review-${stage}-checks.json`), JSON.stringify(checks, null, 2) + '\n')
+    for (const check of checks) {
+      assert.equal(check.attentionVisible, check.required, `${check.state} at ${check.width}px must ${check.required ? '' : 'not '}show inline attention`)
+      assert.equal(check.detailsOpen, false, 'A closed menu must not hide required attention')
+      assert.equal(check.overflow, false, 'Review attention must not add horizontal overflow')
+      if (check.required) assert.equal(check.actionOpensActivities, true, `${check.state} has a useful action to open activities`)
+    }
+    console.log('Passed: stale, unknown, awaiting validation, missing/invalid required validation stay visible/actionable at1280/375; valid current review remains compact.')
+  } finally { await host.close(mission); host.shutdown(); await server.close(); await rm(scratch, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 }) }
+})

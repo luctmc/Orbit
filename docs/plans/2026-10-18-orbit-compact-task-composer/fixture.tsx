@@ -20,6 +20,13 @@ for (const pane of panes) Object.assign(pane, { missionId: 'qa-mission', cwd: '/
 if (query.has('waiting')) Object.assign(panes[1], { status: 'waiting', attention: 'Aprovar o próximo passo' })
 const mission = { id: 'qa-mission', title: 'Melhorar o espaço de trabalho', objective: 'Mais espaço para acompanhar as CLIs e enviar orientações.', mode: 'agentica', status: 'active', usage: { total: 0, costUsd: null }, budget: null, workspaceId: 'qa', squadId: null, git: null } as any
 const progress = { missionId: mission.id, observedAt: Date.now(), activities: query.has('blocked') ? [{ id: 'blocked', missionId: mission.id, title: 'Atividade bloqueada', state: 'blocked', acceptance: ['Entregar com evidência'], dependencies: [], verificationRequired: true, revision: 1 }] : [], attempts: [], results: [], verifications: [], deliveries: [], validation: [], integration: { state: 'none', reviewId: null, reason: null } }
+const review = query.get('review')
+if (review === 'stale' || review === 'unknown') Object.assign(progress.integration, { state: review, reason: 'Source changed; new independent review required' })
+if (review === 'awaiting-validation' || review === 'unverified-accepted' || review === 'invalid-accepted' || review === 'valid-current') {
+  progress.activities.push({ id: 'review-required', missionId: mission.id, title: 'Entrega para revisar', state: review === 'awaiting-validation' ? 'awaiting_validation' : 'accepted', acceptance: ['Revisar a entrega'], dependencies: [], verificationRequired: true, revision: 1 })
+  if (review !== 'awaiting-validation') Object.assign(progress.integration, { state: 'current' })
+  if (review === 'invalid-accepted' || review === 'valid-current') (progress.validation as any[]).push({ activityId: 'review-required', valid: review === 'valid-current', reason: review === 'invalid-accepted' ? 'Source changed' : null })
+}
 const listeners = new Set<() => void>()
 let state = { connection: 'open', accounts: [{ id: 'codex-acc-2', name: 'Codex 2', cli: 'codex', kind: 'assinatura' }], settings: { agentsInEnglish: true }, squads: [], browsers: [], workspaces: [], cards: [], events: [], runtime: { persistent: true }, panes, missions: [mission] }
 const submissions: unknown[] = []

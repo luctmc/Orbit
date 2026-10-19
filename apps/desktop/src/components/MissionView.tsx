@@ -87,7 +87,9 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
   const leader = panes.find(p => p.role === 'lead')
   const suggestions = suggestionsOn && leader ? inputSuggestions({ mission, pane: leader, progress: progress.error ? null : progress.data, cards: missionCards, connected: progress.connection === 'open' }) : []
   const waitingPane = panes.find(p => p.status === 'waiting')
-  const needsAttention = ['waiting', 'blocked', 'offline'].includes(signal.state) || !!progress.error
+  const reviewRequiresAttention = signal.state === 'review' && (progress.data?.integration.state !== 'current' || progress.data?.activities.some(activity =>
+    activity.state === 'awaiting_validation' || (activity.state === 'accepted' && activity.verificationRequired && !progress.data?.validation.find(v => v.activityId === activity.id)?.valid)))
+  const needsAttention = ['waiting', 'blocked', 'offline'].includes(signal.state) || reviewRequiresAttention || !!progress.error
 
   // ⌘1–9 picks an agent, ⌘[ and ⌘] step through them, ⌘J writes to the selected one.
   const latest = useRef({ panes, selected, onSelectPane })
