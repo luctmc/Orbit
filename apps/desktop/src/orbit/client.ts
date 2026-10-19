@@ -90,7 +90,7 @@ export class OrbitClient {
   private readonly inputFlights = new Map<string, Promise<unknown>>()
   readonly inputAttachments = new DurableMap<Array<import('@orbit/protocol').Attachment & { preview: string | null }>>('orbit.input.attachments.v1', files => files.map(file => ({ ...file, preview: null })))
   readonly missionDrafts = new DurableMap<Omit<Extract<ClientMessage, { type: 'mission.create' }>, 'type' | 'requestId'>>('orbit.input.missions.v1')
-  readonly inputDrafts = new DurableMap<{ text: string; accountId: string; allowOriginal: boolean }>('orbit.input.drafts.v1')
+  readonly inputDrafts = new DurableMap<{ text: string; accountId: string; allowOriginal: boolean; dispatch?: 'new-task' | 'continue' }>('orbit.input.drafts.v1')
   private readonly inputAttempts = new DurableMap<{ fingerprint: string; requestId: string }>('orbit.input.attempts.v1')
   inputPending(key: string): boolean { return this.inputAttempts.has(key) }
 

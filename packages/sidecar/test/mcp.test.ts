@@ -215,7 +215,7 @@ test('authenticated finalization accepts only the lead final integration review 
     const accepted = await leadMcp.callTool({ name: 'verification_submit', arguments: verdict(await inspect('result')) })
     assert.notEqual(accepted.isError, true, textOf(accepted))
     const integration = await inspect('integration')
-    assert.equal((await crewMcp.callTool({ name: 'verification_submit', arguments: { ...verdict(integration), readySummary: 'Helper cannot finalize' } })).isError, true)
+    await assert.rejects(crewMcp.callTool({ name: 'verification_submit', arguments: { ...verdict(integration), readySummary: 'Helper cannot finalize' } }), /Execução substituída|409/)
     const final = await leadMcp.callTool({ name: 'verification_submit', arguments: { ...verdict(integration), readySummary: 'Fixture concluída com revisão sintética.' } })
     assert.notEqual(final.isError, true, textOf(final))
     const complete = JSON.parse(textOf(final))

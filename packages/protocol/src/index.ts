@@ -1012,7 +1012,7 @@ export type ClientMessage =
   | { type: 'app-plugins.load'; requestId:string; key:string }
   | { type: 'pane.history.get'; paneId:number; epoch?:string; requestId:string }
   | { type: 'pane.queue.cancel'; paneId: number; targetRequestId: string; requestId: string }
-  | { type: 'pane.submit'; queueTimeoutMs?: number; dispatchTimeoutMs?: number; paneId: number; text: string; attachments?: string[]; requestId?: string; translationAccountId?: string; allowOriginal?: boolean }
+  | { type: 'pane.submit'; dispatch?: 'new-task' | 'continue'; queueTimeoutMs?: number; dispatchTimeoutMs?: number; paneId: number; text: string; attachments?: string[]; requestId?: string; translationAccountId?: string; allowOriginal?: boolean }
   | { type: 'attachment.add'; paneId: number; requestId: string; name: string; mime: string; data: string }
   | { type: 'pane.conversation'; paneId: number }
   | { type: 'pane.resize'; paneId: number; cols: number; rows: number }

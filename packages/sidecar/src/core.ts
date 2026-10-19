@@ -1379,6 +1379,9 @@ export class OrbitCore {
     try {
       const pane = this.store.pane(message.paneId)
       if (!pane) throw new Error('Agente inexistente')
+      if (message.dispatch !== undefined && !['new-task', 'continue'].includes(message.dispatch)) throw new Error('Tipo de envio inválido')
+      const newTask = (message.dispatch ?? (pane.role === 'lead' && pane.cli !== 'shell' ? 'new-task' : 'continue')) === 'new-task'
+      if (newTask && (pane.role !== 'lead' || pane.cli === 'shell')) throw new Error('Uma nova tarefa precisa de um líder de IA ativo; para orientar este terminal, escolha Continuar tarefa')
       if (!message.requestId) {
         // Literal CLI choice buttons are terminal controls, never free-form user prompts.
         if (pane.choices?.includes(message.text)) { this.activeMission(pane.missionId); this.panes.answered(pane.id); this.submitTo(pane.id, message.text); return }
@@ -1398,6 +1401,18 @@ export class OrbitCore {
         record.state = 'prepared'; this.inputJournal.save(pane.missionId, message.requestId!, record)
         const text = record.english + (files.length ? `\n\nUser attachments (local files; inspect using your file/image tools):\n${files.map(f => JSON.stringify({ name: f.name, path: f.path, mime: f.mime })).join('\n')}` : '') + (pane.cli === 'shell' ? '' : `\n\n${RESPONSE_LANGUAGE}`)
         if (this.store.pane(pane.id)?.executionEpoch !== pane.executionEpoch) throw new Error('A execução do agente mudou durante a preparação. O texto foi preservado; confira o destinatário antes de um novo envio.')
+        if (newTask) {
+          const activityId = `ui-${createHash('sha256').update(message.requestId!).digest('hex').slice(0, 32)}`
+          const { pane: worker } = await this.spawnHelper(pane, {
+            title: message.text.trim().slice(0, 80) || 'Nova tarefa', task: text,
+            cli: pane.cli, accountId: pane.accountId, model: pane.model, effort: pane.effort,
+            activityId,
+          })
+          record.paneId = worker.id; record.executionEpoch = worker.executionEpoch
+          record.state = 'acked'; record.acceptedAt = Date.now(); record.error = undefined
+          this.inputJournal.save(pane.missionId, message.requestId!, record)
+          return
+        }
         record.paneId = pane.id
         record.executionEpoch = pane.executionEpoch
         record.state = 'submitting'; this.inputJournal.save(pane.missionId, message.requestId!, record)
@@ -2272,6 +2287,12 @@ export class OrbitCore {
     }
     const alreadyCompleted = readySummary !== undefined && this.store.verifications(caller.missionId).some(v => v.inspectionId === input.inspectionId && v.completion)
     const record = this.store.saveVerification(inspection, result, input, readySummary)
+    // Terminate the exact accepted execution, retaining the pane and its durable terminal history.
+    // A report, process exit or rejected review alone never triggers automatic closure.
+    if (inspection.scope === 'result' && input.verdict === 'accepted') {
+      const finished = this.store.pane(attempt.paneId)
+      if (finished?.role === 'crew' && finished.executionEpoch === attempt.executionEpoch && finished.handoffStatus === 'done' && this.store.currentPaneAttempt(finished.id)?.id === attempt.id) this.panes.kill(finished.id)
+    }
     if (readySummary !== undefined && record.completion) {
       const mission = this.store.mission(caller.missionId)!
       this.broadcast({ type: 'mission.updated', mission: { ...mission } })
