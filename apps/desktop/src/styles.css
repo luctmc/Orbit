@@ -1423,3 +1423,17 @@ button:disabled { cursor: not-allowed; }
   .pane-workbench--narrow { padding:4px; }
   .split-tools--narrow { padding-block:4px; }
 }
+
+/* Mission details live in Visualizar; only actionable attention takes a row. */
+.mission-insight { display: grid; gap: 8px; padding: 12px; font-size: 12px; line-height: 1.5; border-top: 1px solid var(--line); }
+.mission-insight > p { color: var(--text-3); overflow-wrap: anywhere; }
+.mission-insight > .note { color: var(--muted); }
+.mission-insight > .btn { min-height: 44px; justify-content: flex-start; }
+.mission-attention { display: flex; align-items: center; flex: none; gap: 12px; padding: 4px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.mission-attention > p { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mission-attention strong { color: var(--wait); font-weight: 500; }
+.mission-attention .btn { min-height: 44px; flex: none; }
+.pane__identity { display: flex; flex-direction: column; flex: 0 1 auto; min-width: 0; max-width: 28%; gap: 2px; }
+.pane__identity > .pane__session { max-width: none; }
+.pane__account { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--text-2); }
+@container (max-width: 420px) { .pane__identity { max-width: 30%; } }

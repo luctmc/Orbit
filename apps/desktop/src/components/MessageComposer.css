@@ -1,0 +1,32 @@
+/* Compact routing and a single writing surface. Keep 44px interaction targets. */
+.composer.composer--compact { padding: 4px 12px; max-height: 50%; }
+.composer--compact .composer__head { justify-content: flex-start; min-height: 44px; gap: 4px 8px; }
+.composer--compact .composer__target { flex: 0 1 auto; }
+.composer--compact .composer__target > select,
+.composer--compact .composer__mode > select { min-width: 0; width: auto; min-height: 44px; padding: 4px 24px 4px 8px; border: 1px solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; }
+.composer--compact .composer__target > select:hover,
+.composer--compact .composer__mode > select:hover { background: var(--surface-3); }
+.composer--compact .composer__mode { display: flex; align-items: center; min-width: 0; gap: 4px; }
+.composer--compact .composer__mode > select { background: var(--surface-2); }
+.composer--compact .composer__mode > select:disabled { cursor: default; opacity: .6; }
+.composer--compact .composer__mode-help { flex: none; }
+.composer--compact .composer__mode-help > summary { display: flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 0 4px; border-radius: var(--radius-control); color: var(--text-3); font-size: 12px; cursor: pointer; list-style: none; }
+.composer--compact .composer__mode-help > summary::-webkit-details-marker { display: none; }
+.composer--compact .composer__mode-help > summary:hover,
+.composer--compact .composer__mode-help[open] > summary { background: var(--surface-3); color: var(--text); }
+.composer--compact .composer__mode-help > p { position: absolute; z-index: 30; bottom: calc(100% + 8px); left: 0; width: min(440px, 100%); padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: var(--surface-3); color: var(--text-2); font-size: 13px; line-height: 1.5; }
+.composer--compact .composer__actions { min-height: 44px; padding: 0; border-top: 0; }
+.composer--compact .composer__toggle { border-color: transparent; font-size: 12px; padding-inline: 8px; max-width: none; }
+.composer--compact .composer__toggle:hover { background: var(--surface-3); }
+.composer--compact .composer__actions .composer__toggle { order: 0; }
+.composer--compact .composer__shortcuts { margin-inline: 8px; }
+.composer--compact:has(textarea:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 520px) {
+  .composer--compact .composer__target { flex: 1 1 112px; max-width: 44%; gap: 4px; }
+  .composer--compact .composer__target > select { flex: 1; width: 100%; padding-inline: 4px; }
+  .composer--compact .composer__cli { display: none; }
+  .composer--compact .composer__mode { flex: 1 1 168px; }
+  .composer--compact .composer__mode > select { flex: 1; width: 100%; padding-inline: 4px; }
+  .composer--compact .composer__head .composer__leader { display: inline-flex; padding-inline: 8px; margin-left: auto; }
+  .composer--compact .composer__language > summary { min-width: 44px; padding-inline: 4px; font-size: 12px; }
+}

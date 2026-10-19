@@ -1,0 +1,145 @@
+{
+  "registry": "/Users/lucas/Documents/GitHub/Orbit/.git/orbit-agent-claims.json",
+  "path": "apps/desktop/src/components/MessageComposer.tsx",
+  "authorization": "Mission lead #76 explicitly authorized narrowly scoped coordinated transfer; no supported transfer command exists. Root committed history preserved; branch created by agent:begin from origin/main37bc15c.",
+  "before": [
+    {
+      "branch": "fix/orbit-limites-contas-codex",
+      "worktree": "/Users/lucas/Documents/GitHub/Orbit",
+      "files": [
+        "packages/sidecar/src/usage.ts",
+        "packages/sidecar/src/clis.ts",
+        "packages/sidecar/src/store.ts",
+        "packages/sidecar/test/liveLimits.test.ts",
+        "packages/sidecar/test/codexAccountIsolation.test.ts",
+        "packages/sidecar/test/helpers.ts",
+        "packages/sidecar/test/usage.test.ts"
+      ],
+      "createdAt": "2026-10-18T20:17:33.816Z",
+      "owner": "mission helper #60 / Codex 2",
+      "coordination": "Explicit user exception: reuse existing checkout, manual reservation, no new worktree; accounts.ts transferred to T2: owner #60 inactive; lead verified root clean and identical origin/main.; accounts.test.ts transfer: root HEAD and origin/main diff empty, #60 inactive, lead authorized."
+    },
+    {
+      "branch": "fix/orbit-identidade-contas-codex",
+      "worktree": "/Users/lucas/Documents/GitHub/Orbit-fix-orbit-identidade-contas-codex",
+      "files": [
+        "packages/sidecar/src/codexIdentity.ts",
+        "packages/sidecar/test/codexIdentity.test.ts"
+      ],
+      "createdAt": "2026-10-18T23:13:21.768Z"
+    },
+    {
+      "branch": "feature/orbit-ai-account-selection",
+      "worktree": "/Users/lucas/Documents/GitHub/Orbit-feature-orbit-ai-account-selection",
+      "files": [
+        "packages/sidecar/src/mcp.ts",
+        "packages/sidecar/src/providerSetup.ts",
+        "packages/sidecar/src/activityLedger.ts",
+        "packages/sidecar/test/providerSetup.test.ts",
+        "packages/sidecar/test/accountDelegation.test.ts",
+        "packages/sidecar/test/mcp.test.ts",
+        "packages/sidecar/test/spawnReceipt.test.ts",
+        "packages/protocol/src/index.ts",
+        "apps/desktop/src/components/AccountsPanel.tsx",
+        "apps/desktop/src/components/AccountsPanel.css",
+        "apps/desktop/src/components/agentPickers.tsx",
+        "packages/sidecar/src/core.ts",
+        "apps/desktop/src/components/MessageComposer.tsx",
+        "apps/desktop/src/orbit/client.ts",
+        "apps/desktop/src/orbit/inputClient.test.ts",
+        "packages/sidecar/src/accounts.ts",
+        "packages/sidecar/test/openRouterAuth.test.ts",
+        "packages/sidecar/test/inputLanguage.test.ts",
+        "packages/sidecar/test/adaptive.test.ts",
+        "packages/sidecar/test/agentPermissions.test.ts",
+        "packages/sidecar/test/agents.test.ts",
+        "packages/sidecar/test/delivery.test.ts",
+        "packages/sidecar/test/restart.test.ts",
+        "packages/sidecar/test/toolkitJourneys.test.ts",
+        "packages/sidecar/test/accounts.test.ts"
+      ],
+      "createdAt": "2026-10-19T00:45:35.227Z",
+      "coordination": "Core extension: root committed divergence only; no active core writer. Preserve root checkout; implement from fresh origin/main."
+    },
+    {
+      "branch": "fix/orbit-compact-task-composer",
+      "worktree": "/Users/lucas/Documents/GitHub/Orbit-fix-orbit-compact-task-composer",
+      "files": [
+        "apps/desktop/src/components/MessageComposer.css",
+        "apps/desktop/src/components/MessageComposer.browser.test.mjs",
+        "docs/plans/2026-10-18-orbit-compact-task-composer"
+      ],
+      "createdAt": "2026-10-19T02:06:51.066Z"
+    }
+  ],
+  "after": [
+    {
+      "branch": "fix/orbit-limites-contas-codex",
+      "worktree": "/Users/lucas/Documents/GitHub/Orbit",
+      "files": [
+        "packages/sidecar/src/usage.ts",
+        "packages/sidecar/src/clis.ts",
+        "packages/sidecar/src/store.ts",
+        "packages/sidecar/test/liveLimits.test.ts",
+        "packages/sidecar/test/codexAccountIsolation.test.ts",
+        "packages/sidecar/test/helpers.ts",
+        "packages/sidecar/test/usage.test.ts"
+      ],
+      "createdAt": "2026-10-18T20:17:33.816Z",
+      "owner": "mission helper #60 / Codex 2",
+      "coordination": "Explicit user exception: reuse existing checkout, manual reservation, no new worktree; accounts.ts transferred to T2: owner #60 inactive; lead verified root clean and identical origin/main.; accounts.test.ts transfer: root HEAD and origin/main diff empty, #60 inactive, lead authorized."
+    },
+    {
+      "branch": "fix/orbit-identidade-contas-codex",
+      "worktree": "/Users/lucas/Documents/GitHub/Orbit-fix-orbit-identidade-contas-codex",
+      "files": [
+        "packages/sidecar/src/codexIdentity.ts",
+        "packages/sidecar/test/codexIdentity.test.ts"
+      ],
+      "createdAt": "2026-10-18T23:13:21.768Z"
+    },
+    {
+      "branch": "feature/orbit-ai-account-selection",
+      "worktree": "/Users/lucas/Documents/GitHub/Orbit-feature-orbit-ai-account-selection",
+      "files": [
+        "packages/sidecar/src/mcp.ts",
+        "packages/sidecar/src/providerSetup.ts",
+        "packages/sidecar/src/activityLedger.ts",
+        "packages/sidecar/test/providerSetup.test.ts",
+        "packages/sidecar/test/accountDelegation.test.ts",
+        "packages/sidecar/test/mcp.test.ts",
+        "packages/sidecar/test/spawnReceipt.test.ts",
+        "packages/protocol/src/index.ts",
+        "apps/desktop/src/components/AccountsPanel.tsx",
+        "apps/desktop/src/components/AccountsPanel.css",
+        "apps/desktop/src/components/agentPickers.tsx",
+        "packages/sidecar/src/core.ts",
+        "apps/desktop/src/orbit/client.ts",
+        "apps/desktop/src/orbit/inputClient.test.ts",
+        "packages/sidecar/src/accounts.ts",
+        "packages/sidecar/test/openRouterAuth.test.ts",
+        "packages/sidecar/test/inputLanguage.test.ts",
+        "packages/sidecar/test/adaptive.test.ts",
+        "packages/sidecar/test/agentPermissions.test.ts",
+        "packages/sidecar/test/agents.test.ts",
+        "packages/sidecar/test/delivery.test.ts",
+        "packages/sidecar/test/restart.test.ts",
+        "packages/sidecar/test/toolkitJourneys.test.ts",
+        "packages/sidecar/test/accounts.test.ts"
+      ],
+      "createdAt": "2026-10-19T00:45:35.227Z",
+      "coordination": "Core extension: root committed divergence only; no active core writer. Preserve root checkout; implement from fresh origin/main."
+    },
+    {
+      "branch": "fix/orbit-compact-task-composer",
+      "worktree": "/Users/lucas/Documents/GitHub/Orbit-fix-orbit-compact-task-composer",
+      "files": [
+        "apps/desktop/src/components/MessageComposer.css",
+        "apps/desktop/src/components/MessageComposer.browser.test.mjs",
+        "docs/plans/2026-10-18-orbit-compact-task-composer",
+        "apps/desktop/src/components/MessageComposer.tsx"
+      ],
+      "createdAt": "2026-10-19T02:06:51.066Z"
+    }
+  ]
+}
