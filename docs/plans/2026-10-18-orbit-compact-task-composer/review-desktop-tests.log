@@ -1,0 +1,70 @@
+npm notice run @orbit/desktop@0.2.15 test
+npm notice run node --test "src/**/*.test.ts"
+✔ missing cost, reported zero and partial known subtotals remain distinguishable (1.68625ms)
+(node:99214) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ lost input ACK retains request identity, blocks changed input, and pending never starts a fresh operation (33.9135ms)
+✔ renderer restart recovers drafts, attachment IDs and the exact pending operation without duplicate submission (1.008875ms)
+✔ pending mission reconciliation is read-only and preserves an edited draft across terminal receipts (1.062625ms)
+✔ concurrent submit and receipt check share one wire operation and persist the exact PTY receipt (0.310292ms)
+✔ suggestions follow real activity state and do not certify readiness from readyAt (28.529042ms)
+✔ unknown, stale and other-mission context cannot produce an old action (0.2ms)
+✔ predictions stay out of shell, helpers, permission prompts, exhausted budgets and disconnected missions (0.342917ms)
+✔ prefix completion preserves spelling/case and never substitutes unrelated or multiline input (1.090416ms)
+✔ Tab accepts only without modifiers or composition (0.076625ms)
+✔ an advisory exceeded budget preserves suggestions for ongoing work (0.113042ms)
+✔ quota is explicitly remaining and genuine zero usage means 100% remaining (0.682583ms)
+✔ expired, stale, future or invalid data never claims a renewed/unused quota (0.486416ms)
+✔ Claude matches the official used meter while Codex keeps the official remaining meter (0.273833ms)
+✔ leader responses retain headings, numbered steps, code and unfinished streaming fences (0.977459ms)
+✔ untrusted responses never produce executable links or raw HTML nodes (12.606916ms)
+✔ per-mission focus survives switching; foreign, removed and corrupt identities fall back to their own leader (1.32775ms)
+✔ a historical ready declaration never overrides disconnected, unknown, stale or waived verification (12.178083ms)
+✔ permission and unresolved work take precedence over a ready declaration (51.501209ms)
+✔ waiting, handoffs and exits become notices as the person chose (0.788333ms)
+✔ a Claude agent finishing a long turn is a notice; quick answers and Codex are not (0.162084ms)
+✔ single, batch and same-count replacements reveal panes; status updates/removals do not (0.389042ms)
+✔ selection stays on the writer during spawn and moves to the nearest surviving neighbour on removal (0.073875ms)
+✔ container width limits even manual column counts without horizontal scroll (0.061041ms)
+✔ stored ratios are validated and topology changes safely rebalance (0.382333ms)
+✔ resize preserves neighbours total, unrelated tracks and physical minimum at both extremes (0.128417ms)
+✔ remembered wide-window ratios fit a smaller container without shrinking a neighbour below minimum (0.099833ms)
+✔ plugin source cannot escape trusted srcdoc script or gain native/network/parent authority (1.048375ms)
+(node:99251) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ progress requests ignore unrelated errors and match the response request id (72.494292ms)
+✔ pane identity separates observed models from configured/default models and custom endpoints (4.307333ms)
+(node:99253) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ transport open waits for authoritative inventory and disconnection invalidates readiness (48.967042ms)
+✔ disconnect promptly settles in-flight input as uncertain, retaining its exact ID and draft (21.054333ms)
+✔ late callbacks of the previous socket cannot overwrite inventory or close the new transport (3.808166ms)
+✔ reconnection reattaches each terminal once and suppresses live bytes until its replacement snapshot (0.529709ms)
+✔ raw terminal input is refused during reconnect and is never replayed into a replacement process (0.164708ms)
+✔ disposing while the endpoint resolves prevents a late socket and keeps durable drafts (0.14125ms)
+✔ a synchronous send failure retains the uncertain input identity and releases request listeners (0.192291ms)
+(node:99254) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ retry after lost spawn ACK keeps operation identity and deadline, then a new explicit spawn gets a new ID (72.815ms)
+✔ nested splits move stable identities, normalize removal, restore and reject corrupt/duplicate data (1.708083ms)
+✔ geometry keeps minimum pane sizes, resize clamps, and persistent tree is not mutated by a narrow viewport (0.426708ms)
+✔ rendered terminals leave device replies to the engine and preserve real input (0.482416ms)
+✔ Codex native focus/cursor replies and its empty placeholder do not consume the first draft (1.028292ms)
+✔ Claude native Try placeholder anchors typing without accepting existing text or a permission choice (0.196792ms)
+✔ an empty recognized prompt offers a visual next step without owning or changing the buffer (0.098959ms)
+✔ an echoed draft may mark Codex running; starting, permission and exited panes remain excluded (0.052375ms)
+✔ native prediction appears only after the exact draft echo and returns only a suffix (0.782958ms)
+✔ unknown prompt, existing native draft and shell menus are never owned by the predictor (0.214917ms)
+✔ cursor controls, multiline and bracketed paste suspend until a new line (0.2705ms)
+✔ dismissal, backspace and execution reset never insert or submit text (0.140042ms)
+(node:99282) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ workspace save and rejection settle only the matching operation; deletion snapshot removes the displayed list (45.038916ms)
+ℹ tests 50
+ℹ suites 0
+ℹ pass 50
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 894.826334

@@ -4,6 +4,7 @@ import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { dictationAvailable, joinText, useDictation } from '../orbit/dictation.ts'
 import { CloseIcon, MicIcon, PlusIcon, SendIcon } from './icons.tsx'
 import { acceptsSuggestionKey, inlineSuggestion, type InputSuggestion } from '../orbit/inputSuggestions.ts'
+import './MessageComposer.css'
 
 type DraftAttachment = Attachment & { preview: string | null }
 const encodedFile = (file: File): Promise<string> => new Promise((resolve, reject) => {
@@ -19,9 +20,9 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
   const { connection, accounts, settings } = useOrbit()
   const draftKey = `pane-${pane.id}`
   const draft = client.inputDrafts.get(draftKey)
-  const [translationAccountId, setTranslationAccountId] = useState(draft?.accountId ?? '')
+  const [translationAccountId, setTranslationAccountId] = useState(draft?.allowOriginal ? '' : draft?.accountId ?? '')
   const [dispatch, setDispatch] = useState<'new-task' | 'continue'>(draft?.dispatch ?? (pane.role === 'lead' && pane.cli !== 'shell' ? 'new-task' : 'continue'))
-  const [allowOriginal, setAllowOriginal] = useState(draft?.allowOriginal ?? false)
+  const allowOriginal = !translationAccountId
   const [pending, setPending] = useState(client.inputPending(draftKey))
   const [text, setText] = useState(draft?.text ?? '')
   useEffect(() => { client.inputDrafts.set(draftKey, { text, accountId: translationAccountId, allowOriginal, dispatch }) }, [client, draftKey, text, translationAccountId, allowOriginal, dispatch])
@@ -38,14 +39,16 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
   const [selection, setSelection] = useState({ start: 0, end: 0 })
   const [dismissed, setDismissed] = useState<string | null>(null)
   const language = useRef<HTMLDetailsElement>(null)
+  const modeHelp = useRef<HTMLDetailsElement>(null)
   useEffect(() => {
     const dismiss = (event: KeyboardEvent | PointerEvent) => {
-      const details = language.current
-      if (!details?.open) return
-      if (event instanceof KeyboardEvent) {
-        if (event.key !== 'Escape') return
-        event.preventDefault(); details.open = false; details.querySelector('summary')?.focus()
-      } else if (!details.contains(event.target as Node)) details.open = false
+      for (const details of [language.current, modeHelp.current]) {
+        if (!details?.open) continue
+        if (event instanceof KeyboardEvent) {
+          if (event.key !== 'Escape') continue
+          event.preventDefault(); details.open = false; details.querySelector('summary')?.focus()
+        } else if (!details.contains(event.target as Node)) details.open = false
+      }
     }
     document.addEventListener('keydown', dismiss)
     document.addEventListener('pointerdown', dismiss)
@@ -148,7 +151,7 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
   }
   if (!active) return null
   return (
-    <form className={`composer${dragging ? ' composer--dragging' : ''}`} onSubmit={(e) => { e.preventDefault(); void send() }}
+    <form className={`composer composer--compact${dragging ? ' composer--dragging' : ''}`} onSubmit={(e) => { e.preventDefault(); void send() }}
       onDragOver={(e) => { if (pane.cli !== 'shell' && e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragging(true) } }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false) }}
       onDrop={(e) => { e.preventDefault(); setDragging(false); void addFiles(Array.from(e.dataTransfer.files)) }}>
@@ -159,18 +162,20 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
           {onSelectPane && recipients.length > 1 ? <><label className="sr-only" htmlFor={`recipient-${pane.id}`}>Destinatário da mensagem</label><select id={`recipient-${pane.id}`} value={pane.id} onChange={e => onSelectPane(Number(e.target.value))}>
             {recipients.map(target => <option key={target.id} value={target.id}>{target.role === 'lead' ? 'Líder' : target.title} · #{target.id}</option>)}
           </select></> : <strong>{pane.role === 'lead' ? 'o líder' : pane.title}</strong>}
-          <span className="composer__recipient">#{pane.id} · {pane.cli}</span>
+          <span className="composer__recipient">{!(onSelectPane && recipients.length > 1) && `#${pane.id}`}<span className="composer__cli">{onSelectPane && recipients.length > 1 ? pane.cli : ` · ${pane.cli}`}</span></span>
         </div>
+        {pane.role === 'lead' && pane.cli !== 'shell' && <div className="composer__mode">
+          <label className="sr-only" htmlFor={`dispatch-${pane.id}`}>Tipo de envio</label>
+          <select id={`dispatch-${pane.id}`} value={dispatch} disabled={editingDisabled} onChange={e => setDispatch(e.target.value as 'new-task' | 'continue')} aria-describedby={`dispatch-help-${pane.id}`}>
+            <option value="new-task">Nova tarefa</option><option value="continue">Continuar tarefa</option>
+          </select>
+          <details ref={modeHelp} className="composer__mode-help"><summary>Ajuda<span className="sr-only"> sobre o tipo de envio</span></summary>
+            <p id={`dispatch-help-${pane.id}`}>{dispatch === 'new-task' ? 'Abre uma nova CLI visível com a mesma conta do líder. O resultado aguarda revisão antes de fechar.' : 'Envia uma orientação, resposta ou pergunta para esta CLI, mantendo o contexto atual.'}</p>
+          </details>
+        </div>}
         {pane.role !== 'lead' && leader && leader.status !== 'exited' && onSelectPane && <button type="button" className="btn btn--ghost btn--sm composer__leader" onClick={() => onSelectPane(leader.id)}>Conversar com líder</button>}
         <span className="composer__status" role="status">{connection !== 'open' ? 'Reconectando…' : uploading ? 'Preparando anexos…' : dictation.listening ? `Ouvindo${dictation.mode === 'apple' ? ' · Apple' : dictation.mode === 'local' ? ' · no Mac' : ''}…` : ''}</span>
       </div>
-      {pane.role === 'lead' && pane.cli !== 'shell' && <div className="field">
-        <label htmlFor={`dispatch-${pane.id}`}>Tipo de envio</label>
-        <select id={`dispatch-${pane.id}`} value={dispatch} disabled={editingDisabled} onChange={e => setDispatch(e.target.value as 'new-task' | 'continue')} aria-describedby={`dispatch-help-${pane.id}`}>
-          <option value="new-task">Nova tarefa</option><option value="continue">Continuar tarefa</option>
-        </select>
-        <p className="note" id={`dispatch-help-${pane.id}`}>{dispatch === 'new-task' ? 'Abre uma nova CLI visível com a mesma conta do líder. O resultado aguarda revisão antes de fechar.' : 'Envia uma orientação, resposta ou pergunta para esta CLI, mantendo o contexto atual.'}</p>
-      </div>}
       <div className="composer__content">
       {!!files.length && <ul className="composer__files" aria-label="Anexos da mensagem">
         {files.map((file) => <li key={file.id}>
@@ -218,14 +223,13 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
             if (!dictationAvailable) return setError('O reconhecimento de voz não está disponível neste ambiente. No macOS, use o atalho de Ditado do sistema no campo de mensagem.')
             acceptingSpeech.current = true; dictated.current = text; dictation.start(); localInput.current?.focus()
           }}><MicIcon /></button>
-      {pane.cli !== 'shell' && settings?.agentsInEnglish && <details ref={language} className="composer__language"><summary>Idioma<span className="sr-only"> do envio{translationAccountId ? ' · conta selecionada' : allowOriginal ? ' · original autorizado' : ' · escolha uma conta para traduzir'}</span></summary><div className="field">
+      {pane.cli !== 'shell' && settings?.agentsInEnglish && <details ref={language} className="composer__language"><summary>Idioma<span className="sr-only"> do envio{translationAccountId ? ' · tradução para inglês ativada' : ' · sem tradução'}</span></summary><div className="field">
         <label htmlFor={`translator-${pane.id}`}>Traduzir prompt para inglês · {TRANSLATION_LABEL}</label>
-        <select id={`translator-${pane.id}`} disabled={editingDisabled || allowOriginal} value={translationAccountId} onChange={e => setTranslationAccountId(e.target.value)}>
-          <option value="">Escolha a conta Codex</option>
+        <select id={`translator-${pane.id}`} disabled={editingDisabled} value={translationAccountId} onChange={e => setTranslationAccountId(e.target.value)}>
+          <option value="">Sem tradução</option>
           {accounts.filter(a => a.cli === 'codex' && a.kind === 'assinatura').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
-        <label><input type="checkbox" disabled={editingDisabled} checked={allowOriginal} onChange={e => setAllowOriginal(e.target.checked)} /> Autorizar envio do original sem tradução</label>
-        <p className="note">O texto digitado diretamente no terminal segue no idioma original.</p>
+        <p className="note">Selecione uma conta para traduzir. Sem conta selecionada, a mensagem segue no idioma original. O texto digitado diretamente no terminal também mantém o idioma original.</p>
       </div></details>}
         <span className="composer__hint" role="status">{files.length ? `${files.length}/8 anexos` : ''}</span>
         {pane.role === 'lead' && ['claude', 'codex'].includes(pane.cli) && onToggleSuggestions && <button type="button" className="btn btn--ghost btn--sm composer__toggle" aria-pressed={suggestionsOn} title={suggestionsOn ? 'Desativar sugestões no campo e no terminal' : 'Ativar sugestões no campo e no terminal'} onClick={onToggleSuggestions}>Sugestões<span className="sr-only"> {suggestionsOn ? 'ligadas' : 'desligadas'}</span></button>}

@@ -1426,8 +1426,8 @@ export class OrbitCore {
   }
 
   private async englishInput(text: string, accountId?: string, allowOriginal = false): Promise<string> {
-    if (!this.store.settings().agentsInEnglish || allowOriginal || !text.trim()) return text
-    if (!accountId) throw new Error('Escolha explicitamente uma conta Codex para traduzir o prompt para inglês.')
+    // Translation is opt-in per input. Never choose a provider/account for the user.
+    if (!this.store.settings().agentsInEnglish || allowOriginal || !accountId || !text.trim()) return text
     const account = this.store.account(accountId)
     if (!account || account.cli !== 'codex' || account.kind !== 'assinatura') throw new Error('O tradutor aceita somente uma conta de assinatura Codex escolhida explicitamente. Nenhum outro provedor será usado.')
     const home = this.accountFiles.configDir(account) ?? userConfigDir('codex')
@@ -1470,7 +1470,7 @@ export class OrbitCore {
       if (!message.requestId) {
         // Literal CLI choice buttons are terminal controls, never free-form user prompts.
         if (pane.choices?.includes(message.text)) { this.activeMission(pane.missionId); this.panes.answered(pane.id); this.submitTo(pane.id, message.text); return }
-        throw new Error('Envie requestId estável para evitar duplicação e translationAccountId de uma conta Codex explícita; para enviar sem tradução, autorize allowOriginal: true.')
+        throw new Error('Envie requestId estável para evitar duplicação do pedido. A tradução é opcional e exige uma conta Codex escolhida explicitamente.')
       }
       const record = await this.inputOnce(pane.missionId, message.requestId, inputFingerprint(message), message.text, async record => {
         this.activeMission(pane.missionId)
@@ -1531,7 +1531,7 @@ export class OrbitCore {
     let pending = false
     try {
       if (!message.requestId) {
-        if (this.store.settings().agentsInEnglish && message.objective?.trim() && !message.allowOriginal) throw new Error('A missão precisa de requestId estável e translationAccountId de uma conta Codex explícita para traduzir o objetivo; para preservar o original, autorize allowOriginal: true.')
+        if (this.store.settings().agentsInEnglish && message.objective?.trim() && message.translationAccountId && !message.allowOriginal) throw new Error('A missão precisa de requestId estável para traduzir o objetivo com a conta Codex escolhida explicitamente.')
         this.startMission(message); return
       }
       const scope = `new-${message.workspaceId}`

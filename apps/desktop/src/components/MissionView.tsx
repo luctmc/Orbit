@@ -86,6 +86,10 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
   const selected = panes.find((p) => p.id === selectedPaneId) ?? panes[0] ?? null
   const leader = panes.find(p => p.role === 'lead')
   const suggestions = suggestionsOn && leader ? inputSuggestions({ mission, pane: leader, progress: progress.error ? null : progress.data, cards: missionCards, connected: progress.connection === 'open' }) : []
+  const waitingPane = panes.find(p => p.status === 'waiting')
+  const reviewRequiresAttention = signal.state === 'review' && (progress.data?.integration.state !== 'current' || progress.data?.activities.some(activity =>
+    activity.state === 'awaiting_validation' || (activity.state === 'accepted' && activity.verificationRequired && !progress.data?.validation.find(v => v.activityId === activity.id)?.valid)))
+  const needsAttention = ['waiting', 'blocked', 'offline'].includes(signal.state) || reviewRequiresAttention || !!progress.error
 
   // ⌘1–9 picks an agent, ⌘[ and ⌘] step through them, ⌘J writes to the selected one.
   const latest = useRef({ panes, selected, onSelectPane })
@@ -154,6 +158,13 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
             </button>
           )}
           {!archived && <BudgetChip mission={mission} onEdit={() => setBudgetOpen(true)} />}
+          <section className="mission-insight" aria-label="Estado da missão">
+            <strong>{signal.title}</strong>
+            <p>{signal.detail}</p>
+            {runtime?.persistent && <p className="note">Motor independente conectado. Fechar a janela preserva os terminais; encerre os agentes para parar suas execuções.</p>}
+            <button type="button" className="btn btn--ghost btn--sm" disabled={progress.connection !== 'open' || progress.loading} onClick={progress.refresh}>{progress.loading ? 'Conferindo…' : 'Conferir agora'}</button>
+            {progress.error && <p className="composer__error" role="alert">{progress.error}</p>}
+          </section>
           </ActionMenu>
           {mission.git && (
             <button className="btn btn--ghost btn--sm" onClick={() => setPrOpen(true)} title={`Branch ${mission.git.branch} (a partir de ${mission.git.base})`}>
@@ -178,12 +189,13 @@ export function MissionView({ mission, active = true, panes, selectedPaneId, lay
         </div>
       </div>
 
-      {runtime?.persistent && <p className="note" role="status">Motor independente conectado · fechar a janela preserva os terminais. Encerre os agentes para parar suas execuções.</p>}
-      <details className="mission-status" data-state={signal.state}>
-        <summary><strong>{signal.title}</strong><span>{panes.filter(p => p.status === 'waiting').length ? `${panes.filter(p => p.status === 'waiting').length} pedindo atenção · ` : ''}Detalhes</span></summary>
-        <div><p>{signal.detail}</p><button type="button" className="btn btn--ghost btn--sm" disabled={progress.connection !== 'open' || progress.loading} onClick={progress.refresh}>{progress.loading ? 'Conferindo…' : 'Conferir agora'}</button></div>
-        {progress.error && <p className="composer__error" role="alert">{progress.error}</p>}
-      </details>
+      {needsAttention && <div className="mission-attention" role="status">
+        <p><strong>{signal.title}</strong><span> · {signal.detail}</span></p>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={() => {
+          if (waitingPane) { onSelectPane(waitingPane.id); requestAnimationFrame(() => commandInput.current?.focus()) }
+          else setSide('atividades')
+        }}>{waitingPane ? 'Responder' : 'Ver atividades'}</button>
+      </div>}
 
       <div className="mission__body">
         {panes.length === 0 ? (

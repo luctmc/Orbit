@@ -127,7 +127,10 @@ export function PaneView({ pane, selected, onSelect, suggestions = [], suggestio
         <span className="pane__id">#{pane.id}</span>
         <PaneTitle pane={pane} editing={renaming} onEditing={setRenaming} onSelect={onSelect} />
         {pane.handoffStatus && <span className={`chip ${HANDOFF_CHIP[pane.handoffStatus].tone}`} title={HANDOFF_CHIP[pane.handoffStatus].title}>{HANDOFF_CHIP[pane.handoffStatus].label}</span>}
-        <span className="pane__session" title={[identity.provider, identity.model, account?.name, pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}>{pane.model ?? CLI_LABEL[pane.cli]}{pane.effort ? ` · ${EFFORT_LABEL[pane.effort]}` : ''}</span>
+        <span className="pane__identity">
+          {pane.cli !== 'shell' && <span className="pane__account" title={`Conta em uso: ${account?.name ?? pane.accountId ?? 'não informada'}`}>Conta: {account?.name ?? pane.accountId ?? 'não informada'}</span>}
+          <span className="pane__session" title={[identity.provider, identity.model, account?.name, pane.effort && `esforço ${EFFORT_LABEL[pane.effort]}`].filter(Boolean).join(' · ')}>{pane.model ?? CLI_LABEL[pane.cli]}{pane.effort ? ` · ${EFFORT_LABEL[pane.effort]}` : ''}</span>
+        </span>
         <button type="button" className={`pane__state tone--${status.tone}`} aria-label={`Estado de #${pane.id}: ${status.label}. Ver detalhes`} onClick={() => setMenu(!menu)} aria-expanded={menu}><span className={`dot dot--${status.tone}`} />{status.label}</button>
         <div className="menu-anchor">
           <button ref={menuButton} type="button" className="icon-btn" aria-label={`Ações de #${pane.id}`} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>

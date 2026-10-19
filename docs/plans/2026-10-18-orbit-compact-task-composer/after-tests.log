@@ -1,0 +1,10 @@
+Passed: widths1698/1440/1024/768/375; native controls; modes; Enter/Shift+Enter; disclosures; language opt-in; file picker/paste/remove/send; speech boundary; recipient/draft isolation; Tab suggestions; shell; pending/disconnected; real mission status/menu/attention; actual account names/ID fallback at desktop/narrow.
+✔ compact composer preserves routing, keyboard and tools in the real browser (2887.181125ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3090.189208

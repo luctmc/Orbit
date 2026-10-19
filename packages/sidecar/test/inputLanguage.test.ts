@@ -55,12 +55,11 @@ test('Portuguese is translated before PTY, scoped login is explicit, lost ACK/co
   } finally { await f.close() }
 })
 
-test('no silent provider/account fallback; original requires explicit authorization; failed translation never repeats', async () => {
+test('no silent provider/account fallback; original override is respected; failed translation never repeats', async () => {
   let calls = 0
   const f = await fixture(async () => { calls++; throw new Error('synthetic translation failure') })
   try {
     const base = { type: 'pane.submit' as const, dispatch: 'continue' as const, paneId: f.pane.id, text: 'Olá' }
-    assert.match((await f.send({ ...base, requestId: 'missing' })).message, /explicitamente/)
     assert.match((await f.send({ ...base, requestId: 'wrong', translationAccountId: 'claude' })).message, /somente.*Codex/)
     assert.equal(calls, 0); assert.equal(f.sent.length, 0)
     const failure = { ...base, requestId: 'failure', translationAccountId: 'codex' }
@@ -106,11 +105,11 @@ test('initial mission translates before launch, reports correlated ACK and dedup
   } finally { await f.close() }
 })
 
-test('missing initial translator returns correlated failure and does not launch a mission', async () => {
+test('invalid explicit initial translator returns correlated failure and does not launch a mission', async () => {
   const f = await fixture(async () => { throw new Error('must not run') })
   try {
     const before = f.core.store.snapshot().missions.length
-    const result = await f.send({ type: 'mission.create', requestId: 'bad-new', workspaceId: f.workspace.id, title: 'Login', objective: 'Corrija o login', mode: 'agentica', lead: { cli: 'codex', model: null, title: '' } })
+    const result = await f.send({ type: 'mission.create', requestId: 'bad-new', workspaceId: f.workspace.id, title: 'Login', objective: 'Corrija o login', mode: 'agentica', translationAccountId: 'missing-account', lead: { cli: 'codex', model: null, title: '' } })
     assert.equal(result.type, 'mission.create.error'); assert.equal(result.pending, false)
     assert.equal(f.core.store.snapshot().missions.length, before)
   } finally { await f.close() }
@@ -133,8 +132,8 @@ test('legacy clients receive actionable error instead of a silent drop', async (
   const f = await fixture(async () => { throw new Error('must not run') })
   try {
     const response = await f.send({ type: 'pane.submit', dispatch: 'continue', paneId: f.pane.id, text: 'Olá' })
-    assert.equal(response.type, 'error'); assert.match(response.message, /requestId.*translationAccountId.*allowOriginal/)
-    await assert.rejects(async () => { await f.core.handle({ type: 'mission.create', workspaceId: f.workspace.id, title: 'Old caller', objective: 'Olá', mode: 'agentica', lead: { cli: 'codex', model: null, title: '' } }) }, /requestId.*translationAccountId.*allowOriginal/)
+    assert.equal(response.type, 'error'); assert.match(response.message, /requestId/)
+    await assert.rejects(async () => { await f.core.handle({ type: 'mission.create', workspaceId: f.workspace.id, title: 'Old caller', objective: 'Olá', mode: 'agentica', translationAccountId: 'codex', lead: { cli: 'codex', model: null, title: '' } }) }, /requestId/)
     assert.equal(f.sent.length, 0)
   } finally { await f.close() }
 })
@@ -172,7 +171,7 @@ test('explicit account2 is independent of target pane account and uses its own a
   } finally { await f.close() }
 })
 
-test('normal Portuguese input crosses authenticated WebSocket and a real stand-in PTY only as English', async () => {
+test('explicit translation and default original input cross authenticated WebSocket and a real stand-in PTY', async () => {
   const root = mkdtempSync(join(tmpdir(), 'orbit-input-websocket-'))
   const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir: root, shell: '/bin/sh', run: offline, browser: null, scheduler: false,
     agentCommand: () => ({ file: '/bin/sh', args: ['-c', 'while IFS= read -r line; do printf "%s\\n" "$line"; done'] }) })
@@ -194,6 +193,11 @@ test('normal Portuguese input crosses authenticated WebSocket and a real stand-i
     await new Promise(r => setTimeout(r, 100))
     assert.equal(calls, 1)
     assert.equal(new InputJournal(root).get(pane.missionId, request.requestId)?.state, 'acked')
+    const original = { ...request, requestId: 'bridge-original', text: 'Mantenha esta mensagem em português', translationAccountId: undefined }
+    ui.send(original)
+    await ui.next('pane.submitted', m => m.requestId === original.requestId)
+    await ui.next('pane.data', m => m.paneId === pane.id && m.data.includes(original.text))
+    assert.equal(calls, 1, 'Default original input makes no translating provider call')
   } finally { ui.ws.close(); await server.close(); rmSync(root, { recursive: true, force: true }) }
 })
 
@@ -211,7 +215,7 @@ test('private journal rejects traversal and deletes original creation receipts w
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
-test('scheduled objectives require an explicit translator and launch only the English objective with pt-BR response instruction', async () => {
+test('scheduled objectives keep original by default and translate only with an explicit account', async () => {
   let calls = 0
   const f = await fixture(async ({ text }) => { calls++; assert.equal(text, 'Confira os arquivos'); return 'Check the files' })
   try {
@@ -221,16 +225,43 @@ test('scheduled objectives require an explicit translator and launch only the En
     let schedule = f.core.store.schedules()[0]!
     const count = f.core.store.snapshot().missions.length
     await f.send({ type: 'schedule.run', scheduleId: schedule.id })
-    assert.equal(f.core.store.snapshot().missions.length, count, 'missing translator must never bypass English preference')
-    assert.match(f.core.store.schedule(schedule.id)!.lastResult!, /explicitamente/)
+    assert.equal(f.core.store.snapshot().missions.length, count + 1)
+    assert.equal(calls, 0)
+    assert.equal(f.core.store.mission(f.core.store.schedule(schedule.id)!.lastMissionId!)!.objective, 'Confira os arquivos')
     await f.send({ type: 'schedule.save', schedule: { ...schedule, translationAccountId: 'codex', allowOriginal: false } } as ClientMessage)
     schedule = f.core.store.schedule(schedule.id)!
     await Promise.all([f.send({ type: 'schedule.run', scheduleId: schedule.id }), f.send({ type: 'schedule.run', scheduleId: schedule.id })])
     assert.equal(calls, 1)
-    assert.equal(f.core.store.snapshot().missions.length, count + 1)
+    assert.equal(f.core.store.snapshot().missions.length, count + 2)
     const mission = f.core.store.mission(f.core.store.schedule(schedule.id)!.lastMissionId!)!
     assert.equal(mission.objective, 'Check the files')
     assert.match(readFileSync(f.launches.at(-1).taskPath, 'utf8'), /Respond to the user in Brazilian Portuguese/)
+  } finally { await f.close() }
+})
+
+test('messages and initial objectives without a translating account preserve original text without provider calls', async () => {
+  let calls = 0
+  const f = await fixture(async () => { calls++; throw new Error('No translator was selected') })
+  try {
+    const message = { type: 'pane.submit' as const, dispatch: 'continue' as const, paneId: f.pane.id, text: 'Olá, mantenha o original', requestId: 'original-default' }
+    assert.equal((await f.send(message)).type, 'pane.submitted')
+    assert.equal((await f.send(message)).type, 'pane.submitted')
+    assert.equal(f.sent.length, 1, 'Default language does not weaken input deduplication')
+    assert.match(f.sent[0]!, /^Olá, mantenha o original\n\nRespond to the user in Brazilian Portuguese/)
+    const create = { type: 'mission.create' as const, requestId: 'original-mission', workspaceId: f.workspace.id, title: 'Login', objective: 'Corrija o login', mode: 'agentica' as const, lead: { cli: 'codex' as const, model: null, title: '' } }
+    const created = await f.send(create)
+    assert.equal(created.type, 'mission.created', JSON.stringify(created))
+    assert.equal(created.mission.objective, create.objective)
+    assert.equal((await f.send(create)).mission.id, created.mission.id)
+    assert.equal(calls, 0)
+    const before = f.sent.length
+    const missingId = await f.send({ type: 'pane.submit', dispatch: 'continue', paneId: f.pane.id, text: 'Sem ID não pode duplicar envio' })
+    assert.match(missingId.message, /requestId/)
+    assert.equal(f.sent.length, before)
+    const count = f.core.store.snapshot().missions.length
+    await assert.rejects(f.send({ ...create, requestId: undefined, translationAccountId: 'codex' }), /requestId/)
+    assert.equal(f.core.store.snapshot().missions.length, count)
+    assert.equal(calls, 0)
   } finally { await f.close() }
 })
 

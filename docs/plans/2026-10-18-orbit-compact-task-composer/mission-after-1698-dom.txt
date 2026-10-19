@@ -1,0 +1,43 @@
+Melhorar o espaço de trabalho
+AGÊNTICA
+
+Mais espaço para acompanhar as CLIs e enviar orientações.
+
+Grade
+Splits
+Foco
+Visualizar
+Agente
+Missão
+LÍDER
+#76
+Líder
+Conta: Codex 2
+gpt-6.1-sol · alto
+ocioso
+ 
+AJUDANTE
+#77
+Compactar compositor
+Conta: legacy-account-77
+gpt-6.1-sol · alto
+ocioso
+ 
+Mensagem para o líder · #76
+Para
+Destinatário da mensagem
+Líder · #76
+Compactar compositor · #77
+codex
+Tipo de envio
+Nova tarefa
+Continuar tarefa
+Ajuda
+sobre o tipo de envio
+Idioma
+do envio · sem tradução
+Sugestões
+ligadas
+Enter envia · Shift+Enter nova linha
+. ⌘J foca a mensagem.
+Enviar
