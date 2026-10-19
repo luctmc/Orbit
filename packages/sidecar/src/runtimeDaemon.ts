@@ -65,7 +65,13 @@ export async function ensureRuntimeDaemon(options:RuntimeOptions):Promise<Runtim
    const observed=await status(known)
    if(observed){
     if(known.revision===revision)return known
-    if(observed.live>0)throw new Error('Motor anterior ainda tem terminais ativos. Encerre-os explicitamente antes de aplicar a atualização; nenhum trabalho foi interrompido.')
+    if(observed.live>0){
+     // The v1 bridge protocol is unchanged. Keep the authenticated engine and
+     // its actual revision until its PTYs finish; updating the shell must not
+     // make those sessions inaccessible or require terminating them.
+     console.warn('[orbit] Interface atualizada; motor anterior preservado enquanto há terminais ativos. A próxima abertura sem terminais ativos atualizará o motor.')
+     return known
+    }
     const stop=await fetch(`http://127.0.0.1:${known.port}/runtime/stop`,{method:'POST',headers:{authorization:`Bearer ${known.token}`},signal:AbortSignal.timeout(2000)})
     if(!stop.ok)throw new Error('O motor anterior não confirmou encerramento seguro')
     while(alive(known.pid)){if(Date.now()>deadline)throw new Error('Motor anterior ainda não encerrou');await wait(50)}
@@ -106,10 +112,32 @@ export async function startRuntimeBridge(options:{daemon:RuntimeConnection;token
  const authenticated=(url:URL,authorization?:string)=>url.searchParams.get('token')===token||authorization===`Bearer ${token}`
  const server=createServer((req,res)=>{
   const url=new URL(req.url??'/','http://127.0.0.1')
-  if(!url.pathname.startsWith('/update/')||!authenticated(url,req.headers.authorization)){res.writeHead(401);res.end();return}
+  // Tauri's updater sends x-orbit-token, independently of WebSocket authentication.
+  if(!url.pathname.startsWith('/update/')||req.headers['x-orbit-token']!==token){res.writeHead(401);res.end();return}
+  const address=server.address()
+  if(req.headers.origin||!address||typeof address==='string'||![`127.0.0.1:${address.port}`,`localhost:${address.port}`].includes(req.headers.host??'')){res.writeHead(403);res.end();return}
   url.searchParams.set('token',daemon.token)
-  const upstream=httpRequest({host:'127.0.0.1',port:daemon.port,path:url.pathname+url.search,method:req.method,headers:{...req.headers,authorization:`Bearer ${daemon.token}`,host:`127.0.0.1:${daemon.port}`}},response=>{res.writeHead(response.statusCode??502,response.headers);response.pipe(res)})
-  upstream.setTimeout(15000,()=>upstream.destroy())
+  const upstream=httpRequest({host:'127.0.0.1',port:daemon.port,path:url.pathname+url.search,method:req.method,headers:{...req.headers,'x-orbit-token':daemon.token,host:`127.0.0.1:${daemon.port}`}},response=>{
+   if(url.pathname!=='/update/latest.json'||response.statusCode!==200){res.writeHead(response.statusCode??502,response.headers);response.pipe(res);return}
+   // The daemon survives shell restarts: archive URLs must point to THIS bridge,
+   // where the updater's shell token is translated, never to the daemon itself.
+   const chunks:Buffer[]=[];let size=0
+   response.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>1024*1024)upstream.destroy(new Error('Manifesto de atualização grande demais'));else chunks.push(chunk)})
+   response.on('end',()=>{
+    try{
+     const manifest=JSON.parse(Buffer.concat(chunks).toString('utf8'))
+     for(const platform of Object.values(manifest.platforms??{}) as {url:string}[]){
+      const file=new URL(platform.url)
+      if(file.origin!==`http://127.0.0.1:${daemon.port}`||!file.pathname.startsWith('/update/files/'))throw new Error('URL de atualização inválida no motor')
+      platform.url=`http://127.0.0.1:${address.port}${file.pathname}`
+     }
+     res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(manifest))
+    }catch(error){res.writeHead(502);res.end(error instanceof Error?error.message:String(error))}
+   })
+   response.on('error',()=>{if(!res.headersSent)res.writeHead(502);res.end('Falha ao ler manifesto do motor')})
+  })
+  // gh may need to download a large signed archive before the first response byte.
+  upstream.setTimeout(15*60_000,()=>upstream.destroy())
   upstream.on('error',()=>{if(!res.headersSent)res.writeHead(502);res.end('Motor indisponível')})
   req.pipe(upstream)
  })

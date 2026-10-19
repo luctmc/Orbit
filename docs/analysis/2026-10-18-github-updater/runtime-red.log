@@ -1,0 +1,25 @@
+(node:94624) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:94625) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[31m✖ UI/sidecar bridges restart while daemon PTY, epoch, token and durable history stay intact [90m(342.949334ms)[39m[39m
+[32m✔ a dead bridge with unconfirmed detached spawn never creates a second engine [90m(106.411583ms)[39m[39m
+[34mℹ tests 2[39m
+[34mℹ suites 0[39m
+[34mℹ pass 1[39m
+[34mℹ fail 1[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 590.847541[39m
+
+[31m✖ failing tests:[39m
+
+test at packages/sidecar/test/runtimeDaemon.test.ts:10:1
+[31m✖ UI/sidecar bridges restart while daemon PTY, epoch, token and durable history stay intact [90m(342.949334ms)[39m[39m
+  Error: Motor anterior ainda tem terminais ativos. Encerre-os explicitamente antes de aplicar a atualização; nenhum trabalho foi interrompido.
+      at ensureRuntimeDaemon [90m(file:///Users/lucas/Documents/GitHub/Orbit-fix-orbit-github-updater/[39mpackages/sidecar/src/runtimeDaemon.ts:68:30[90m)[39m
+  [90m    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)[39m
+      at async TestContext.<anonymous> [90m(file:///Users/lucas/Documents/GitHub/Orbit-fix-orbit-github-updater/[39mpackages/sidecar/test/runtimeDaemon.test.ts:26:23[90m)[39m
+  [90m    at async Test.run (node:internal/test_runner/test:1409:7)[39m
+  [90m    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)[39m

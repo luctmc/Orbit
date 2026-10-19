@@ -92,3 +92,37 @@ test('a release folder can stand in for GitHub, to try an update before publishi
   assert.deepEqual(readFileSync((await updates.file('v0.2.0', 'Orbit_0.2.0_aarch64.app.tar.gz')).path), TARBALL)
   assert.match(updates.status.repo, /^pasta /)
 })
+
+test('desktop updater fetches manifest and archive through the disposable bridge with its own token', async () => {
+  const { startRuntimeBridge } = await import('../src/runtimeDaemon.ts')
+  const state: { release: 'none' | 'ok' | 'logout'; downloads: string[] } = { release: 'ok', downloads: [] }
+  const daemonToken = TOKEN + '-daemon'
+  const server = await startServer({ port: 0, token: daemonToken, allowedOrigins: [ORIGIN], dataDir: mkdtempSync(join(tmpdir(), 'orbit-update-bridge-')), shell: '/bin/sh', run: fakeGh(state), browser: null })
+  const bridge = await startRuntimeBridge({ daemon: { version: 1, instanceId: '0'.repeat(32), pid: process.pid, port: server.port, token: daemonToken, revision: '0'.repeat(64) }, token: TOKEN, port: 0, allowedOrigins: [ORIGIN] })
+  const base = `http://127.0.0.1:${bridge.port}`
+  const headers = { 'x-orbit-token': TOKEN }
+  try {
+    assert.equal((await fetch(`${base}/update/latest.json`)).status, 401)
+    assert.equal((await fetch(`${base}/update/latest.json`, { headers: { 'x-orbit-token': daemonToken } })).status, 401)
+    const response = await fetch(`${base}/update/latest.json`, { headers })
+    assert.equal(response.status, 200)
+    const manifest = await response.json()
+    const platform = manifest.platforms['darwin-aarch64']
+    assert.equal(platform.url, `${base}/update/files/v0.2.0/Orbit_0.2.0_aarch64.app.tar.gz`)
+    assert.equal(platform.signature, MANIFEST.platforms['darwin-aarch64'].signature)
+    const archive = await fetch(platform.url, { headers })
+    assert.equal(archive.status, 200)
+    assert.deepEqual(Buffer.from(await archive.arrayBuffer()), TARBALL)
+    assert.equal((await fetch(`${base}/update/latest.json`, { headers: { ...headers, origin: ORIGIN } })).status, 403)
+    assert.equal((await fetch(`${base}/update/latest.json`, { method: 'POST', headers })).status, 405)
+    state.release = 'none'
+    assert.equal((await fetch(`${base}/update/latest.json`, { headers })).status, 204)
+    state.release = 'logout'
+    const failed = await fetch(`${base}/update/latest.json`, { headers })
+    assert.equal(failed.status, 502)
+    assert.match(await failed.text(), /gh auth login/)
+  } finally {
+    await bridge.close()
+    await server.close()
+  }
+})
