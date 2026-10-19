@@ -170,7 +170,7 @@ test('fresh conversations never replay a completed or subsequently reassigned ta
     assert.equal(f.launches.at(-1)!.task.includes(f.input.task), false, 'completion must not be turned into another execution')
     const reopened = f.core.store.pane(pane.id)!
     f.core.handoff(reopened, { summary: 'Still complete', evidence: 'offline check' })
-    f.core.sendTo(f.lead, pane.id, 'A distinct follow-up assignment')
+    f.core.sendTo(f.lead, pane.id, 'A distinct follow-up assignment', true)
     assert.equal(f.core.store.currentPaneAttempt(pane.id)?.requestHash, undefined)
     await f.core.handle({ type: 'pane.restart', paneId: pane.id, resume: false })
     assert.equal(f.launches.at(-1)!.task.includes(f.input.task), false, 'a new assignment cannot recover the old one as current')

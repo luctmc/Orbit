@@ -7,12 +7,16 @@ import { CLI_NAME, type AgentCli, type Mission, type MissionGit, type Pane, type
 
 /** The board, for leads that plan and helpers that report progress. */
 const BOARD_LEAD = 'Keep the mission board current (board_add, board_update, board_list): one card per activity, with its owner. The user follows it and moves cards too.'
-const BOARD_CREW = 'If a card on the board is yours (board_list), move it to "fazendo" when you start and to "feito" when you deliver (board_update).'
+const BOARD_CREW = 'Use board_list; move your card to "fazendo" at start and "feito" on delivery with board_update.'
 
 /** Every agent shares the mission's browser. */
-const BROWSER_NOTE = 'To look at a web page (the running app, for instance), use the mission browser through the "orbit" browser_* tools: browser_open, browser_screenshot, browser_text, browser_click, browser_type, browser_console. It is one page for the whole mission, and the user sees the same page in Orbit.'
+const BROWSER_NOTE = 'Shared browser (visible in Orbit): browser_open, browser_screenshot, browser_text, browser_click, browser_type, browser_console.'
 
-const VERIFICATION_NOTE = 'Done is not acceptance. Independent review: result_inspect(resultId), inspect source/criteria and run real checks, then verification_submit(inspectionId, verdict, summary, checks, criteria). Checks need command, integer exitCode and summary; criteria need item, met, how. Never invent evidence or accept your own result. Changed source/contracts or changes_required require a new delivery/inspection; later acceptance cannot erase rejection. After result acceptance and integration, inspect scope="integration" and verify all final criteria. mission_ready needs a matching final review. Never use force to bypass failed evidence.'
+const VERIFICATION_NOTE = 'Done is not acceptance. Independent review: result_inspect(resultId), check source/criteria and affected behavior, then verification_submit(inspectionId, verdict, summary, checks, criteria). Checks: command, integer exitCode, summary; criteria: item, met, how. Never invent evidence or self-accept. Reuse evidence for the same source revision; reviewers test delta. Required full suite/build once at integration; repeat for relevant changes, failures or new risks. AGENTS/CI remain mandatory. Changed source/contracts or changes_required need new delivery/inspection; acceptance cannot erase rejection. After acceptance/integration, inspect scope="integration" and final criteria. mission_ready needs matching final review; never force failed evidence.'
+const OUTPUT_NOTE = 'Tool output: return relevant excerpts, summary and exit code. Save long logs to files; inspect details for failures. Avoid whole-file/catalog/suite dumps unless needed; preserve access to all required evidence.'
+
+const MESSAGING_NOTE = 'agent_send: omit newTask for ACK/wait/questions; only leads use newTask:true for new work. No ACK/readiness delegation. Completed: handoff_list; implicit agent_resume: unfinished only.'
+
 
 const EFFORT_EN: Record<string, string> = { low: 'low', medium: 'medium', high: 'high', xhigh: 'extra high', max: 'max', ultra: 'ultra' }
 
@@ -33,8 +37,8 @@ function routingTable(routing: Routing): string {
 export function languageNote(english: boolean, role: 'lead' | 'crew'): string {
   if (!english) return 'Language: write everything in Brazilian Portuguese — tasks, messages to other agents, notes, handoffs and anything the user reads.'
   return role === 'lead'
-    ? 'Language: the user writes in Brazilian Portuguese. Work in English: write tasks, messages to other agents and notes in English. Everything the user reads goes in Brazilian Portuguese: your replies in this terminal, ask_user questions and the mission_ready summary.'
-    : 'Language: work in English — your notes, messages to other agents and technical evidence in English. Handoff summaries and details read by the user must be in Brazilian Portuguese. If the user types to you directly, answer them in Brazilian Portuguese.'
+    ? 'Language: English for tasks, agent messages and notes; Brazilian Portuguese for everything the user reads: terminal replies, ask_user questions and mission_ready summary.'
+    : 'Language: English for notes, agent messages and technical evidence; Brazilian Portuguese for user-facing handoff summaries/details and direct replies.'
 }
 
 /** Said to a helper that ends its turn still owing a handoff. */
@@ -46,7 +50,7 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
     languageNote(english, 'lead'),
     'Orbit exposes an MCP server named "orbit". Tool schemas describe arguments; do not reproduce them in messages. Use mission_briefing after compaction, resume or uncertainty; mission_note records decisions, project_note records reusable knowledge, project_memory retrieves it.',
     'Ask the user only for missing decisions or authorization with ask_user, then end your turn. Preserve the user scope, permissions and budget.',
-    BROWSER_NOTE, BOARD_LEAD, VERIFICATION_NOTE,
+    BROWSER_NOTE, BOARD_LEAD, VERIFICATION_NOTE, MESSAGING_NOTE, OUTPUT_NOTE,
   ]
   if (mission.mode === 'livre') return [...base, 'Execute the requested work; open helpers only when requested or useful.'].join('\n\n')
   const orchestration = [
@@ -55,8 +59,8 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
     'Split by independent scope, not agent count. One simple command needs one helper; overlapping files belong to one writer. Start independent work with agent_spawn_many (up to eight); start dependent work only after acceptance.',
     'For each agent_spawn, pass a self-contained task: context, exact paths, outcome, evidence, boundaries and accept criteria. Reuse a stable activityId for identical requests. Changed instructions, model, effort, difficulty or criteria require retryReason explaining changed inputs or failed evidence. Check activity_status before retrying a stopped reservation; never repeat completed work merely to recover context.',
     'Reuse active helpers with agent_send and completed evidence with handoff_list. A required done result is a submission, not acceptance. Ask for missing evidence, then close finished writers before launching another in their physical checkout. Isolated worktrees allow parallel writers; extra folders still count toward overlap. Admission refusal is not a queued task.',
-    'Legacy readOnly and requireReadOnlySandbox fields describe assignment scope only; native agents launch with the default writable bypass policy. dependsOn pins accepted activity revisions, attempts and results; changed prerequisites require new downstream work. Reviewing an unaccepted target: pass its resultId in the task, not in dependsOn (that would form a cycle).',
-    'After delegating, end your turn; results wake you automatically. Do not poll agent_list or agent_read; use agent_read only to diagnose a stuck helper. For each result notice call delivery_ack(deliveryId, includeResult=true); use returned bounded evidence and fetch handoff_list detail only for missing/truncated fields. ACK means receipt, not acceptance; duplicate notice ids are recovery, not new work.',
+    'readOnly/requireReadOnlySandbox describe scope; writable bypass is unchanged. dependsOn pins accepted revisions/results; changed prerequisites need new downstream work. Review an unaccepted resultId in task, never dependsOn (a cycle).',
+    'After delegating, end your turn; results wake you. Do not poll agent_list/agent_read; diagnose stuck helpers only. Call delivery_ack(deliveryId, includeResult=true); fetch handoff_list only for missing evidence. ACK is receipt, not acceptance; duplicate ids are recovery.',
     'Choose an independent reviewer, ideally another CLI. After all required results are accepted and merged, review final integration. With the accepted integration verification_submit, include readySummary in Portuguese to finish atomically. If completion is returned, do not call mission_ready again. Otherwise mission_ready must satisfy the same gates. Do not waive required work or failed reviews to report success.',
     'Explain each delegation receipt briefly to the user. Report verified outcome and remaining gaps; closed terminals, last words and blocked reports never prove completion.',
   ]
@@ -94,9 +98,9 @@ export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, context: Crew
     ...[squadRole, taskType].flatMap(r => r?.skills.length && !r.onlySkills ? [`Use these skills when available: ${r.skills.join(', ')}.`] : []),
     'Do only the assigned task within user permissions. Missing essential context: deliver blocked with the question to your assigner.',
     ...(children > 0 ? [`You may open up to ${children} sub-helpers for independent work with agent_spawn. Integrate and verify their results before your own delivery; close them afterwards.`] : []),
-    BROWSER_NOTE, ...(context.hasBoard === false ? [] : [BOARD_CREW]), VERIFICATION_NOTE,
+    BROWSER_NOTE, ...(context.hasBoard === false ? [] : [BOARD_CREW]), VERIFICATION_NOTE, MESSAGING_NOTE, OUTPUT_NOTE,
     context.attemptId ? `Assignment attemptId: ${context.attemptId}. Include it in handoff_submit; no whoami lookup is needed for this identity.` : 'Capture whoami.agent.attemptId on assignment; include it in handoff_submit.',
-    'Never relabel old work. Deliver done with summary, evidence (actual commands, exits, files) and each acceptance item in criteria; blocked with the question; progress for an interim update. Use to for another recipient. A done submission is not acceptance. Do not wait after delivering.',
+    'Deliver done with summary, evidence (commands, exits, files) and each acceptance item in criteria; blocked with the question; progress for interim updates. Use to for another recipient. Done is not acceptance. Never relabel old work or wait after delivery.',
     'Read result notices and call delivery_ack(deliveryId); repeated ids are recovery, not new assignments.',
   ].join('\n\n')
 }

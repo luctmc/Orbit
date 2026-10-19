@@ -155,7 +155,7 @@ test('new work in a completed terminal creates a separate required delivery', as
   try {
     f.core.handoff(f.worker, { summary: 'First result', evidence: 'First check' })
     const first = f.core.store.deliveries(f.lead.missionId)[0]!
-    f.core.sendTo(f.lead, f.worker.id, 'One more independent check')
+    f.core.sendTo(f.lead, f.worker.id, 'One more independent check', true)
     const records = f.core.store.deliveries(f.lead.missionId)
     assert.equal(records.length, 2)
     assert.equal(records[0]!.status, 'done')

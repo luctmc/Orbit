@@ -2253,36 +2253,50 @@ export class OrbitCore {
   }
 
   /** Sends text to another agent of the same mission, as if typed by a person. */
-  sendTo(caller: Pane, targetId: number, text: string): void {
+  sendTo(caller: Pane, targetId: number, text: string, newTask = false): void {
     const target = this.sameMission(caller, targetId)
+    if (newTask) this.authorizeAssignment(caller, target)
     if (!this.submitTo(target.id, `[Orbit] Mensagem de #${caller.id}: ${text}`)) throw new Error(`#${targetId} não está rodando`)
-    // A message from the lead is new work: the helper owes a handoff again.
-    if (caller.role === 'lead' && target.role === 'crew' && target.cli !== 'shell') this.assign(target.id, caller.id)
+    if (newTask) this.assign(target.id, caller.id)
+  }
+
+  /** Validate intent before typing or interrupting: messages alone never assign work. */
+  private authorizeAssignment(caller: Pane, target: Pane): void {
+    this.assertCurrent(caller)
+    // target is freshly resolved from Store; an exited helper may be explicitly resumed.
+    if (caller.role !== 'lead' || target.role !== 'crew' || target.cli === 'shell') throw new Error('Só o líder atribui nova tarefa a um ajudante agente; use newTask apenas para trabalho novo.')
   }
 
   /** Stops what a helper is doing (Esc, as a person would) and, optionally, gives it new orders. */
   async interrupt(caller: Pane, targetId: number, message: string | null): Promise<void> {
     const target = this.sameMission(caller, targetId)
     if (!this.panes.isAlive(target.id) || target.cli === 'shell') throw new Error(`#${targetId} não é um agente rodando`)
+    if (message?.trim()) this.authorizeAssignment(caller, target)
     this.panes.write(target.id, '\x1b')
     this.panes.report(target.id, 'idle', null)
     if (!message?.trim()) return
     await new Promise((resolve) => setTimeout(resolve, INTERRUPT_SETTLE_MS))
     this.assertCurrent(caller)
     this.assertCurrent(target)
-    this.sendTo(caller, targetId, message.trim())
+    this.sendTo(caller, targetId, message.trim(), true)
   }
 
   /** Opens a helper again in the same conversation, with a message to carry on; returns the new agent. */
   async resumeHelper(caller: Pane, targetId: number, message: string | null): Promise<Pane> {
     const target = this.sameMission(caller, targetId)
     if (target.role !== 'crew' || target.cli === 'shell') throw new Error(`#${targetId} não é um ajudante`)
+    const explicitTask = Boolean(message?.trim())
+    if (explicitTask) this.authorizeAssignment(caller, target)
+    const pending = this.pendingDeliveries(target.missionId).some(d => d.paneId === target.id && ['pending', 'progress', 'blocked'].includes(d.status))
+    if (!explicitTask && !pending && (target.handoffStatus === 'done' || target.handoffStatus === 'auto')) {
+      throw new Error('Ajudante já entregou. Consulte handoff_list; para trabalho novo use agent_send com newTask:true ou agent_resume com mensagem explícita.')
+    }
     if (this.panes.isAlive(target.id) && (target.status === 'running' || target.status === 'starting')) {
       throw new Error(`#${targetId} está trabalhando. Para mudar o rumo use agent_interrupt; para falar com ele, agent_send.`)
     }
     const pane = await this.restartPane(target.id, true, message?.trim() || 'Continue a tarefa de onde parou. Ao terminar, entregue com handoff_submit.')
     this.assertCurrent(caller)
-    this.assign(pane.id, caller.id)
+    if (explicitTask) this.assign(pane.id, caller.id)
     return this.store.pane(pane.id) ?? pane
   }
 
@@ -2498,7 +2512,10 @@ export class OrbitCore {
     if (!this.owesHandoff(pane)) return null
     // A progress checkpoint may end a turn, but the durable obligation still gates completion.
     if (pane.handoffStatus === 'progress') return null
-    if (canBlock) return HANDOFF_NUDGE
+    if (canBlock && !this.nudged.has(pane.id)) {
+      this.nudged.add(pane.id)
+      return HANDOFF_NUDGE
+    }
     if (pane.cli !== 'shell' && !AGENT_INFO[pane.cli].hooks && !this.nudged.has(pane.id)) {
       this.nudged.add(pane.id)
       this.panes.submit(pane.id, `[Orbit] ${HANDOFF_NUDGE}`)
