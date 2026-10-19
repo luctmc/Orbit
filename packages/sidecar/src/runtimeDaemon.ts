@@ -65,7 +65,13 @@ export async function ensureRuntimeDaemon(options:RuntimeOptions):Promise<Runtim
    const observed=await status(known)
    if(observed){
     if(known.revision===revision)return known
-    if(observed.live>0)throw new Error('Motor anterior ainda tem terminais ativos. Encerre-os explicitamente antes de aplicar a atualização; nenhum trabalho foi interrompido.')
+    if(observed.live>0){
+     // The v1 bridge protocol is unchanged. Keep the authenticated engine and
+     // its actual revision until its PTYs finish; updating the shell must not
+     // make those sessions inaccessible or require terminating them.
+     console.warn('[orbit] Interface atualizada; motor anterior preservado enquanto há terminais ativos. A próxima abertura sem terminais ativos atualizará o motor.')
+     return known
+    }
     const stop=await fetch(`http://127.0.0.1:${known.port}/runtime/stop`,{method:'POST',headers:{authorization:`Bearer ${known.token}`},signal:AbortSignal.timeout(2000)})
     if(!stop.ok)throw new Error('O motor anterior não confirmou encerramento seguro')
     while(alive(known.pid)){if(Date.now()>deadline)throw new Error('Motor anterior ainda não encerrou');await wait(50)}

@@ -19,6 +19,14 @@ test('UI/sidecar bridges restart while daemon PTY, epoch, token and durable hist
   const {pane}=await ui.next('pane.updated')
   ui.send({type:'pane.input',paneId:pane.id,data:'echo DURABLE_MARKER\r'})
   await ui.next('pane.data',m=>m.data.includes('DURABLE_MARKER'))
+  // A newly installed shell must attach to the verified existing engine while
+  // its PTYs are live; a different code revision must not strand the UI.
+  const upgradedEntry=join(dataDir,'upgraded-engine.mjs')
+  writeFileSync(upgradedEntry,`import ${JSON.stringify(new URL('./fixtures/runtime-daemon.mjs',import.meta.url).href)};\n// new build\n`)
+  const duringUpgrade=await ensureRuntimeDaemon({dataDir,entry:upgradedEntry,shell:'/bin/sh',allowedOrigins:[ORIGIN]})
+  assert.equal(duringUpgrade.instanceId,daemon.instanceId)
+  assert.equal(duringUpgrade.pid,daemon.pid)
+  assert.equal(duringUpgrade.revision,daemon.revision,'the running engine is not relabeled as upgraded')
   ui.ws.close();await bridge.close()
   const reconnected=await ensureRuntimeDaemon({dataDir,entry,shell:'/bin/sh',allowedOrigins:[ORIGIN]})
   assert.equal(reconnected.instanceId,daemon.instanceId)
@@ -34,6 +42,10 @@ test('UI/sidecar bridges restart while daemon PTY, epoch, token and durable hist
   assert.equal((await fetch(`http://127.0.0.1:${state.port}/runtime/stop`,{method:'POST',headers:auth})).status,409,'live processes must not be killed to upgrade')
   ui.send({type:'pane.close',paneId:pane.id});await ui.next('pane.removed')
   await new Promise(r=>setTimeout(r,30))
+  const previous=daemon
+  daemon=await ensureRuntimeDaemon({dataDir,entry:upgradedEntry,shell:'/bin/sh',allowedOrigins:[ORIGIN]})
+  assert.notEqual(daemon.instanceId,previous.instanceId,'a quiescent engine can upgrade on the next shell launch')
+  assert.notEqual(daemon.revision,previous.revision)
  }finally{
   ui?.ws.close();await bridge?.close()
   if(daemon)await fetch(`http://127.0.0.1:${daemon.port}/runtime/stop`,{method:'POST',headers:{authorization:`Bearer ${daemon.token}`}}).catch(()=>{})

@@ -1,0 +1,20 @@
+(node:94795) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:94796) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[orbit] Interface atualizada; motor anterior preservado enquanto há terminais ativos. A próxima abertura sem terminais ativos atualizará o motor.
+[32m✔ UI/sidecar bridges restart while daemon PTY, epoch, token and durable history stay intact [90m(642.140708ms)[39m[39m
+[32m✔ a dead bridge with unconfirmed detached spawn never creates a second engine [90m(55.106875ms)[39m[39m
+(node:94797) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[32m✔ the updater plugin gets Orbit's releases through the sidecar, with the UI token only [90m(55.938084ms)[39m[39m
+[32m✔ a release folder can stand in for GitHub, to try an update before publishing [90m(0.923833ms)[39m[39m
+[32m✔ desktop updater fetches manifest and archive through the disposable bridge with its own token [90m(28.14575ms)[39m[39m
+[34mℹ tests 5[39m
+[34mℹ suites 0[39m
+[34mℹ pass 5[39m
+[34mℹ fail 0[39m
+[34mℹ cancelled 0[39m
+[34mℹ skipped 0[39m
+[34mℹ todo 0[39m
+[34mℹ duration_ms 839.723041[39m
