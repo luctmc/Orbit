@@ -12,11 +12,13 @@ test('lost input ACK retains request identity, blocks changed input, and pending
     await Promise.resolve()
     const ask = client.ask.bind(client)
     client.ask = ((m: any, t: any, match: any) => ask(m, t, match, 10)) as any
-    const input = { paneId: 1, text: 'Corrija o botão', translationAccountId: 'explicit-codex' }
+    const input = { paneId: 1, text: 'Corrija o botão', dispatch: 'new-task' as const, translationAccountId: 'explicit-codex' }
     await assert.rejects(client.submitInput(input), OrbitRequestTimeout)
     assert(client.inputPending('pane-1'))
     await assert.rejects(client.submitInput({ ...input, text: 'Changed' }), OrbitPendingInput)
     assert.equal(sent.length, 1)
+    assert.equal(sent[0].dispatch, 'new-task')
+    await assert.rejects(client.submitInput({ ...input, dispatch: 'continue' }), OrbitPendingInput)
     const retry = client.submitInput(input)
     assert.equal(sent[1].requestId, sent[0].requestId)
     ;(client as any).receive({ type: 'pane.submit.error', requestId: sent[1].requestId, pending: true, message: 'ACK pending' })
@@ -37,7 +39,7 @@ test('renderer restart recovers drafts, attachment IDs and the exact pending ope
   globalThis.WebSocket = Socket as any
   try {
     const first = new OrbitClient(async () => 'ws://synthetic'); await Promise.resolve()
-    first.inputDrafts.set('pane-1', { text: 'Confira o estado', accountId: 'codex-acc-2', allowOriginal: false })
+    first.inputDrafts.set('pane-1', { text: 'Confira o estado', accountId: 'codex-acc-2', allowOriginal: false, dispatch: 'continue' })
     first.inputAttachments.set('pane-1', [{ id: 'attachment-1', name: 'draft.txt', mime: 'text/plain', size: 12, path: '/private/draft.txt', preview: 'blob:expired' } as any])
     first.ask = (async () => { throw new OrbitRequestTimeout('synthetic ACK loss') }) as any
     const input = { paneId: 1, text: 'Confira o estado', attachments: ['attachment-1'], translationAccountId: 'codex-acc-2', allowOriginal: false }
@@ -45,6 +47,7 @@ test('renderer restart recovers drafts, attachment IDs and the exact pending ope
     const requestId = (first as any).inputAttempts.get('pane-1').requestId
     const restarted = new OrbitClient(async () => 'ws://synthetic'); await Promise.resolve()
     assert.equal(restarted.inputDrafts.get('pane-1')?.text, input.text)
+    assert.equal(restarted.inputDrafts.get('pane-1')?.dispatch, 'continue')
     assert.equal(restarted.inputAttachments.get('pane-1')?.[0]?.id, 'attachment-1')
     assert.equal(restarted.inputAttachments.get('pane-1')?.[0]?.preview, null)
     assert(restarted.inputPending('pane-1'))

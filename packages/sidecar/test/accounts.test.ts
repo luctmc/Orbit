@@ -93,7 +93,8 @@ test('accounts: each runs in its own folder, keys stay in the sidecar, logins op
     const env = await ui.next('pane.data', (m) => m.paneId === lead.id && m.data.includes('ENV:'))
     assert.match(env.data, new RegExp(`ENV:${join(dataDir, 'accounts', openrouter.id, 'claude')}\\|https://openrouter.ai/api\\|anthropic/claude-sonnet-5.5:`))
     const settings = JSON.parse(readFileSync(join(dataDir, 'panes', String(lead.id), 'settings.json'), 'utf8'))
-    assert.equal(settings.apiKeyHelper, `cat '${keyFile}'`)
+    assert.equal(settings.apiKeyHelper, undefined, 'OpenRouter uses isolated bearer auth, not x-api-key helper')
+    assert.ok(!JSON.stringify(settings).includes('sk-or-test-key'))
 
     // A second Codex subscription: logged out until the person logs in through a terminal.
     ui.send({ type: 'account.save', account: { cli: 'codex', name: 'Codex trabalho', kind: 'assinatura' } })

@@ -39,6 +39,7 @@ export interface OrbitState {
   cards: Card[]
   templates: MissionTemplate[]
   schedules: Schedule[]
+  providerSetups?: Array<Extract<ServerMessage, { type: 'provider.setup.result' }>>
   lastError: string | null
 }
 
@@ -90,7 +91,7 @@ export class OrbitClient {
   private readonly inputFlights = new Map<string, Promise<unknown>>()
   readonly inputAttachments = new DurableMap<Array<import('@orbit/protocol').Attachment & { preview: string | null }>>('orbit.input.attachments.v1', files => files.map(file => ({ ...file, preview: null })))
   readonly missionDrafts = new DurableMap<Omit<Extract<ClientMessage, { type: 'mission.create' }>, 'type' | 'requestId'>>('orbit.input.missions.v1')
-  readonly inputDrafts = new DurableMap<{ text: string; accountId: string; allowOriginal: boolean }>('orbit.input.drafts.v1')
+  readonly inputDrafts = new DurableMap<{ text: string; accountId: string; allowOriginal: boolean; dispatch?: 'new-task' | 'continue' }>('orbit.input.drafts.v1')
   private readonly inputAttempts = new DurableMap<{ fingerprint: string; requestId: string }>('orbit.input.attempts.v1')
   inputPending(key: string): boolean { return this.inputAttempts.has(key) }
 
@@ -368,7 +369,12 @@ export class OrbitClient {
   }
 
   private receive(message: ServerMessage): void {
-    if (message.type === 'mission.checked' || message.type === 'workspace.saved' || message.type === 'workspace.error') {
+    if (message.type === 'provider.setup.result') {
+      this.update({ providerSetups: upsert(this.state.providerSetups ?? [], message, item => item.provider) })
+      for (const answer of [...this.answers]) answer(message)
+      return
+    }
+    if ( message.type === 'account.catalog.result' || message.type === 'mission.checked' || message.type === 'workspace.saved' || message.type === 'workspace.error') {
       for (const answer of [...this.answers]) answer(message)
       return
     }
@@ -418,7 +424,7 @@ export class OrbitClient {
         this.update({ panes: upsert(this.state.panes, message.pane, (p) => p.id) })
         return
       case 'pane.removed':
-        this.update({ panes: this.state.panes.filter((p) => p.id !== message.paneId) })
+        this.update({ panes: this.state.panes.filter((p) => p.id !== message.paneId), providerSetups: this.state.providerSetups?.filter(s => s.paneId !== message.paneId) })
         return
       case 'event.added':
         this.update({ events: [...this.state.events, message.event] })

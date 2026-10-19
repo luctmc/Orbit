@@ -103,3 +103,6 @@
   .ias .quota-access__windows { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { .ias-spinner { animation: none; } }
+
+.ias-setup .btn { min-height: 44px; }
+.ias-setup .account-form__actions { flex-wrap: wrap; }

@@ -1,3 +1,4 @@
+import { providerSetup } from './providerSetup.ts'
 import { catalogRevision as revisionOfCatalog } from './catalogRevision.ts'
 import { AppPlugins } from './appPlugins.ts'
 import { AGENT_PERMISSION_NOTE, AGENT_PERMISSION_POLICY } from './agentPermissions.ts'
@@ -84,7 +85,7 @@ const MAX_CHILDREN = 2
 const RESUME_NOTE = 'O Orbit foi reaberto. Continue a tarefa de onde parou e, ao terminar, entregue com handoff_submit.'
 
 export interface HelperRequest {
-  title: string; task: string; cli?: AgentCli; model: string | null; effort?: Effort | null
+  title: string; task: string; cli?: AgentCli; accountId?: string | null; model: string | null; effort?: Effort | null
   squadRoleId?: string | null; taskTypeId?: string | null; accept?: string[]; folder?: string | null
   difficulty?: Difficulty | null; retryReason?: string; activityId?: string
   dependsOn?: string[]
@@ -162,6 +163,10 @@ export class OrbitCore {
   private readonly accountStatus = new Map<string, AccountStatus>()
   /** Terminals running a CLI login → the account they log in. Not part of any mission. */
   private readonly loginPanes = new Map<number, string>()
+  private readonly setupPanes = new Map<number, { requestId: string; provider: string; action: string }>()
+  private readonly setupRequests = new Map<string, { fingerprint: string; reply?: ServerMessage; promise: Promise<void> }>()
+  private readonly setupAdmissions = new Set<string>()
+  private readonly accountChecks = new Map<string, Promise<void>>()
   /** One headless page per mission, shared by its agents and the person. */
   readonly browser: BrowserHost
   /** New releases of Orbit itself, read with the person's gh login. */
@@ -215,13 +220,18 @@ export class OrbitCore {
     })
     this.panes.on('resized', (paneId, cols, rows) => this.broadcast({ type: 'pane.resized', paneId, cols, rows }))
     this.panes.on('status', (pane, previous) => {
-      if (this.loginPanes.has(pane.id)) return
+      if (this.loginPanes.has(pane.id) || this.setupPanes.has(pane.id)) return
       this.syncPane(pane)
       if (pane.status === 'waiting' && previous !== 'waiting') {
         this.event(pane.missionId, 'pane.waiting', `#${pane.id} espera você`, pane.attention ?? 'O agente precisa de você.', pane.id)
       }
     })
     this.panes.on('exit', (pane) => {
+      const setup = this.setupPanes.get(pane.id)
+      if (setup) {
+        this.broadcast({ type: 'provider.setup.result', ...setup, paneId: pane.id, phase: pane.exitCode === 0 ? 'succeeded' : 'failed', message: pane.exitCode === 0 ? 'Comando concluído. Confira o login e os detalhes no terminal.' : `O comando terminou com código ${pane.exitCode ?? '?'}. Confira o terminal antes de tentar novamente.` })
+        return
+      }
       const login = this.loginPanes.get(pane.id)
       if (login) {
         // The terminal stays on screen (it may show an error) until the person closes it.
@@ -261,6 +271,7 @@ export class OrbitCore {
       this.skillsMessage(),
       { type: 'update.status', status: this.updates.status },
       { type: 'browser.engine', name: this.browser.engine?.name ?? null },
+      ...[...this.setupPanes].map(([paneId, setup]): ServerMessage => ({ type: 'provider.setup.result', ...setup, paneId, phase: this.panes.get(paneId)?.status === 'exited' ? this.panes.get(paneId)?.exitCode === 0 ? 'succeeded' : 'failed' : 'running', message: 'Terminal de configuração preservado. Confira os detalhes abaixo.' })),
       ...this.browser.states().map((browser): ServerMessage => ({ type: 'browser.state', browser })),
     ]
     if (this.catalog) messages.push({ type: 'catalog', catalog: this.catalog, accounts: this.accountCatalogs })
@@ -283,6 +294,23 @@ export class OrbitCore {
     // Removed accounts must never reappear from an in-flight probe.
     if (this.store.account(account.id) && accountCatalogKey(account, this.accountFiles, this.clis.get(account.cli)?.version ?? null) === key) { this.accountCatalogs[account.id] = item; this.catalogKeys.set(account.id, key) }
     return item
+  }
+
+  private async refreshSelectedCatalog(message: Extract<ClientMessage, { type: 'account.catalog.refresh' }>, reply: (message: ServerMessage) => void): Promise<void> {
+    try {
+      if (!message.requestId || message.requestId.length > 100) throw new Error('Identificador de consulta inválido')
+      const account = this.store.account(message.accountId)
+      if (!account) throw new Error('Conta desconhecida')
+      if (this.accountStatus.get(account.id)?.busy) throw new Error('Aguarde o login ou verificação desta conta')
+      this.catalogCache.invalidate(account.id)
+      const catalog = await this.catalogForAccount(account)
+      if (account.builtin && this.catalog) this.catalog = { ...this.catalog, [account.cli]: catalog }
+      if (this.catalog) this.broadcast({ type: 'catalog', catalog: this.catalog, accounts: this.accountCatalogs })
+      const ok = catalog.source === 'cli' && catalog.models.length > 0
+      reply({ type: 'account.catalog.result', requestId: message.requestId, accountId: account.id, ok, catalog, message: ok ? 'Catálogo desta conta atualizado.' : catalog.reason ?? 'A CLI não confirmou os modelos desta conta.' })
+    } catch (error) {
+      reply({ type: 'account.catalog.result', requestId: message.requestId, accountId: message.accountId, ok: false, message: error instanceof Error ? error.message : String(error) })
+    }
   }
 
   private currentAccountCatalog(account: Account): import('@orbit/protocol').CliCatalog {
@@ -1099,8 +1127,17 @@ export class OrbitCore {
 
   /** Asks the CLI whether the account is logged in, and as whom. */
   async checkAccount(accountId: string): Promise<void> {
+    const running = this.accountChecks.get(accountId)
+    if (running) return running
+    const checking = this.inspectAccount(accountId)
+    this.accountChecks.set(accountId, checking)
+    try { await checking } finally { if (this.accountChecks.get(accountId) === checking) this.accountChecks.delete(accountId) }
+  }
+
+  private async inspectAccount(accountId: string): Promise<void> {
     const account = this.store.account(accountId)
     if (!account) return
+    const identity = accountCatalogKey(account, this.accountFiles, this.clis.get(account.cli)?.version ?? null)
     const current = this.accountStatus.get(accountId)
     if (current?.busy === 'checking') return
     this.setAccountStatus(accountId, { busy: current?.loginPaneId && this.panes.isAlive(current.loginPaneId) ? 'login' : 'checking' })
@@ -1113,6 +1150,12 @@ export class OrbitCore {
     if (!this.store.account(accountId)) return // removed meanwhile
     if (current && (found.loggedIn !== current.loggedIn || found.email !== current.email)) this.catalogCache.invalidate(accountId)
     if (account.kind === 'assinatura' && found.loggedIn !== false) await this.refreshAccountLimits(account)
+    const latestAccount = this.store.account(accountId)
+    if (!latestAccount) return
+    if (identity !== accountCatalogKey(latestAccount, this.accountFiles, this.clis.get(latestAccount.cli)?.version ?? null)) {
+      this.setAccountStatus(accountId, { loggedIn: null, email: null, plan: null, method: null, busy: null, message: 'A conta mudou durante a consulta. Verifique novamente antes de usá-la.' })
+      return
+    }
     const loginPaneId = this.accountStatus.get(accountId)?.loginPaneId ?? null
     this.setAccountStatus(accountId, { ...found, checkedAt: Date.now(), busy: loginPaneId && this.panes.isAlive(loginPaneId) ? 'login' : null })
     await this.catalogForAccount(account)
@@ -1243,6 +1286,48 @@ export class OrbitCore {
     }
   }
 
+  private async startProviderSetup(message: Extract<ClientMessage, { type: 'provider.setup' }>, reply: (message: ServerMessage) => void): Promise<void> {
+    const fingerprint = JSON.stringify([message.provider, message.action])
+    const previous = this.setupRequests.get(message.requestId)
+    if (previous) {
+      if (previous.fingerprint !== fingerprint) { reply({ type: 'provider.setup.result', requestId: message.requestId, provider: message.provider, phase: 'failed', message: 'Este pedido de configuração já foi usado com outros dados.' }); return }
+      await previous.promise
+      if (previous.reply?.type === 'provider.setup.result' && previous.reply.paneId && this.panes.get(previous.reply.paneId)?.status === 'exited') {
+        const code = this.panes.get(previous.reply.paneId)?.exitCode
+        reply({ ...previous.reply, phase: code === 0 ? 'succeeded' : 'failed', message: `Comando encerrado com código ${code ?? '?'}. Confira o terminal preservado.` })
+      } else if (previous.reply) reply(previous.reply)
+      return
+    }
+    const entry: { fingerprint: string; reply?: ServerMessage; promise: Promise<void> } = { fingerprint, promise: Promise.resolve() }
+    this.setupRequests.set(message.requestId, entry)
+    entry.promise = this.executeProviderSetup(message, result => { entry.reply = result; reply(result) })
+    await entry.promise
+  }
+
+  private async executeProviderSetup(message: Extract<ClientMessage, { type: 'provider.setup' }>, reply: (message: ServerMessage) => void): Promise<void> {
+    let ownsAdmission = false
+    try {
+      if (!message.requestId || message.requestId.length > 100) throw new Error('Identificador de configuração inválido')
+      if (this.stopping) throw new Error('O motor está encerrando; aguarde a reconexão')
+      const setup = providerSetup(message.provider, message.action)
+      const existing = [...this.setupPanes].find(([, item]) => item.requestId === message.requestId)
+      if (existing) { reply({ type: 'provider.setup.result', requestId: message.requestId, provider: message.provider, phase: 'running', paneId: existing[0], message: 'Terminal de configuração já aberto.' }); return }
+      if ([...this.setupPanes].some(([id, item]) => item.provider === message.provider && this.panes.isAlive(id))) throw new Error('Já existe uma configuração deste provedor em andamento')
+      if (this.setupAdmissions.has(message.provider)) throw new Error('Já existe uma configuração deste provedor em andamento')
+      this.setupAdmissions.add(message.provider); ownsAdmission = true
+      const installed = await this.run(`command -v ${setup.bin}`, 5000)
+      if (message.action === 'install' && installed.code === 0) throw new Error(`${setup.bin} já está instalado. A instalação existente foi preservada; use Conectar ou a documentação oficial para atualizar.`)
+      if (message.action === 'connect' && installed.code !== 0) throw new Error('Instale a CLI antes de conectar')
+      const id = this.store.allocatePaneId()
+      this.panes.spawn({ id, request: { missionId: '', role: 'crew', cli: 'shell', model: null, title: `${message.action === 'install' ? 'Instalar' : 'Conectar'} ${message.provider}` }, squadRole: null, taskType: null, cwd: this.dataDir, launch: { cli: 'shell', model: null }, env: {}, hookDriven: false, accountId: null })
+      this.setupPanes.set(id, { requestId: message.requestId, provider: message.provider, action: message.action })
+      // Fixed command selected on the server. The user's shell only receives one quoted script.
+      this.panes.write(id, `exec /bin/sh -c ${shellQuote(setup.command)}\r`)
+      reply({ type: 'provider.setup.result', requestId: message.requestId, provider: message.provider, phase: 'running', paneId: id, message: 'Configuração aberta no terminal visível. Conclua os passos solicitados pela CLI.' })
+    } catch (error) { reply({ type: 'provider.setup.result', requestId: message.requestId, provider: message.provider, phase: 'failed', message: error instanceof Error ? error.message : String(error) }) }
+    finally { if (ownsAdmission) this.setupAdmissions.delete(message.provider) }
+  }
+
   /** A terminal running the CLI's own login, as this account. */
   private startLogin(accountId: string): void {
     const account = this.store.account(accountId)
@@ -1293,14 +1378,24 @@ export class OrbitCore {
       const rooms = this.rooms(cli, live)
       return {
         cli,
-        accounts: rooms.map((r) => ({
-          account: r.account.builtin ? `${CLI_LABEL[cli]} deste Mac` : r.account.name,
-          kind: r.account.kind,
-          used: r.used === null ? 'sem leitura ainda' : `${Math.round(r.used)}%`,
-          agentsNow: r.live,
-          full: r.full,
-          backIn: r.resetsAt ? untilText(r.resetsAt) : null,
-        })),
+        accounts: this.store.accounts().filter(a => a.cli === cli).map(account => {
+          const room = rooms.find(r => r.account.id === account.id)
+          const status = this.accountStatus.get(account.id)
+          const unavailable = status?.busy ? 'Verificação ou login em andamento' : status?.loggedIn === false || (account.kind === 'api' && (!account.keyHint || !this.accountFiles.hasKey(account))) ? 'Conta não conectada' : null
+          return {
+            accountId: account.id,
+            account: account.builtin ? `${CLI_LABEL[cli]} deste Mac` : account.name,
+            kind: account.kind,
+            automatic: account.auto,
+            selectable: unavailable === null,
+            unavailable,
+            loginConfirmed: status?.loggedIn === true,
+            used: room?.used == null ? 'sem leitura ainda' : `${Math.round(room.used)}%`,
+            agentsNow: live.get(account.id) ?? 0,
+            full: room?.full ?? null,
+            backIn: room?.resetsAt ? untilText(room.resetsAt) : null,
+          }
+        }),
         canOpen: !chooseAccount(rooms).exhausted,
       }
     })
@@ -1313,6 +1408,9 @@ export class OrbitCore {
       const account = this.store.account(requested)
       if (!account) throw new Error('Conta desconhecida')
       if (account.cli !== cli) throw new Error(`A conta ${account.name} é do ${CLI_LABEL[account.cli]}, não do ${CLI_LABEL[cli]}`)
+      const status = this.accountStatus.get(account.id)
+      if (status?.busy) throw new Error(`A conta ${account.name} está ocupada verificando ou fazendo login; aguarde.`)
+      if (status?.loggedIn === false || (account.kind === 'api' && (!account.keyHint || !this.accountFiles.hasKey(account)))) throw new Error(`A conta ${account.name} não está conectada; entre nela antes de abrir o agente. Nenhuma outra conta foi usada.`)
       return account
     }
     return pickAccount(cli, this.store.accounts(), this.statuses(), this.store.limits())
@@ -1366,6 +1464,9 @@ export class OrbitCore {
     try {
       const pane = this.store.pane(message.paneId)
       if (!pane) throw new Error('Agente inexistente')
+      if (message.dispatch !== undefined && !['new-task', 'continue'].includes(message.dispatch)) throw new Error('Tipo de envio inválido')
+      const newTask = (message.dispatch ?? (pane.role === 'lead' && pane.cli !== 'shell' ? 'new-task' : 'continue')) === 'new-task'
+      if (newTask && (pane.role !== 'lead' || pane.cli === 'shell')) throw new Error('Uma nova tarefa precisa de um líder de IA ativo; para orientar este terminal, escolha Continuar tarefa')
       if (!message.requestId) {
         // Literal CLI choice buttons are terminal controls, never free-form user prompts.
         if (pane.choices?.includes(message.text)) { this.activeMission(pane.missionId); this.panes.answered(pane.id); this.submitTo(pane.id, message.text); return }
@@ -1385,6 +1486,18 @@ export class OrbitCore {
         record.state = 'prepared'; this.inputJournal.save(pane.missionId, message.requestId!, record)
         const text = record.english + (files.length ? `\n\nUser attachments (local files; inspect using your file/image tools):\n${files.map(f => JSON.stringify({ name: f.name, path: f.path, mime: f.mime })).join('\n')}` : '') + (pane.cli === 'shell' ? '' : `\n\n${RESPONSE_LANGUAGE}`)
         if (this.store.pane(pane.id)?.executionEpoch !== pane.executionEpoch) throw new Error('A execução do agente mudou durante a preparação. O texto foi preservado; confira o destinatário antes de um novo envio.')
+        if (newTask) {
+          const activityId = `ui-${createHash('sha256').update(message.requestId!).digest('hex').slice(0, 32)}`
+          const { pane: worker } = await this.spawnHelper(pane, {
+            title: message.text.trim().slice(0, 80) || 'Nova tarefa', task: text,
+            cli: pane.cli, accountId: pane.accountId, model: pane.model, effort: pane.effort,
+            activityId,
+          })
+          record.paneId = worker.id; record.executionEpoch = worker.executionEpoch
+          record.state = 'acked'; record.acceptedAt = Date.now(); record.error = undefined
+          this.inputJournal.save(pane.missionId, message.requestId!, record)
+          return
+        }
         record.paneId = pane.id
         record.executionEpoch = pane.executionEpoch
         record.state = 'submitting'; this.inputJournal.save(pane.missionId, message.requestId!, record)
@@ -1543,6 +1656,10 @@ export class OrbitCore {
         return
       case 'account.reset':
         return this.resetAccount(message, reply)
+      case 'provider.setup':
+        return this.startProviderSetup(message, reply)
+      case 'account.catalog.refresh':
+        return this.refreshSelectedCatalog(message, reply)
       case 'account.check':
         void this.checkAccounts()
         return
@@ -1927,6 +2044,13 @@ export class OrbitCore {
   async spawnHelper(caller: Pane, input: HelperRequest): Promise<{ pane: Pane; receipt: string[] }> {
     this.assertCurrent(caller)
     this.activeMission(caller.missionId)
+    if (input.accountId) {
+      const account = this.store.account(input.accountId)
+      if (!account) throw new Error('Conta desconhecida')
+      if (input.cli && input.cli !== account.cli) throw new Error('A conta escolhida não pertence à CLI solicitada')
+      this.accountFor(account.cli, account.id)
+      input = { ...input, cli: account.cli }
+    }
     // Receipts expose the ledger id; accepting it here keeps a resumed leader on the same work.
     const identified = input.activityId && this.store.activity(caller.missionId, input.activityId)
     const key = identified ? identified.key : this.delegationKey(input)
@@ -1984,7 +2108,7 @@ export class OrbitCore {
   private async openHelper(caller: Pane, input: HelperRequest, attempt: { id: string; paneId: number }): Promise<{ pane: Pane; receipt: string[] }> {
     const receipt: string[] = []
     const policyRevision = routingRevision(this.store.routing())
-    let decisionSource: DecisionReceipt['source'] = input.cli || input.model || input.effort ? 'explicit' : 'rule'
+    let decisionSource: DecisionReceipt['source'] = input.cli || input.model || input.effort || input.accountId ? 'explicit' : 'rule'
     const mission = this.activeMission(caller.missionId)
     if (caller.role === 'crew') {
       const slots = this.childSlots(caller)
@@ -2252,6 +2376,12 @@ export class OrbitCore {
     }
     const alreadyCompleted = readySummary !== undefined && this.store.verifications(caller.missionId).some(v => v.inspectionId === input.inspectionId && v.completion)
     const record = this.store.saveVerification(inspection, result, input, readySummary)
+    // Terminate the exact accepted execution, retaining the pane and its durable terminal history.
+    // A report, process exit or rejected review alone never triggers automatic closure.
+    if (inspection.scope === 'result' && input.verdict === 'accepted') {
+      const finished = this.store.pane(attempt.paneId)
+      if (finished?.role === 'crew' && finished.executionEpoch === attempt.executionEpoch && finished.handoffStatus === 'done' && this.store.currentPaneAttempt(finished.id)?.id === attempt.id) this.panes.kill(finished.id)
+    }
     if (readySummary !== undefined && record.completion) {
       const mission = this.store.mission(caller.missionId)!
       this.broadcast({ type: 'mission.updated', mission: { ...mission } })
@@ -2830,6 +2960,7 @@ export class OrbitCore {
       }
     }
     const account = chosen ?? this.accountFor(request.cli, request.accountId)
+    if (account) receipt.push(`conta efetiva: ${account.name} (${account.id})${input.accountId ? ' · escolha explícita, sem substituição' : ' · automática'}`)
     if (input.effort && (!options.tier || request.role === 'crew')) request.effort = input.effort
     if (account && !request.model && account.model) request.model = account.model
     if (request.role === 'crew' && request.cli !== 'shell' && !mission.allowedClis.includes(request.cli)) throw new Error('A CLI efetiva não está permitida nesta missão')
@@ -2838,6 +2969,7 @@ export class OrbitCore {
     receipt.push(`catálogo: ${account?.id ?? 'sem conta'} · ${accountCatalog?.origin ?? accountCatalog?.source ?? 'indisponível'}${accountCatalog?.reason ? ` · ${accountCatalog.reason}` : ''}`)
     const allowed = effortsFor(effectiveCatalog, request.cli, request.model)
     if (request.effort && request.cli !== 'shell' && !allowed.includes(request.effort)) {
+      if (accountCatalog?.origin === 'unavailable') throw new Error(accountCatalog.reason ?? 'Catálogo desta conta indisponível; atualize antes de escolher modelo e esforço.')
       throw new Error(`Esforço "${EFFORT_LABEL[request.effort]}" não vale para ${request.model ?? `o modelo padrão do ${CLI_LABEL[request.cli]}`}; use ${allowed.map((e) => EFFORT_LABEL[e]).join(', ')}`)
     }
 
@@ -3029,6 +3161,9 @@ export class OrbitCore {
       const git = this.store.mission(pane.missionId)?.git
       const worktree = git && pane.branch ? { path: this.worktreeOf(pane, git), branch: pane.branch } : undefined
       const accept = this.acceptance.get(paneId)
+      if (pane.accountId && this.accountStatus.get(pane.accountId)?.busy === 'checking') await this.accountChecks.get(pane.accountId)
+      // Reject unavailable explicit accounts before revoking or removing the recoverable pane.
+      this.accountFor(pane.cli, pane.accountId)
       await this.prepareDesignContext({ ...spec, title: pane.title, ...(message ? { task: message } : {}) })
       this.store.revokeExecution(paneId)
       this.panes.kill(paneId)
@@ -3036,7 +3171,8 @@ export class OrbitCore {
       const stopped = this.store.pane(paneId)
       if (!stopped || stopped.executionEpoch !== pane.executionEpoch) throw new Error('A retomada foi cancelada porque este agente foi fechado ou substituído')
       if (this.stopping) throw new Error('Orbit está encerrando; a retomada foi preservada para a próxima abertura')
-      this.closePane(paneId)
+      this.panes.forget(paneId)
+      for (const [token, id] of this.paneTokens) if (id === paneId) this.paneTokens.delete(token)
       const opened = this.spawn({ ...spec, title: pane.title, task }, {
         keep: pane.cli === 'shell' ? undefined : { cli: pane.cli, model: pane.model, effort: pane.effort },
         id: paneId,
@@ -3045,6 +3181,10 @@ export class OrbitCore {
         permissionUpgrade,
         opened: (id) => (resume ? `#${id} retomou a conversa` : `#${id} reaberto numa conversa nova`),
       })
+      // Replace the terminal view only after the new process was admitted. Durable metadata
+      // stays available if launch fails; successful restart keeps the existing UI reset contract.
+      this.broadcast({ type: 'pane.removed', paneId })
+      this.broadcast({ type: 'pane.updated', pane: opened })
       // The next turn is a delta, not a replacement for the durable original assignment.
       this.store.setPaneSpec(paneId, { ...spec, title: pane.title })
       if (accept) this.acceptance.set(opened.id, accept)
@@ -3071,6 +3211,9 @@ export class OrbitCore {
   }
 
   private closePane(id: number): void {
+    if (this.setupPanes.has(id)) {
+      this.setupPanes.delete(id); this.panes.forget(id); this.broadcast({ type: 'pane.removed', paneId: id }); return
+    }
     const login = this.loginPanes.get(id)
     if (login !== undefined) {
       this.loginPanes.delete(id)

@@ -31,7 +31,7 @@ test('Portuguese is translated before PTY, scoped login is explicit, lost ACK/co
   let calls = 0
   const f = await fixture(async input => { calls++; assert.equal(input.text, 'Corrija o botão'); assert.equal(input.authFile, join(HOMES.codex, 'auth.json')); return 'Fix the button' })
   try {
-    const message = { type: 'pane.submit' as const, paneId: f.pane.id, text: 'Corrija o botão', requestId: 'same-request', translationAccountId: 'codex' }
+    const message = { type: 'pane.submit' as const, dispatch: 'continue' as const, paneId: f.pane.id, text: 'Corrija o botão', requestId: 'same-request', translationAccountId: 'codex' }
     const replies = await Promise.all([f.send(message), f.send(message)])
     assert(replies.every(r => r.type === 'pane.submitted'))
     assert.equal(replies[0].executionEpoch, f.pane.executionEpoch)
@@ -59,7 +59,7 @@ test('no silent provider/account fallback; original requires explicit authorizat
   let calls = 0
   const f = await fixture(async () => { calls++; throw new Error('synthetic translation failure') })
   try {
-    const base = { type: 'pane.submit' as const, paneId: f.pane.id, text: 'Olá' }
+    const base = { type: 'pane.submit' as const, dispatch: 'continue' as const, paneId: f.pane.id, text: 'Olá' }
     assert.match((await f.send({ ...base, requestId: 'missing' })).message, /explicitamente/)
     assert.match((await f.send({ ...base, requestId: 'wrong', translationAccountId: 'claude' })).message, /somente.*Codex/)
     assert.equal(calls, 0); assert.equal(f.sent.length, 0)
@@ -77,7 +77,7 @@ test('durable uncertain translation or PTY state is reported pending after resta
   const f = await fixture(async () => { calls++; return 'Hello' })
   try {
     for (const state of ['translating', 'submitting'] as const) {
-      const message = { type: 'pane.submit' as const, paneId: f.pane.id, text: 'Olá', requestId: state, translationAccountId: 'codex' }
+      const message = { type: 'pane.submit' as const, dispatch: 'continue' as const, paneId: f.pane.id, text: 'Olá', requestId: state, translationAccountId: 'codex' }
       new InputJournal(f.root).save(f.pane.missionId, state, { state, original: message.text, fingerprint: inputFingerprint(message) })
       const result = await f.send(message)
       assert.equal(result.type, 'pane.submit.error'); assert.equal(result.pending, true)
@@ -121,7 +121,7 @@ test('uncertain provider failure remains pending and cannot be retried under the
   let calls = 0
   const f = await fixture(async () => { calls++; throw new UncertainTranslation('timeout synthetic') })
   try {
-    const request = { type: 'pane.submit' as const, paneId: f.pane.id, text: 'Olá', requestId: 'uncertain-provider', translationAccountId: 'codex' }
+    const request = { type: 'pane.submit' as const, dispatch: 'continue' as const, paneId: f.pane.id, text: 'Olá', requestId: 'uncertain-provider', translationAccountId: 'codex' }
     assert.equal((await f.send(request)).pending, true)
     assert.equal((await f.send(request)).pending, true)
     assert.equal(calls, 1); assert.equal(f.sent.length, 0)
@@ -132,7 +132,7 @@ test('uncertain provider failure remains pending and cannot be retried under the
 test('legacy clients receive actionable error instead of a silent drop', async () => {
   const f = await fixture(async () => { throw new Error('must not run') })
   try {
-    const response = await f.send({ type: 'pane.submit', paneId: f.pane.id, text: 'Olá' })
+    const response = await f.send({ type: 'pane.submit', dispatch: 'continue', paneId: f.pane.id, text: 'Olá' })
     assert.equal(response.type, 'error'); assert.match(response.message, /requestId.*translationAccountId.*allowOriginal/)
     await assert.rejects(async () => { await f.core.handle({ type: 'mission.create', workspaceId: f.workspace.id, title: 'Old caller', objective: 'Olá', mode: 'agentica', lead: { cli: 'codex', model: null, title: '' } }) }, /requestId.*translationAccountId.*allowOriginal/)
     assert.equal(f.sent.length, 0)
@@ -166,7 +166,7 @@ test('explicit account2 is independent of target pane account and uses its own a
   try {
     const account = f.core.store.account('codex')!
     f.core.store.saveAccount({ ...account, id: 'codex-acc-2', name: 'Account 2', builtin: false })
-    const result = await f.send({ type: 'pane.submit', paneId: f.pane.id, text: 'Olá', requestId: 'chosen-account2', translationAccountId: 'codex-acc-2' })
+    const result = await f.send({ type: 'pane.submit', dispatch: 'continue', paneId: f.pane.id, text: 'Olá', requestId: 'chosen-account2', translationAccountId: 'codex-acc-2' })
     assert.equal(result.type, 'pane.submitted')
     assert.equal(selected, join(f.root, 'accounts/codex-acc-2/codex/auth.json'))
   } finally { await f.close() }
@@ -184,7 +184,7 @@ test('normal Portuguese input crosses authenticated WebSocket and a real stand-i
     const workspace = server.core.store.createWorkspace('Input bridge', [root])
     await server.core.handle({ type: 'mission.create', workspaceId: workspace.id, title: 'Input bridge', objective: '', mode: 'livre', lead: { cli: 'codex', model: null, title: '' } })
     const pane = server.core.store.snapshot().panes[0]!
-    const request = { type: 'pane.submit' as const, paneId: pane.id, text: 'Corrija o botão de login', requestId: 'bridge-input', translationAccountId: 'codex' }
+    const request = { type: 'pane.submit' as const, dispatch: 'continue' as const, paneId: pane.id, text: 'Corrija o botão de login', requestId: 'bridge-input', translationAccountId: 'codex' }
     ui.send(request)
     await ui.next('pane.submitted', m => m.requestId === request.requestId)
     await ui.next('pane.data', m => m.paneId === pane.id && m.data.includes('Fix the login button'))
@@ -315,7 +315,7 @@ test('a translation prepared for an old execution is never submitted into a repl
   let translated!: (value: string) => void
   const f = await fixture(() => new Promise(resolve => { translated = resolve }))
   try {
-    const sending = f.send({ type: 'pane.submit', paneId: f.pane.id, text: 'Mensagem para o processo original', requestId: 'epoch-race', translationAccountId: 'codex' })
+    const sending = f.send({ type: 'pane.submit', dispatch: 'continue', paneId: f.pane.id, text: 'Mensagem para o processo original', requestId: 'epoch-race', translationAccountId: 'codex' })
     // Same stable pane, different process while the translator is in flight.
     await f.core.handle({ type: 'pane.restart', paneId: f.pane.id, resume: false })
     translated('Message for the original process')

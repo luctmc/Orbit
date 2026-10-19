@@ -165,7 +165,7 @@ test('WebSocket/core/real PTY runs generated CLI arguments with one policy; late
     assert.equal(count(args.join('\n')), 1)
     assert.ok(args.includes('--dangerously-bypass-approvals-and-sandbox'))
     assert.ok(args.includes('gpt-6-luna'))
-    client.send({ type: 'pane.submit', requestId: 'toolkit-simple', paneId: pane.id, text: 'Explique sem alterar arquivos', allowOriginal: true })
+    client.send({ type: 'pane.submit', dispatch: 'continue', requestId: 'toolkit-simple', paneId: pane.id, text: 'Explique sem alterar arquivos', allowOriginal: true })
     await client.next('pane.submitted', m => m.requestId === 'toolkit-simple')
     await client.next('pane.data', m => m.paneId === pane.id && m.data.includes('INPUT_SEEN:'))
     assert.equal(count(readFileSync(argvPath, 'utf8')), 1, 'continuation cannot mutate or append launch contract')

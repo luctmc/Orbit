@@ -6,6 +6,7 @@ import { untilTime } from '../orbit/time.ts'
 import { QuotaAccess } from './QuotaAccess.tsx'
 import { PlusIcon, OrbitMark } from './icons.tsx'
 import { ProviderMark } from './ProviderMark.tsx'
+import { openExternal } from '../orbit/open.ts'
 import './AccountsPanel.css'
 import { Terminal } from './LazyTerminal.tsx'
 import { limitWindowView, limitReadLabel } from '../orbit/limitPresentation.ts'
@@ -72,6 +73,17 @@ function AccountCard({ account, status, limits, liveAgents, onEdit, now }: { acc
   const client = useOrbitClient()
   const { connection } = useOrbit()
   const offline = connection !== 'open'
+  const [catalogBusy, setCatalogBusy] = useState(false)
+  const [catalogNotice, setCatalogNotice] = useState<string | null>(null)
+  const refreshCatalog = async () => {
+    setCatalogBusy(true); setCatalogNotice(null)
+    try {
+      const requestId = crypto.randomUUID()
+      const result = await client.ask({ type: 'account.catalog.refresh', accountId: account.id, requestId }, 'account.catalog.result', m => m.requestId === requestId, 30_000)
+      setCatalogNotice(result.message)
+    } catch (error) { setCatalogNotice(error instanceof Error ? error.message : String(error)) }
+    finally { setCatalogBusy(false) }
+  }
   const state = statusText(account, status)
   const loginPane = status?.loginPaneId ?? null
   const remove = () => {
@@ -92,6 +104,7 @@ function AccountCard({ account, status, limits, liveAgents, onEdit, now }: { acc
             {status?.busy === 'login' ? 'Entrando…' : status?.loggedIn ? 'Entrar de novo' : 'Entrar'}
           </button>
         )}
+        <button type="button" className="btn btn--ghost btn--sm" disabled={offline || catalogBusy || !!status?.busy} aria-busy={catalogBusy} onClick={() => void refreshCatalog()}>{catalogBusy ? 'Consultando modelos…' : 'Atualizar modelos desta conta'}</button>
         {!account.builtin && <button className="btn btn--ghost btn--sm" onClick={onEdit}>Editar</button>}
         {!account.builtin && <button className="btn btn--ghost btn--sm btn--danger" disabled={offline} onClick={remove}>Remover</button>}
       </div>
@@ -99,6 +112,7 @@ function AccountCard({ account, status, limits, liveAgents, onEdit, now }: { acc
         <span className={`account__state account__state--${state.tone}`}>{state.text}</span>
         <LimitsLine limits={limits} now={now} />
       </div>
+      {catalogNotice && <p role="status" className="note">{catalogNotice}</p>}
       <QuotaAccess account={account} limits={limits} status={status} />
       <label className="check">
         <input type="checkbox" checked={account.auto} disabled={offline} onChange={(e) => client.send({ type: 'account.save', account: { id: account.id, cli: account.cli, kind: account.kind, name: account.name, baseUrl: account.baseUrl, model: account.model, auto: e.target.checked } })} />
@@ -230,6 +244,41 @@ function AgentMark({ cli }: { cli: AgentCliForRole }) {
   return cli === 'codex' || cli === 'claude' ? <ProviderMark brand={cli === 'codex' ? 'openai' : 'anthropic'} /> : <span className="ias-mark" aria-hidden="true"><OrbitMark size={24} /></span>
 }
 
+const SETUP_CARDS = [
+  { id: 'antigravity', label: 'Antigravity', detail: 'CLI agy e aplicativo desktop. A CLI participa das missões do Orbit com o login deste Mac.', docs: 'https://www.antigravity.google/docs/cli/install/' },
+  { id: 'grok', label: 'Grok', detail: 'Grok Build: CLI oficial. Instalação e login externos; delegação pelo Orbit ainda não disponível.', docs: 'https://docs.x.ai/build/overview' },
+  { id: 'opencode', label: 'OpenCode', detail: 'CLI e aplicativo desktop. Instala OpenCode 1 somente se opencode não existir; preserva OpenCode 2. Sem delegação pelo Orbit.', docs: 'https://opencode.ai/docs/' },
+  { id: 'hermes', label: 'Hermes', detail: 'Agente com CLI e aplicativo desktop. O assistente configura o provedor; sem delegação pelo Orbit.', docs: 'https://hermes-agent.nousresearch.com/docs/getting-started/installation' },
+] as const
+
+function ProviderSetupCard({ entry }: { entry: (typeof SETUP_CARDS)[number] }) {
+  const client = useOrbitClient()
+  const { connection, providerSetups } = useOrbit()
+  const result = providerSetups?.find(s => s.provider === entry.id)
+  const [opening, setOpening] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const busy = opening || result?.phase === 'running'
+  const setup = async (action: 'install' | 'connect') => {
+    setOpening(true); setError(null)
+    try {
+      const requestId = crypto.randomUUID()
+      await client.ask({ type: 'provider.setup', provider: entry.id, action, requestId }, 'provider.setup.result', m => m.requestId === requestId, 15_000)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { setOpening(false) }
+  }
+  return <article className="account" aria-label={`Configurar ${entry.label}`}>
+    <h4>{entry.label}</h4><p className="note">{entry.detail}</p>
+    <div className="account-form__actions">
+      <button type="button" className="btn btn--ghost btn--sm" disabled={connection !== 'open' || busy} aria-busy={busy} onClick={() => void setup('install')}>{busy ? 'Configuração em andamento…' : 'Instalar CLI'}</button>
+      <button type="button" className="btn btn--primary btn--sm" disabled={connection !== 'open' || busy} onClick={() => void setup('connect')}>Conectar</button>
+      <button type="button" className="btn btn--ghost btn--sm" onClick={() => void openExternal(entry.docs).catch(cause => setError(String(cause)))}>Documentação oficial</button>
+    </div>
+    {error && <p role="alert" className="form-error">{error}</p>}
+    {result && <p role={result.phase === 'failed' ? 'alert' : 'status'} className={result.phase === 'failed' ? 'form-error' : 'note'}>{result.message}</p>}
+    {result?.paneId && <div className="account__login"><div className="account__terminal"><Terminal paneId={result.paneId} interactive={result.phase === 'running'} /></div><button type="button" className="btn btn--ghost btn--sm" disabled={connection !== 'open'} onClick={() => client.send({ type: 'pane.close', paneId: result.paneId! })}>Fechar terminal de configuração</button></div>}
+  </article>
+}
+
 /** Settings › IAs: provider overview, independent accounts, and real quota actions. */
 export function AccountsPanel() {
   const client = useOrbitClient()
@@ -319,6 +368,12 @@ export function AccountsPanel() {
         {form && !form.id && <AccountForm key={`${form.cli}-${form.kind}`} initial={form} onDone={() => setForm(null)} />}
         {!selectedAccounts.length && !form && <p className="ias-empty">Nenhuma conta {CLI_LABEL[selected]} configurada. {selected === 'antigravity' ? 'O login do Antigravity é o deste Mac.' : 'Adicione uma assinatura ou chave de API para começar.'}</p>}
         {selectedAccounts.map(account => form?.id === account.id ? <AccountForm key={account.id} initial={form} onDone={() => setForm(null)} /> : <AccountCard key={account.id} account={account} now={now} status={accountStatuses.find(s => s.accountId === account.id)} limits={limits.find(l => l.accountId === account.id)} liveAgents={panes.filter(p => p.accountId === account.id && p.status !== 'exited').length} onEdit={() => setForm(draftOf(account))} />)}
+      </section>
+      <section className="ias-details ias-setup" aria-labelledby="ias-setup-title">
+        <h3 id="ias-setup-title">Instalar e conectar outras IAs</h3>
+        <p className="note">Cada ação abre um terminal visível com o comando oficial. Conectar uma CLI externa não a adiciona ao roteamento de missões.</p>
+        {SETUP_CARDS.map(entry => <ProviderSetupCard key={entry.id} entry={entry} />)}
+        <article className="account"><h4>OpenRouter</h4><p className="note">Gateway de API pago por uso, conectado pelo Claude Code. Não precisa de uma CLI OpenRouter. A chave fica na conta isolada do Orbit.</p><div className="account-form__actions"><button type="button" className="btn btn--primary btn--sm" disabled={!canAdd || form !== null || connection !== 'open'} onClick={() => { setSelected('claude'); setForm({ ...blankDraft('claude'), name: 'OpenRouter', kind: 'api', provider: 'openrouter', auto: false }); requestAnimationFrame(() => details.current?.scrollIntoView({ block: 'nearest', behavior: 'instant' })) }}>Conectar OpenRouter por API</button><button type="button" className="btn btn--ghost btn--sm" onClick={() => void openExternal('https://openrouter.ai/docs/cookbook/coding-agents/claude-code-integration').catch(cause => setRefreshNotice(String(cause)))}>Documentação oficial</button></div></article>
       </section>
       <section className="ias-api" aria-labelledby="ias-api-title"><div className="ias-toolbar"><div><h3 id="ias-api-title">Chaves pagas por uso</h3><p>Uso cobrado pelo provedor. Só entram na seleção automática com sua permissão.</p></div></div><div className="ias-api__grid">{CLIS.map(cli => <button key={cli} type="button" className="ias-api__item" disabled={!canAdd || form !== null || connection !== 'open'} onClick={() => add(cli, 'api')}><AgentMark cli={cli} /><span><strong>{CLI_LABEL[cli]}</strong><small>{accounts.filter(a => a.cli === cli && a.kind === 'api').length} chaves · adicionar chave</small></span><PlusIcon size={16} /></button>)}</div></section>
       <p className="ias-footnote">O login adicional abre uma sessão separada. Seus outros logins continuam conectados. Modelos e esforço são escolhidos ao abrir uma janela ou nas regras da missão.</p>

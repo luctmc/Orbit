@@ -20,10 +20,11 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
   const draftKey = `pane-${pane.id}`
   const draft = client.inputDrafts.get(draftKey)
   const [translationAccountId, setTranslationAccountId] = useState(draft?.accountId ?? '')
+  const [dispatch, setDispatch] = useState<'new-task' | 'continue'>(draft?.dispatch ?? (pane.role === 'lead' && pane.cli !== 'shell' ? 'new-task' : 'continue'))
   const [allowOriginal, setAllowOriginal] = useState(draft?.allowOriginal ?? false)
   const [pending, setPending] = useState(client.inputPending(draftKey))
   const [text, setText] = useState(draft?.text ?? '')
-  useEffect(() => { client.inputDrafts.set(draftKey, { text, accountId: translationAccountId, allowOriginal }) }, [client, draftKey, text, translationAccountId, allowOriginal])
+  useEffect(() => { client.inputDrafts.set(draftKey, { text, accountId: translationAccountId, allowOriginal, dispatch }) }, [client, draftKey, text, translationAccountId, allowOriginal, dispatch])
   const [files, setFiles] = useState<DraftAttachment[]>(client.inputAttachments.get(draftKey) ?? [])
   useEffect(() => { client.inputAttachments.set(draftKey, files) }, [client, draftKey, files])
   const [uploading, setUploading] = useState(false)
@@ -131,8 +132,8 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
     setSending(true)
     setError(null)
     try {
-      await (pending ? client.checkPendingInput(draftKey) : client.submitInput({ paneId: pane.id, text, attachments: files.map(f => f.id), translationAccountId: translationAccountId || undefined, allowOriginal }))
-      client.inputDrafts.set(draftKey, { text: '', accountId: translationAccountId, allowOriginal })
+      await (pending ? client.checkPendingInput(draftKey) : client.submitInput({ paneId: pane.id, text, dispatch, attachments: files.map(f => f.id), translationAccountId: translationAccountId || undefined, allowOriginal }))
+      client.inputDrafts.set(draftKey, { text: '', accountId: translationAccountId, allowOriginal, dispatch })
       client.inputAttachments.delete(draftKey)
       for (const url of previews.current) URL.revokeObjectURL(url)
       previews.current.clear()
@@ -163,6 +164,13 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
         {pane.role !== 'lead' && leader && leader.status !== 'exited' && onSelectPane && <button type="button" className="btn btn--ghost btn--sm composer__leader" onClick={() => onSelectPane(leader.id)}>Conversar com líder</button>}
         <span className="composer__status" role="status">{connection !== 'open' ? 'Reconectando…' : uploading ? 'Preparando anexos…' : dictation.listening ? `Ouvindo${dictation.mode === 'apple' ? ' · Apple' : dictation.mode === 'local' ? ' · no Mac' : ''}…` : ''}</span>
       </div>
+      {pane.role === 'lead' && pane.cli !== 'shell' && <div className="field">
+        <label htmlFor={`dispatch-${pane.id}`}>Tipo de envio</label>
+        <select id={`dispatch-${pane.id}`} value={dispatch} disabled={editingDisabled} onChange={e => setDispatch(e.target.value as 'new-task' | 'continue')} aria-describedby={`dispatch-help-${pane.id}`}>
+          <option value="new-task">Nova tarefa</option><option value="continue">Continuar tarefa</option>
+        </select>
+        <p className="note" id={`dispatch-help-${pane.id}`}>{dispatch === 'new-task' ? 'Abre uma nova CLI visível com a mesma conta do líder. O resultado aguarda revisão antes de fechar.' : 'Envia uma orientação, resposta ou pergunta para esta CLI, mantendo o contexto atual.'}</p>
+      </div>}
       <div className="composer__content">
       {!!files.length && <ul className="composer__files" aria-label="Anexos da mensagem">
         {files.map((file) => <li key={file.id}>
