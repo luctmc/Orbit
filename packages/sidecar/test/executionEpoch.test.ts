@@ -37,7 +37,7 @@ test('a captured caller from a completed assignment cannot finish new work in th
     const token = [...tokens].find(([, id]) => id === f.pane.id)![0]
     const captured = f.core.identify(token)!
     f.core.handoff(captured, { summary: 'First result', evidence: 'exit 0' })
-    f.core.sendTo(f.lead, f.pane.id, 'A new independent activity')
+    f.core.sendTo(f.lead, f.pane.id, 'A new independent activity', true)
     assert.throws(() => f.core.handoff(captured, { summary: 'Late result', evidence: 'old evidence' }), /execução|tentativa/)
     assert.throws(() => f.core.handoff(f.core.identify(token)!, { summary: 'Reposted old result', evidence: 'old evidence', attemptId: captured.activityAttemptId }), /tentativa/)
     assert.equal(f.core.pendingDeliveries(f.pane.missionId).length, 1)

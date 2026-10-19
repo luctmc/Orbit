@@ -14,3 +14,19 @@ test('default role budgets preserve independent review, recovery and user langua
   }
   for (const required of ['activityId', 'retryReason', 'readOnly', 'requireReadOnlySandbox', 'dependsOn', 'mission_briefing', 'readySummary']) assert.ok(lead.includes(required), required)
 })
+
+test('coordination and factory methods preserve gates with proportional checks', () => {
+  for (const mode of ['livre', 'agentica'] as const) {
+    const lead = leadRole({ ...mission, mode }, { id: 1 }, undefined, DEFAULT_ROUTING)
+    assert.match(lead, /newTask:true/)
+    assert.match(lead, /ACK/)
+    assert.match(lead, /same source revision/)
+  }
+  const worker = crewRole(mission, { id: 2 }, {})
+  assert.match(worker, /newTask:true/)
+  for (const kind of ['bug', 'funcionalidade', 'revisao']) {
+    const method = DEFAULT_ROUTING.taskTypes.find(t => t.id === kind)!.method
+    assert.match(method, /affected|delta/)
+    assert.doesNotMatch(method, /run the whole suite|run the suite and the build/)
+  }
+})

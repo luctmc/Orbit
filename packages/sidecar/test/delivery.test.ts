@@ -106,7 +106,7 @@ test('helpers always report back: forced handoff, structured status, interrupt, 
     assert.equal(pane(helperId).handoffStatus, 'auto')
 
     // The lead answers: that is new work, owed back.
-    assert.match((await asLead('agent_send', { agent: helperId, message: 'Use SQLite' })).text, /enviada/)
+    assert.match((await asLead('agent_send', { agent: helperId, message: 'Use SQLite', newTask: true })).text, /enviada/)
     assert.equal(pane(helperId).handoffStatus, null)
 
     // Done needs evidence; progress is only recorded and lets the helper stop without being chased.
@@ -124,6 +124,15 @@ test('helpers always report back: forced handoff, structured status, interrupt, 
     assert.match((await asHelper('handoff_submit', { summary: 'Tabela clientes criada', evidence: 'sqlite3 .schema mostra clientes' })).text, new RegExp(`enfileirado para #${lead.id}`))
     await delivered
     assert.match(lastHandoff().body, /^Tabela clientes criada\n\nEvidência: sqlite3/)
+    const historyBeforeMessages = server.core.store.activityHistory(mission.id)
+    for (const message of ['ACK', 'Aguarde', 'Qual arquivo?']) {
+      assert.equal((await asLead('agent_send', { agent: helperId, message })).error, false)
+    }
+    assert.equal(pane(helperId).handoffStatus, 'done')
+    assert.deepEqual(server.core.store.activityHistory(mission.id), historyBeforeMessages)
+    assert.equal((await asLead('agent_resume', { agent: helperId })).error, true)
+    assert.match((await asLead('agent_resume', { agent: helperId })).text, /handoff_list/)
+    assert.equal((await asHelper('agent_send', { agent: lead.id, message: 'Unauthorized task', newTask: true })).error, true)
     const deliveredResult = server.core.store.activityHistory(mission.id).results.findLast(r => r.status === 'done')!
     acceptSyntheticResult(server.core, lead, deliveredResult.id)
     assert.match((await asLead('mission_ready', { summary: 'Cadastro feito por #' + helperId })).text, /pronta/)
