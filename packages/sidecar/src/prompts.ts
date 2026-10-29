@@ -9,6 +9,11 @@ import { CLI_NAME, type AgentCli, type Mission, type MissionGit, type Pane, type
 const BOARD_LEAD = 'Keep the mission board current (board_add, board_update, board_list): one card per activity, with its owner. The user follows it and moves cards too.'
 const BOARD_CREW = 'Use board_list; move your card to "fazendo" at start and "feito" on delivery with board_update.'
 
+/** IDs explícitos de tarefas/papéis com trabalho no navegador ou quadro, sem inferir pelo título. */
+export function crewUsesSharedTools(squadRoleId?: string | null, taskTypeId?: string | null): boolean {
+  return [squadRoleId, taskTypeId].some(id => id != null && ['frontend', 'design', 'qa', 'browser', 'navegador', 'board', 'quadro', 'verificador'].includes(id))
+}
+
 /** Every agent shares the mission's browser. */
 const BROWSER_NOTE = 'Shared browser (visible in Orbit): browser_open, browser_screenshot, browser_text, browser_click, browser_type, browser_console.'
 
@@ -99,7 +104,7 @@ export function crewRole(mission: Mission, pane: Pick<Pane, 'id'>, context: Crew
     ...[squadRole, taskType].flatMap(r => r?.skills.length && !r.onlySkills ? [`Use these skills when available: ${r.skills.join(', ')}.`] : []),
     'Do only the assigned task within user permissions. Missing essential context: deliver blocked with the question to your assigner.',
     ...(children > 0 ? [`You may open up to ${children} sub-helpers for independent work with agent_spawn. Integrate and verify their results before your own delivery; close them afterwards.`] : []),
-    BROWSER_NOTE, ...(context.hasBoard === false ? [] : [BOARD_CREW]), VERIFICATION_NOTE, MESSAGING_NOTE, OUTPUT_NOTE,
+    ...(crewUsesSharedTools(squadRole?.id, taskType?.id) ? [BROWSER_NOTE, ...(context.hasBoard === false ? [] : [BOARD_CREW])] : ['Tools board/browser ausentes: peça ao líder via agent_send; se necessário, handoff_submit blocked.']), VERIFICATION_NOTE, MESSAGING_NOTE, OUTPUT_NOTE,
     context.attemptId ? `Assignment attemptId: ${context.attemptId}. Include it in handoff_submit; no whoami lookup is needed for this identity.` : 'Capture whoami.agent.attemptId on assignment; include it in handoff_submit.',
     'Deliver done with summary, evidence (commands, exits, files) and each acceptance item in criteria; blocked with the question; progress for interim updates. Use to for another recipient. Done is not acceptance. Never relabel old work or wait after delivery.',
     'Read result notices and call delivery_ack(deliveryId); repeated ids are recovery, not new assignments.',

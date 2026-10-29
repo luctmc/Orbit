@@ -12,6 +12,8 @@ import type { AgentLaunch } from '../src/command.ts'
 import type { ServerMessage } from '@orbit/protocol'
 import { offline, TOKEN, ORIGIN } from './helpers.ts'
 
+const toolGroup = (name: string) => name.startsWith('board_') ? 'board' : name.startsWith('browser_') ? 'browser' : /^(project_|context_)/.test(name) ? 'memory-context' : name.startsWith('skill_') ? 'skills' : /^(result_|verification_)/.test(name) ? 'verification' : name === 'model_catalog' || name === 'accounts_status' || name === 'routing_propose' ? 'routing' : 'coordination'
+
 const size = (text: string) => ({ bytes: Buffer.byteLength(text), estimatedTokens: Buffer.byteLength(text) / 4 })
 
 /** Fixture local com PTY sintético e MCP real; nunca executa uma CLI de provedor. */
@@ -49,6 +51,8 @@ export async function tokenBaseline() {
         const settings = JSON.parse(readFileSync(launch.settingsPath!, 'utf8'))
         components.push({ role: pane.role, cli: pane.cli, toolCount: tools.length,
           roleContract: size(contract), toolkit: size(toolkit),
+          prompt: size(launch.taskPath ? readFileSync(launch.taskPath, 'utf8') : ''),
+          tools: tools.map(t => ({ name: t.name, group: toolGroup(t.name), descriptionBytes: Buffer.byteLength(t.description ?? ''), schemaBytes: Buffer.byteLength(JSON.stringify(t.inputSchema)), bytes: Buffer.byteLength(JSON.stringify({ name: t.name, description: t.description, inputSchema: t.inputSchema })) })),
           toolkitSource: size(toolkitSections().map(s => s.text).join('\n\n')),
           completeRole: size(role),
           otherRoleSections: size(role.replace(contract, '').replace(toolkit, '')),

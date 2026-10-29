@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
 import { AGENT_CLIS, BROWSER_KEYS, type AgentCliForRole, type Difficulty, BROWSER_VIEWPORT, CARD_COLUMNS, CARD_LIMITS, EFFORTS, MODEL_ID, type CardColumn, type Effort, type HandoffStatus, type Pane } from '@orbit/protocol'
+import { crewUsesSharedTools } from './prompts.ts'
 import type { OrbitCore } from './core.ts'
 import type { VerificationInput } from '@orbit/protocol'
 
@@ -337,8 +338,11 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     inputSchema: { agent: z.number().int().describe('The agent\'s number'), lines: z.number().int().min(1).max(400).optional().describe('How many last lines (default 60)') },
   }, guarded(({ agent, lines }: { agent: number; lines?: number }) => core.readScreen(caller, agent, lines ?? 60) || '(tela vazia)'))
 
-  registerBrowserTools(server, core, caller)
-  registerBoardTools(server, core, caller)
+  const spec = core.store.paneSpec(caller.id)
+  if (caller.role === 'lead' || crewUsesSharedTools(spec?.squadRoleId, spec?.taskTypeId)) {
+    registerBrowserTools(server, core, caller)
+    registerBoardTools(server, core, caller)
+  }
 
   // Helpers the lead opened may open a couple of sub-helpers; their results come back to them.
   if (caller.role === 'crew' && (core.childSlots(caller) > 0 || core.missionPanes(caller.missionId).some((p) => p.assignedBy === caller.id))) {
