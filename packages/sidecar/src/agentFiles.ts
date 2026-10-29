@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { mkdirSync, rmSync, writeFileSync, readFileSync, chmodSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import type { AgentCli, Effort } from '@orbit/protocol'
+import type { ActivityResult, AgentCli, Effort } from '@orbit/protocol'
 import { shellQuote, type AgentLaunch } from './command.ts'
 
 /** Claude Code events that move a pane's status. */
@@ -119,4 +119,20 @@ export function helperBrief(dataDir: string, missionId: string, task?: string, b
   }
   chmodSync(path, 0o600)
   return { id, path, task }
+}
+
+/** A private, idempotent copy; the result ledger remains authoritative. */
+export function handoffFile(dataDir: string, missionId: string, result: ActivityResult): string {
+  if (![missionId, result.id].every(id => /^[a-zA-Z0-9_-]+$/.test(id))) throw new Error('Identificador inválido para handoff')
+  const directory = resolve(dataDir, 'handoffs', missionId)
+  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  const path = join(directory, `${result.id}.md`)
+  const content = `STATUS: ${result.status}\nSUMMARY: ${result.summary}\n\nEvidência:\n${result.evidence}\n\nCritérios e detalhes:\n${result.details}\n`
+  try { writeFileSync(path, content, { mode: 0o600, flag: 'wx' }) }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+    if (readFileSync(path, 'utf8') !== content) throw new Error('Conteúdo do handoff não corresponde ao resultado')
+  }
+  chmodSync(path, 0o600)
+  return path
 }

@@ -6,6 +6,8 @@ import { fixture } from './r2Fixture.ts'
 import { buildCommand } from '../src/command.ts'
 import { HarnessMeasurements } from '../src/measurements.ts'
 
+const validBrief = '# Goal\nCorrigir leitura em packages/sidecar/src/core.ts.\n## Expected result\n1. Executar npm test e comprovar o resultado.\nScope: owns core.ts; must not touch usage.ts.\nConstraints: Preservar dados e credenciais existentes.\n'
+
 test('F10 long tasks persist exact private content and launch a short pointer with acceptance and attempt', async () => {
   const { core, lead, root } = await fixture()
   const measurements = new HarnessMeasurements()
@@ -15,9 +17,9 @@ test('F10 long tasks persist exact private content and launch a short pointer wi
   const spawn = manager.spawn.bind(manager)
   manager.spawn = (args: any) => { launches.push(args.launch); return spawn(args) }
   try {
-    const task = 'Contexto completo.\n'.repeat(300).slice(0, 5000)
+    const task = (validBrief + 'Contexto completo.\n'.repeat(300)).slice(0, 5000)
     const { pane, receipt } = await core.spawnHelper(lead, { title: 'Long', task, cli: 'claude', model: null, accept: ['Comprovar resultado'] })
-    const id = receipt.find(s => s.startsWith('brief: '))?.slice(7)
+    const id = receipt.find(s => s.startsWith('brief: '))?.slice(7, 19)
     assert.match(id ?? '', /^[a-f0-9]{12}$/)
     const path = join(root, 'data', 'briefs', lead.missionId, `${id}.md`)
     assert.ok(isAbsolute(path)); assert.equal(readFileSync(path, 'utf8'), task)
@@ -61,10 +63,10 @@ test('F10 short tasks remain inline (ALREADY_COVERED)', async () => {
 test('F10 brief files survive restart, are idempotent, and cannot cross mission boundaries', async () => {
   const { helperBrief } = await import('../src/agentFiles.ts')
   const { core, lead, root, create } = await fixture()
-  const task = 'á\n'.repeat(601)
+  const task = validBrief + 'á\n'.repeat(601)
   try {
     const first = await core.spawnHelper(lead, { title: 'Exact', task, cli: 'claude', model: null })
-    const id = first.receipt.find(s => s.startsWith('brief: '))!.slice(7)
+    const id = first.receipt.find(s => s.startsWith('brief: '))!.slice(7, 19)
     const path = join(root, 'data', 'briefs', lead.missionId, `${id}.md`)
     const modified = statSync(path).mtimeMs
     await core.spawnHelper(lead, { title: 'Exact', task, cli: 'claude', model: null })
@@ -98,7 +100,7 @@ test('F10 MCP spawn and spawn_many accept briefId without task and return the sa
   try {
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
     await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${(server.address() as any).port}/mcp`)))
-    const first = await client.callTool({ name: 'agent_spawn', arguments: { task: 'MCP context '.repeat(200), agent: 'claude' } })
+    const first = await client.callTool({ name: 'agent_spawn', arguments: { task: validBrief + 'MCP context '.repeat(200), agent: 'claude' } })
     assert.ok(!first.isError, textOf(first))
     const id = /brief: ([a-f0-9]{12})/.exec(textOf(first))![1]!
     const reused = await client.callTool({ name: 'agent_spawn_many', arguments: { helpers: [{ briefId: id, agent: 'claude' }, { briefId: id, agent: 'claude' }] } })
@@ -122,6 +124,6 @@ test('F10 MCP spawn and spawn_many accept briefId without task and return the sa
 test('F10 pointer preserves routing and design constraints from the full assignment', async () => {
   const { core, lead } = await fixture()
   try {
-    await assert.rejects(core.spawnHelper(lead, { title: 'Worker', task: 'Implemente design de frontend. '.repeat(100), cli: 'claude', model: 'claude-haiku-5-5' }), /conflita com a política frontend/)
+    await assert.rejects(core.spawnHelper(lead, { title: 'Worker', task: validBrief + 'Implemente design de frontend. '.repeat(100), cli: 'claude', model: 'claude-haiku-5-5' }), /conflita com a política frontend/)
   } finally { await core.shutdown() }
 })

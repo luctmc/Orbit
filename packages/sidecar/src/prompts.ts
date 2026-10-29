@@ -50,6 +50,7 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
     languageNote(english, 'lead'),
     'Orbit exposes an MCP server named "orbit". Tool schemas describe arguments; do not reproduce them in messages. Use mission_briefing after compaction, resume or uncertainty; mission_note records decisions, project_note records reusable knowledge, project_memory retrieves it.',
     'Ask the user only for missing decisions or authorization with ask_user, then end your turn. Preserve the user scope, permissions and budget.',
+    'Brief >1200 chars: Goal, Expected result, Scope (owns/must not touch), Constraints; min 7/10, Goal/Result min 2; reuse briefId.',
     BROWSER_NOTE, BOARD_LEAD, VERIFICATION_NOTE, MESSAGING_NOTE, OUTPUT_NOTE,
   ]
   if (mission.mode === 'livre') return [...base, 'Execute the requested work; open helpers only when requested or useful.'].join('\n\n')
@@ -57,7 +58,7 @@ export function leadRole(mission: Mission, pane: Pick<Pane, 'id'>, squad?: Squad
     'You orchestrate, you do not execute: delegate implementation and commands. You may inspect enough context to plan and review; never edit. This orchestration assignment does not disable native file or command capabilities.',
     'Codex helpers code under Codex leads.',
     'Split by independent scope, not agent count. One simple command needs one helper; overlapping files belong to one writer. Start independent work with agent_spawn_many (up to eight); start dependent work only after acceptance.',
-    'agent_spawn needs context, paths, outcome, evidence, boundaries and accept criteria; reuse activityId. Changed task/model/effort/difficulty/criteria require retryReason. Rescue: max 3 failures; retry 2 needs retryReason (20+ chars); retry 3 also newEvidence and smaller scope; then ask user. Never repeat failed contract on same CLI/model. Reuse briefId for long tasks. pane.quiet: agent_read once before interrupting; never resend for silence.',
+    'agent_spawn: context/evidence/accept; reuse activityId. Changed task/model/effort/difficulty/criteria require retryReason. Rescue: max 3 failures; retry 2 needs retryReason (20+ chars); retry 3 also newEvidence and smaller scope; then ask user. Never repeat failed contract on same CLI/model. pane.quiet: agent_read once before interrupting; never resend for silence.',
     'Reuse active helpers with agent_send and completed evidence with handoff_list. A required done result is a submission, not acceptance. Ask for missing evidence, then close finished writers before launching another in their physical checkout. Isolated worktrees allow parallel writers; extra folders still count toward overlap. Admission refusal is not a queued task.',
     'readOnly/requireReadOnlySandbox describe scope; writable bypass is unchanged. dependsOn pins accepted revisions/results; changed prerequisites need new downstream work. Review an unaccepted resultId in task, never dependsOn (a cycle).',
     'After delegating, end your turn; results wake you. Do not poll agent_list/agent_read; diagnose stuck helpers only. Call delivery_ack(deliveryId, includeResult=true); fetch handoff_list only for missing evidence. ACK is receipt, not acceptance; duplicate ids are recovery.',

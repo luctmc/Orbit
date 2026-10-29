@@ -66,6 +66,8 @@ export interface ExecutionMeasurement {
   sourceBytes: number
   contextReadBytes: number
   skillReadBytes: number
+  handoffWakeBytesBeforePointer: number
+  handoffWakeBytes: number
   submittedBytes: number
   submittedMessages: number
   ptyAcceptedWakeups: number
@@ -78,7 +80,14 @@ export class HarnessMeasurements {
   private readonly records = new Map<string, { record: ExecutionMeasurement; clock: number; totals: TokenUsage }>()
   start(pane: Pane, spawnMs: number, initialBytes: number, sourceBytes: number, preparedRoleBytes = 0, pointerBytesSaved = 0): void {
     if (!pane.executionEpoch) return
-    this.records.set(pane.executionEpoch, { clock: performance.now() - spawnMs, totals: {input:0,output:0,cacheRead:0,cacheWrite:0,total:0,costUsd:null}, record: { usageSources: [], epoch: pane.executionEpoch, paneId: pane.id, missionId: pane.missionId, cli: pane.cli, model: pane.model, role: pane.role, spawnMs, firstPtyOutputMs: null, initialBytesBeforePointer: initialBytes + pointerBytesSaved, initialBytes, sourceBytes, preparedRoleBytes, contextReadBytes: 0, skillReadBytes: 0, submittedBytes: 0, submittedMessages: 0, ptyAcceptedWakeups: 0, reports: 0, usage: unknownUsage() } })
+    this.records.set(pane.executionEpoch, { clock: performance.now() - spawnMs, totals: {input:0,output:0,cacheRead:0,cacheWrite:0,total:0,costUsd:null}, record: { usageSources: [], epoch: pane.executionEpoch, paneId: pane.id, missionId: pane.missionId, cli: pane.cli, model: pane.model, role: pane.role, spawnMs, firstPtyOutputMs: null, initialBytesBeforePointer: initialBytes + pointerBytesSaved, initialBytes, sourceBytes, preparedRoleBytes, contextReadBytes: 0, skillReadBytes: 0, handoffWakeBytesBeforePointer: 0, handoffWakeBytes: 0, submittedBytes: 0, submittedMessages: 0, ptyAcceptedWakeups: 0, reports: 0, usage: unknownUsage() } })
+  }
+  handoff(epoch: string, before: string, after: string): void {
+    const item = this.records.get(epoch)
+    if (item) {
+      item.record.handoffWakeBytesBeforePointer = Buffer.byteLength(before)
+      item.record.handoffWakeBytes = Buffer.byteLength(after)
+    }
   }
   output(epoch: string): void {
     const item = this.records.get(epoch)

@@ -38,11 +38,11 @@ test('large optional memory is retrievable while task acceptance and user instru
     assert.ok(page.nextOffset)
     const end = core.readContext(lead, sha256, page.nextOffset!, 16000)
     assert.equal(end.nextOffset, null)
-    const fullTask = 'x'.repeat(19999)
+    const fullTask = ('# Goal\nCorrigir leitura em packages/sidecar/src/core.ts.\n## Expected result\n1. Executar npm test e comprovar o resultado.\nScope: owns core.ts; must not touch usage.ts.\nConstraints: Preservar dados e credenciais existentes.\n' + 'x'.repeat(19999)).slice(0, 19999)
     const { pane, receipt } = await core.spawnHelper(lead, { title: 'Long contract', task: fullTask, cli: 'claude', readOnly: true, model: null, accept: ['Do not publish. Preserve the complete contract.'] })
     const task = readFileSync(join(root, 'data/panes', String(pane.id), 'task.md'), 'utf8')
     // F10 keeps the complete assignment in a private brief; the launch carries its pointer.
-    const briefId = receipt.find(line => line.startsWith('brief: '))?.slice(7)
+    const briefId = receipt.find(line => line.startsWith('brief: '))?.slice(7, 19)
     assert.match(briefId ?? '', /^[a-f0-9]{12}$/)
     const briefPath = join(root, 'data', 'briefs', lead.missionId, `${briefId}.md`)
     assert.equal(readFileSync(briefPath, 'utf8'), fullTask)
