@@ -17,7 +17,7 @@ test('receipt advances only after Enter and only its recipient can acknowledge c
     assert.equal(notice().resultId, result.resultId)
     assert.equal(notice().state, 'persisted')
     assert.throws(() => f.core.acknowledgeDelivery(f.lead, notice().id), /ainda não foi enviado/)
-    await delay(180)
+    await delay(6500)
     assert.equal(notice().state, 'pty_accepted')
     assert.equal(notice().deliveries[0]?.executionEpoch, f.lead.executionEpoch)
     assert.throws(() => f.core.acknowledgeDelivery(f.pane, notice().id), /destinatário/)
@@ -25,7 +25,7 @@ test('receipt advances only after Enter and only its recipient can acknowledge c
     assert.equal(ack.state, 'agent_acknowledged')
     assert.deepEqual(f.core.acknowledgeDelivery(f.lead, notice().id), ack)
     await f.core.handle({ type: 'pane.restart', paneId: f.lead.id, resume: false })
-    await delay(180)
+    await delay(6500)
     assert.equal(notice().deliveries.length, 1, 'confirmed notices do not wake another execution')
   } finally { await f.core.shutdown() }
 })
@@ -36,7 +36,7 @@ test('restart before Enter cancels the old receipt and delivers the same notice 
     f.core.handoff(f.pane, input)
     const id = f.core.store.notifications(f.pane.missionId)[0]!.id
     await f.core.handle({ type: 'pane.restart', paneId: f.lead.id, resume: false })
-    await delay(180)
+    await delay(6500)
     const notice = f.core.store.notifications(f.pane.missionId)[0]!
     const lead = f.core.store.pane(f.lead.id)!
     assert.equal(notice.id, id)
@@ -56,7 +56,7 @@ test('sidecar recovery replays an unacknowledged result without executing the ac
   const restored = f.create()
   try {
     await restored.handle({ type: 'pane.restart', paneId: f.lead.id, resume: false })
-    await delay(180)
+    await delay(6500)
     const notice = restored.store.notifications(f.pane.missionId)[0]!
     assert.equal(notice.id, id)
     assert.equal(notice.state, 'pty_accepted')
@@ -69,12 +69,12 @@ test('a new lead receives the unacknowledged notice addressed to the lead role',
   const f = await fixture()
   try {
     f.core.handoff(f.pane, input)
-    await delay(180)
+    await delay(6500)
     const lead = await f.core.changeLead(f.pane.missionId, { kind: 'new', cli: 'claude', model: null, effort: null, accountId: null })
     f.core.hookReport(lead.id, { hook_event_name: 'SessionStart' })
     await delay(1300)
     f.core.dispatchDeliveries(f.pane.missionId)
-    await delay(180)
+    await delay(6500)
     const notice = f.core.store.notifications(f.pane.missionId)[0]!
     assert.equal(notice.deliveries.length, 2)
     assert.equal(notice.deliveries[1]?.paneId, lead.id)
@@ -124,7 +124,7 @@ test('an explicit reviewer that exited keeps its notice pending until its replac
     f.core.hookReport(reviewer.id, { hook_event_name: 'SessionStart' })
     await delay(1300)
     f.core.dispatchDeliveries(f.pane.missionId)
-    await delay(180)
+    await delay(6500)
     const notice = f.core.store.notifications(f.pane.missionId)[0]!
     assert.equal(notice.state, 'pty_accepted')
     assert.equal(notice.deliveries[0]?.paneId, reviewer.id)

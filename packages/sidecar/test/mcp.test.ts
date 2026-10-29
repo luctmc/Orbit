@@ -85,7 +85,7 @@ test('lead and helper coordinate through MCP, handoffs and hooks', async (t) => 
     const result = await crewMcp.callTool({ name: 'handoff_submit', arguments: { summary: 'testes passando', evidence: 'npm test', details: '12 ok' } })
     assert.match(textOf(result), new RegExp(`enfileirado para #${lead.id}`))
     await ui.next('event.added', (m) => m.event.kind === 'handoff' && m.event.paneId === crew.id)
-    await ui.next('pane.data', (m) => m.paneId === lead.id && paneText(lead.id).includes(`[Orbit] Retorno de #${crew.id}`))
+    await ui.next('pane.data', (m) => m.paneId === lead.id && paneText(lead.id).includes(`[Orbit] Retorno de #${crew.id}`), 9000)
     const handoffs = JSON.parse(textOf(await leadMcp.callTool({ name: 'handoff_list', arguments: {} })))
     assert.equal(handoffs[0].text, 'testes passando\n\nEvidência: npm test\n\n12 ok')
     const summaries = JSON.parse(textOf(await leadMcp.callTool({ name: 'handoff_list', arguments: { view: 'summary' } })))

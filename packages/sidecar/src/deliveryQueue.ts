@@ -9,7 +9,7 @@ export function makeNotice(result: ActivityResult, pane: Pane, recipient: Delive
 }
 
 export function needsDelivery(notice: DeliveryNotice, pane: Pane): boolean {
-  return notice.state !== 'agent_acknowledged' && !!pane.executionEpoch && !notice.deliveries.some(d => d.paneId === pane.id && d.executionEpoch === pane.executionEpoch)
+  return notice.state !== 'superseded' && notice.state !== 'agent_acknowledged' && !!pane.executionEpoch && !notice.deliveries.some(d => d.paneId === pane.id && d.executionEpoch === pane.executionEpoch)
 }
 
 export function noticeText(notice: DeliveryNotice): string {

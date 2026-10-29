@@ -1944,25 +1944,46 @@ export class OrbitCore {
       || current.executionEpoch !== caller.executionEpoch || this.store.executionEpoch(caller.id) !== caller.executionEpoch
       || current.role !== caller.role
       || (caller.activityAttemptId !== undefined && caller.activityAttemptId !== this.store.currentPaneAttempt(caller.id)?.id)
-    if (obsolete) throw new Error('Esta execução ou tentativa foi substituída ou encerrada. Consulte a execução atual antes de agir.')
+    if (obsolete) throw new Error('stale_dispatch: Esta execução ou tentativa foi substituída ou encerrada. Consulte a execução atual antes de agir.')
   }
 
   dispatchDeliveries(missionId?: string): void {
+    const groups = new Map<number, { target: Pane; notices: ReturnType<Store['notifications']> }>()
     for (const notice of this.store.notifications(missionId, true)) {
       if (this.store.mission(notice.missionId)?.status !== 'active') continue
       const target = notice.recipient.kind === 'pane' ? this.store.pane(notice.recipient.paneId) : this.missionPanes(notice.missionId).find(p => p.role === 'lead')
       if (!target || target.missionId !== notice.missionId || !this.panes.canReceiveDelivery(target.id) || !needsDelivery(notice, target)) continue
-      const key = `${notice.id}:${target.executionEpoch}`
-      if (this.sendingNotices.has(key)) continue
-      this.sendingNotices.add(key)
-      const recipient = { ...target }
-      const queued = this.panes.submitWithReceipt(target.id, noticeText(notice), () => {
-        this.measurements?.wakeup(recipient.executionEpoch!)
-        try { this.store.markNoticeAccepted(notice.id, recipient) }
-        finally { this.sendingNotices.delete(key) }
-      }, {requestId:key,rejected:()=>this.sendingNotices.delete(key)})
-      if (queued) this.measurements?.bytes(target.executionEpoch!, 'submittedBytes', noticeText(notice))
-      if (!queued) this.sendingNotices.delete(key)
+      if (this.sendingNotices.has(`${notice.id}:${target.executionEpoch}`)) continue
+      const group = groups.get(target.id) ?? { target: { ...target }, notices: [] }
+      group.notices.push(notice)
+      groups.set(target.id, group)
+    }
+    for (const { target, notices } of groups.values()) {
+      // A janela começa no primeiro retorno; os recibos continuam independentes e duráveis.
+      if (target.role === 'lead' && Date.now() - Math.min(...notices.map(n => n.createdAt)) < 5000) continue
+      while (notices.length) {
+        const batch = [notices.shift()!]
+        let text = noticeText(batch[0]!)
+        while (notices.length && Buffer.byteLength(text + '\n\n' + noticeText(notices[0]!)) <= 120_000) {
+          const notice = notices.shift()!
+          batch.push(notice)
+          text += '\n\n' + noticeText(notice)
+        }
+        const keys = batch.map(n => `${n.id}:${target.executionEpoch}`)
+        for (const key of keys) this.sendingNotices.add(key)
+        const release = () => { for (const key of keys) this.sendingNotices.delete(key) }
+        const queued = this.panes.submitWithReceipt(target.id, text, () => {
+          this.measurements?.wakeup(target.executionEpoch!)
+          try { for (const notice of batch) this.store.markNoticeAccepted(notice.id, target) }
+          finally { release() }
+        }, { requestId: keys.join(','), rejected: release, prepare: () => {
+          const pending = new Set(this.store.notifications(target.missionId, true).filter(n => needsDelivery(n, target)).map(n => n.id))
+          const current = batch.filter(n => pending.has(n.id))
+          return current.length ? current.map(noticeText).join('\n\n') : null
+        } })
+        if (queued) this.measurements?.bytes(target.executionEpoch!, 'submittedBytes', text)
+        else release()
+      }
     }
   }
 
@@ -2262,11 +2283,13 @@ export class OrbitCore {
   }
 
   /** Sends text to another agent of the same mission, as if typed by a person. */
-  sendTo(caller: Pane, targetId: number, text: string, newTask = false): void {
+  sendTo(caller: Pane, targetId: number, text: string, newTask = false, attemptId?: string): void {
+    this.assertCurrent(caller)
+    if (attemptId !== undefined && attemptId !== this.store.currentPaneAttempt(caller.id)?.id) throw new Error('stale_dispatch: A mensagem pertence a uma tentativa anterior; confira whoami e a atribuição atual.')
     const target = this.sameMission(caller, targetId)
     if (newTask) this.authorizeAssignment(caller, target)
     if (!this.submitTo(target.id, `[Orbit] Mensagem de #${caller.id}: ${text}`)) throw new Error(`#${targetId} não está rodando`)
-    if (newTask) this.assign(target.id, caller.id)
+    if (newTask) this.assign(target.id, caller.id, true)
   }
 
   /** Validate intent before typing or interrupting: messages alone never assign work. */
@@ -2305,7 +2328,7 @@ export class OrbitCore {
     }
     const pane = await this.restartPane(target.id, true, message?.trim() || 'Continue a tarefa de onde parou. Ao terminar, entregue com handoff_submit.')
     this.assertCurrent(caller)
-    if (explicitTask) this.assign(pane.id, caller.id)
+    if (explicitTask) this.assign(pane.id, caller.id, true)
     return this.store.pane(pane.id) ?? pane
   }
 
@@ -2494,7 +2517,7 @@ export class OrbitCore {
   }
 
   /** Gives a helper work from `by`: it owes a handoff again, and the mission is not ready anymore. */
-  private assign(paneId: number, by: number): void {
+  private assign(paneId: number, by: number, replace = false): void {
     this.nudged.delete(paneId)
     this.panes.setHandoff(paneId, { status: null, assignedBy: by })
     const pane = this.store.pane(paneId)
@@ -2503,7 +2526,7 @@ export class OrbitCore {
       const updated = this.store.updateMission(mission.id, { readyAt: null, readySummary: null })
       if (updated) this.broadcast({ type: 'mission.updated', mission: updated })
     }
-    if (pane) this.store.assignDelivery(pane, this.acceptance.get(paneId) ?? [])
+    if (pane) this.store.assignDelivery(pane, this.acceptance.get(paneId) ?? [], replace)
   }
 
   /** Role instructions are installed once at launch, never repeated in user messages. */
@@ -2549,9 +2572,9 @@ export class OrbitCore {
     }
     const said = oneLine(lastMessage?.trim() || this.panes.screenText(pane.id, 20)).slice(-1500) || '(nada na tela)'
     const committed = this.store.commitActivityResult(pane, { status: 'auto', summary: said, evidence: '', details: '', deliveredTo: pane.assignedBy }, { title: `Retorno de #${pane.id} (automático)`, body: `#${pane.id} encerrou o turno sem handoff_submit. Última mensagem:\n\n${said}` }, `[Orbit] #${pane.id} (${pane.title}) encerrou o turno sem entregar. Última mensagem dele: ${said} (Confira a evidência antes de aceitar.)`)
+    if (committed.duplicate) return null
     this.panes.setHandoff(pane.id, { status: 'auto' })
     if (committed.event) this.broadcast({ type: 'event.added', event: committed.event })
-    if (committed.duplicate) return null
     this.dispatchDeliveries(pane.missionId)
     return null
   }
@@ -2579,7 +2602,7 @@ export class OrbitCore {
    */
   handoff(caller: Pane, input: { summary: string; attemptId?: string; details?: string; status?: HandoffStatus; evidence?: string; to?: number | null; criteria?: Array<{ item: number; met: boolean; how: string }> }): { deliveredTo: number | null; status: HandoffStatus; resultId: string; duplicate: boolean } {
     this.assertCurrent(caller)
-    if (input.attemptId !== undefined && input.attemptId !== this.store.currentPaneAttempt(caller.id)?.id) throw new Error('O resultado pertence a uma tentativa anterior; confira whoami e a atribuição atual.')
+    if (input.attemptId !== undefined && input.attemptId !== this.store.currentPaneAttempt(caller.id)?.id) throw new Error('stale_dispatch: O resultado pertence a uma tentativa anterior; confira whoami e a atribuição atual.')
     const status = input.status ?? 'done'
     if (!HANDOFF_STATUSES.includes(status)) throw new Error(`Status inválido: ${status}`)
     let text = input.summary.trim().slice(0, 2000)

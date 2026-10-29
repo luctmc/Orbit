@@ -68,8 +68,8 @@ test('helpers answer acceptance criteria, open sub-helpers within a cap, and the
     await seedRoutingQuota(server.core)
 
     const screen = server.core as unknown as { panes: { screenText: (id: number, lines: number) => string } }
-    const sees = async (paneId: number, text: string) => {
-      for (let i = 0; i < 100; i++) {
+    const sees = async (paneId: number, text: string, polls = 100) => {
+      for (let i = 0; i < polls; i++) {
         if (screen.panes.screenText(paneId, 200).replaceAll('\n', '').includes(text)) return
         await new Promise((r) => setTimeout(r, 30))
       }
@@ -138,7 +138,7 @@ test('helpers answer acceptance criteria, open sub-helpers within a cap, and the
     assert.match(await asFix.call('agent_close', { agent: auditId }), /só fecha os seus/)
     assert.match(await asFix.call('agent_close', { agent: childId }), /fechado/)
 
-    const done = sees(lead.id, `Retorno de #${fixId} (Corrigir)`)
+    const done = sees(lead.id, `Retorno de #${fixId} (Corrigir)`, 300)
     assert.match(await asFix.call('handoff_submit', { summary: 'Feito', evidence: 'npm test', criteria: [{ item: 1, met: true, how: 'npm test: 9 ok' }, { item: 2, met: true, how: 'README.md linha 12' }] }), /Resultado persistido/)
     await done
     await sees(lead.id, 'rios: 2/2')

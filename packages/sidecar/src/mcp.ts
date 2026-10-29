@@ -323,9 +323,9 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
 
   server.registerTool('agent_send', {
     description: 'Writes a message into another agent\'s terminal of the mission, as if typed. Informative by default: ACKs, waiting and questions preserve delivery/readiness. Only the lead may set newTask:true to assign new helper work.',
-    inputSchema: { agent: z.number().int().describe('The agent\'s number'), message: z.string().min(1).max(8000), newTask: z.boolean().optional().default(false).describe('True only for a new assignment; omit/false for ACK, wait or questions.') },
-  }, guarded(({ agent, message, newTask }: { agent: number; message: string; newTask?: boolean }) => {
-    core.sendTo(caller, agent, message, newTask)
+    inputSchema: { agent: z.number().int().describe('The agent\'s number'), message: z.string().min(1).max(8000), attemptId: z.string().max(100).optional().describe('Attempt id from whoami.agent.attemptId; rejects messages for obsolete work'), newTask: z.boolean().optional().default(false).describe('True only for a new assignment; omit/false for ACK, wait or questions.') },
+  }, guarded(({ agent, message, newTask, attemptId }: { agent: number; message: string; newTask?: boolean; attemptId?: string }) => {
+    core.sendTo(caller, agent, message, newTask, attemptId)
     return `Mensagem enviada para #${agent}.`
   }))
 
