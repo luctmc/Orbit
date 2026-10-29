@@ -7,7 +7,7 @@ import { InputJournal, inputFingerprint, translateCodex, UncertainTranslation, R
 
 /** Admission refused before account preparation or any PTY launch. */
 class AgentAdmissionError extends Error {}
-import { readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { needsDelivery, noticeText } from './deliveryQueue.ts'
 import { claudeHook, claudeStatus } from './adapters/claude.ts'
@@ -47,7 +47,8 @@ import { LimitRefreshGate, parseCodexAccountLimits } from './accountLimits.ts'
 import { codexHome, findCodexRolloutById, codexSessionId, findCodexRollout, fromCodexRollout, fromClaudeStatus, readTail, type UsageReport } from './usage.ts'
 import { contractHash, helperRequestHash, normalizedAcceptance } from './activityLedger.ts'
 import { blankStatus, inspectCli, latestVersion, loginShellRunner, runUpdate, type Run } from './clis.ts'
-import { helperBrief, hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
+import { scoreBrief } from './briefGate.ts'
+import { BRIEF_POINTER_MIN, handoffFile, helperBrief, hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
 import { claudeTranscript, claudeTurns, codexTurns, deleteClaudeConversation, tailTurns, turnsMarkdown, type Turn } from './transcripts.ts'
 import { statusFromHook, type HookPayload } from './hooks.ts'
@@ -2101,12 +2102,14 @@ export class OrbitCore {
   async spawnHelper(caller: Pane, input: HelperRequest): Promise<{ pane: Pane; receipt: string[] }> {
     this.assertCurrent(caller)
     this.activeMission(caller.missionId)
+    const gate = !input.briefId && input.task && input.task.length > BRIEF_POINTER_MIN ? scoreBrief(input.task) : null
+    if (gate && !gate.accepted) throw new Error(gate.error!)
     const brief = helperBrief(this.dataDir, caller.missionId, input.task, input.briefId)
     const supplement = input.briefId && input.task ? input.task : ''
     const task = brief ? brief.task + (supplement ? `\n\n${supplement}` : '') : input.task!
     const initialTask = brief ? `Leia o arquivo inteiro ${brief.path}, execute a tarefa e entregue com handoff_submit.${supplement ? `\n\n${supplement}` : ''}` : undefined
     const result = await this.spawnResolvedHelper(caller, { ...input, task, briefId: brief?.id, initialTask })
-    return { ...result, receipt: [...result.receipt, ...(brief ? [`brief: ${brief.id}`] : [])] }
+    return { ...result, receipt: [...result.receipt, ...(brief ? [`brief: ${brief.id}${gate ? ` · nota ${gate.score}/10` : ''}`] : [])] }
   }
 
   private async spawnResolvedHelper(caller: Pane, input: ResolvedHelperRequest): Promise<{ pane: Pane; receipt: string[] }> {
@@ -2626,7 +2629,7 @@ export class OrbitCore {
       return null
     }
     const said = oneLine(lastMessage?.trim() || this.panes.screenText(pane.id, 20)).slice(-1500) || '(nada na tela)'
-    const committed = this.store.commitActivityResult(pane, { status: 'auto', summary: said, evidence: '', details: '', deliveredTo: pane.assignedBy }, { title: `Retorno de #${pane.id} (automático)`, body: `#${pane.id} encerrou o turno sem handoff_submit. Última mensagem:\n\n${said}` }, `[Orbit] #${pane.id} (${pane.title}) encerrou o turno sem entregar. Última mensagem dele: ${said} (Retorno informativo, não verificado; não refaça o trabalho por este aviso.)`)
+    const committed = this.store.commitActivityResult(pane, { status: 'auto', summary: said, evidence: '', details: '', deliveredTo: pane.assignedBy }, { title: `Retorno de #${pane.id} (automático)`, body: `#${pane.id} encerrou o turno sem handoff_submit. Última mensagem:\n\n${said}` }, result => this.handoffWake(pane, result, `[Orbit] #${pane.id} (${pane.title}) encerrou o turno sem entregar. Última mensagem dele: ${said} (Retorno informativo, não verificado; não refaça o trabalho por este aviso.)`))
     if (committed.duplicate) return null
     this.panes.setHandoff(pane.id, { status: 'auto' })
     if (committed.event) this.broadcast({ type: 'event.added', event: committed.event })
@@ -2697,7 +2700,7 @@ export class OrbitCore {
     const notificationText = `[Orbit] Retorno de #${caller.id} (${caller.title})${target ? ' para você' : ''}, ${label}: ${line}`
     const policy = this.store.executionPolicy(caller.id)
     const source = status === 'done' && caller.cli !== 'shell' ? sourceRevision(policy?.roots ?? copyRoots([caller.cwd]), [this.dataDir]) : undefined
-    const committed = this.store.commitActivityResult(caller, { status, summary: text, evidence, details: [criteria, details].filter(Boolean).join('\n\n'), deliveredTo, ...(source ? { source } : {}) }, { title, body }, notificationText)
+    const committed = this.store.commitActivityResult(caller, { status, summary: text, evidence, details: [criteria, details].filter(Boolean).join('\n\n'), deliveredTo, ...(source ? { source } : {}) }, { title, body }, result => this.handoffWake(caller, result, notificationText, met))
     const resultId = committed.result.id
     this.dispatchDeliveries(caller.missionId)
     if (committed.duplicate) return { deliveredTo, status, resultId, duplicate: true }
@@ -2715,6 +2718,19 @@ export class OrbitCore {
       return { deliveredTo: target.id, status, resultId, duplicate: false }
     }
     return { deliveredTo: this.missionPanes(caller.missionId).find(p => p.role === 'lead' && this.panes.isAlive(p.id))?.id ?? null, status, resultId, duplicate: false }
+  }
+
+  private handoffWake(pane: Pane, result: import('@orbit/protocol').ActivityResult, inline: string, criteria = ''): string {
+    const path = handoffFile(this.dataDir, pane.missionId, result)
+    const header = `[Orbit] Retorno de #${pane.id} (${oneLine(pane.title).slice(0, 160)}), ${result.status === 'auto' ? 'automático' : HANDOFF_LABEL[result.status]}`
+    const status = `STATUS: ${result.status}`
+    const summary = `SUMMARY: ${oneLine(result.summary)}`
+    const short = `${inline}\n${status}\n${summary}`
+    const text = !result.details && Buffer.byteLength(short) < 600 && short.split('\n').length <= 8
+      ? short
+      : [header, status, summary.slice(0, 249), criteria.trim(), result.status === 'auto' ? 'Retorno informativo, não verificado.' : '', `Leia o arquivo inteiro: ${path}`].filter(Boolean).join('\n')
+    this.measurements?.handoff(pane.executionEpoch!, inline, text)
+    return text
   }
 
   /** Claude's status line, forwarded by the agent: usage, context and account limits. */
@@ -3164,6 +3180,7 @@ export class OrbitCore {
       { id: 'toolkit-session-upgrade', text: toolkitMigration, required: true },
       { id: 'assignment-and-acceptance', text: request.task?.trim() || (toolkitMigration ? 'Policy update only. No new task is assigned: await user input; do not execute setup or restart earlier work.' : ''), required: true },
     ], 128_000)
+    mkdirSync(join(this.dataDir, 'handoffs', mission.id), { recursive: true, mode: 0o700 })
     const launch = writeAgentFiles({
       paneDir: this.paneDir(id),
       cli: request.cli,
@@ -3174,7 +3191,7 @@ export class OrbitCore {
       hookCommand: hookCommand(process.execPath, HOOK_SCRIPT),
       statusCommand: hookCommand(process.execPath, STATUS_SCRIPT),
       apiKeyHelper: account ? this.accountFiles.apiKeyHelper(account) : undefined,
-      addDirs: [...(folder ? workspace.folders.filter((f) => f !== folder && (!mission.git || f !== workspace.path)) : workspace.folders.slice(1)), this.attachments.directory(mission.id), ...(request.briefId ? [join(this.dataDir, 'briefs', mission.id)] : [])],
+      addDirs: [...(folder ? workspace.folders.filter((f) => f !== folder && (!mission.git || f !== workspace.path)) : workspace.folders.slice(1)), this.attachments.directory(mission.id), join(this.dataDir, 'handoffs', mission.id), ...(request.briefId ? [join(this.dataDir, 'briefs', mission.id)] : [])],
       rolePrompt: roleContext.text,
       task: taskContext.text || null,
       orbitCommand: hookCommand(process.execPath, ORBIT_CLI_SCRIPT),

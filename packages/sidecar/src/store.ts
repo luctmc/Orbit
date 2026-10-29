@@ -517,13 +517,14 @@ export class Store {
     return { result: structuredClone(result), duplicate: false }
   }
 
-  commitActivityResult(pane: Pane, input: Pick<ActivityResult, 'status' | 'summary' | 'evidence' | 'details' | 'deliveredTo'> & Pick<Partial<ActivityResult>, 'source'>, event: Pick<MissionEvent, 'title' | 'body'>, notificationText?: string) {
+  commitActivityResult(pane: Pane, input: Pick<ActivityResult, 'status' | 'summary' | 'evidence' | 'details' | 'deliveredTo'> & Pick<Partial<ActivityResult>, 'source'>, event: Pick<MissionEvent, 'title' | 'body'>, notificationText?: string | ((result: ActivityResult) => string)) {
     return this.transaction(() => {
       const committed = this.appendResult(pane, input)
+      const text = typeof notificationText === 'function' ? notificationText(committed.result) : notificationText
       if (committed.duplicate) return { ...committed, event: null, notification: structuredClone(this.state.notifications?.find(n => n.resultId === committed.result.id) ?? null) }
       let notification: DeliveryNotice | null = null
       if (input.status !== 'progress' || input.deliveredTo !== null) {
-        notification = makeNotice(committed.result, pane, this.noticeRecipient(input.deliveredTo), notificationText)
+        notification = makeNotice(committed.result, pane, this.noticeRecipient(input.deliveredTo), text)
         this.state.notifications!.push(notification)
       }
       this.saveDelegationResult(pane.id, input)
