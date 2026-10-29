@@ -47,7 +47,7 @@ import { LimitRefreshGate, parseCodexAccountLimits } from './accountLimits.ts'
 import { codexHome, findCodexRolloutById, codexSessionId, findCodexRollout, fromCodexRollout, fromClaudeStatus, readTail, type UsageReport } from './usage.ts'
 import { contractHash, helperRequestHash, normalizedAcceptance } from './activityLedger.ts'
 import { blankStatus, inspectCli, latestVersion, loginShellRunner, runUpdate, type Run } from './clis.ts'
-import { hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
+import { helperBrief, hookCommand, removeAgentFiles, writeAgentFiles } from './agentFiles.ts'
 import { shellQuote, type AgentLaunch, type PaneCommand } from './command.ts'
 import { claudeTranscript, claudeTurns, codexTurns, deleteClaudeConversation, tailTurns, turnsMarkdown, type Turn } from './transcripts.ts'
 import { statusFromHook, type HookPayload } from './hooks.ts'
@@ -85,13 +85,17 @@ const MAX_CHILDREN = 2
 const RESUME_NOTE = 'O Orbit foi reaberto. Continue a tarefa de onde parou e, ao terminar, entregue com handoff_submit.'
 
 export interface HelperRequest {
-  title: string; task: string; cli?: AgentCli; accountId?: string | null; model: string | null; effort?: Effort | null
+  title: string; task?: string; briefId?: string; cli?: AgentCli; accountId?: string | null; model: string | null; effort?: Effort | null
   squadRoleId?: string | null; taskTypeId?: string | null; accept?: string[]; folder?: string | null
   difficulty?: Difficulty | null; retryReason?: string; newEvidence?: string; activityId?: string
   dependsOn?: string[]
   requireReadOnlySandbox?: boolean
   readOnly?: boolean
 }
+
+type ResolvedHelperRequest = HelperRequest & { task: string; initialTask?: string }
+
+export const QUIET_MS = 10 * 60_000
 
 export type Broadcast = (message: ServerMessage) => void
 
@@ -136,6 +140,7 @@ export class OrbitCore {
   /** Per-pane secret used by that agent's MCP client and hooks. Lives only in memory. */
   private readonly paneTokens = new Map<string, number>()
   private readonly sendingNotices = new Set<string>()
+  private readonly quietActivity = new Map<number, { at: number; reported: boolean }>()
   private readonly deliveryTimer: NodeJS.Timeout
   private endpoint = ''
   private readonly delegating = new Map<string, { requestHash: string; retryReason: string | null; opening: Promise<{ pane: Pane; receipt: string[] }> }>()
@@ -214,6 +219,7 @@ export class OrbitCore {
     this.deliveryTimer = setInterval(() => this.dispatchDeliveries(), 2000)
     this.deliveryTimer.unref()
     this.panes.on('data', (paneId, data) => {
+      if (data) this.quietActivity.set(paneId, { at: Date.now(), reported: false })
       const epoch = this.store.pane(paneId)?.executionEpoch
       if (epoch) this.measurements?.output(epoch)
       this.broadcast({ type: 'pane.data', paneId, data })
@@ -934,7 +940,7 @@ export class OrbitCore {
     }
     if (previous?.turns.length) out.push(`## End of the previous lead's conversation (#${previous.pane.id})\n\n${turnsMarkdown(previous.turns, Infinity, Infinity)}`)
     const flow = this.missionEvents(missionId).filter((e) => e.kind !== 'handoff').slice(-25)
-    if (flow.length) out.push(`## Recent flow\n\n${flow.map((e) => `- ${new Date(e.at).toISOString().slice(5, 16).replace('T', ' ')} ${e.title}`).join('\n')}`)
+    if (flow.length) out.push(`## Recent flow\n\n${flow.map((e) => `- ${new Date(e.at).toISOString().slice(5, 16).replace('T', ' ')} ${e.title}${e.kind === 'pane.quiet' ? ` — ${e.body}` : ''}`).join('\n')}`)
     out.push('## How to carry on\n\nHelpers that owe a result now deliver it to you. Write important decisions down with mission_note. Submitted results are not independently validated. Pending required results block mission_ready. Retrieve referenced details with context_read; handoff_list supports resultId and after cursors. To read this briefing again, call mission_briefing.')
     const optional = /^(## Project memory|## Board|## Closed activities|## Results received|## End of the previous|## Recent flow)/
     return this.contextPack(missionId, out.map((text, i) => ({ id: `briefing-${i}`, text, required: !optional.test(text), maxBytes: 3000 })), 18_000).text
@@ -1950,6 +1956,15 @@ export class OrbitCore {
   }
 
   dispatchDeliveries(missionId?: string): void {
+    for (const [id, silence] of this.quietActivity) {
+      const pane = this.store.pane(id)
+      if (!pane || !this.panes.isAlive(id)) { this.quietActivity.delete(id); continue }
+      if (pane.role !== 'crew' || pane.cli === 'shell' || (missionId && pane.missionId !== missionId) || this.store.mission(pane.missionId)?.status !== 'active') continue
+      if (!silence.reported && Date.now() - silence.at >= QUIET_MS) {
+        silence.reported = true
+        this.event(pane.missionId, 'pane.quiet', `#${id} sem saída há 10 minutos`, 'Silêncio não é falha. Consulte agent_read uma vez antes de interromper; nunca reenvie a tarefa por silêncio.', id)
+      }
+    }
     const groups = new Map<number, { target: Pane; notices: ReturnType<Store['notifications']> }>()
     for (const notice of this.store.notifications(missionId, true)) {
       if (this.store.mission(notice.missionId)?.status !== 'active') continue
@@ -2078,12 +2093,23 @@ export class OrbitCore {
       if (!/^[a-zA-Z0-9_-]{1,100}$/.test(input.activityId)) throw new Error('Identificador da atividade inválido')
       return createHash('sha256').update(`activity:${input.activityId}`).digest('hex')
     }
-    return createHash('sha256').update(JSON.stringify({ task: input.task.trim().replaceAll('\r\n', '\n'),
+    return createHash('sha256').update(JSON.stringify({ task: (input.task ?? '').trim().replaceAll('\r\n', '\n'),
       folder: input.folder ?? null, role: input.squadRoleId ?? null, kind: input.taskTypeId ?? null,
       accept: (input.accept ?? []).map((c) => c.trim()).filter(Boolean).slice(0, 8), ...(input.dependsOn?.length ? { dependsOn: [...new Set(input.dependsOn)].sort() } : {}), ...(input.requireReadOnlySandbox ? { requireReadOnlySandbox: true } : {}), ...(input.readOnly ? { readOnly: true } : {}) })).digest('hex')
   }
 
   async spawnHelper(caller: Pane, input: HelperRequest): Promise<{ pane: Pane; receipt: string[] }> {
+    this.assertCurrent(caller)
+    this.activeMission(caller.missionId)
+    const brief = helperBrief(this.dataDir, caller.missionId, input.task, input.briefId)
+    const supplement = input.briefId && input.task ? input.task : ''
+    const task = brief ? brief.task + (supplement ? `\n\n${supplement}` : '') : input.task!
+    const initialTask = brief ? `Leia o arquivo inteiro ${brief.path}, execute a tarefa e entregue com handoff_submit.${supplement ? `\n\n${supplement}` : ''}` : undefined
+    const result = await this.spawnResolvedHelper(caller, { ...input, task, briefId: brief?.id, initialTask })
+    return { ...result, receipt: [...result.receipt, ...(brief ? [`brief: ${brief.id}`] : [])] }
+  }
+
+  private async spawnResolvedHelper(caller: Pane, input: ResolvedHelperRequest): Promise<{ pane: Pane; receipt: string[] }> {
     this.assertCurrent(caller)
     this.activeMission(caller.missionId)
     this.assertSpawnBudget(caller.missionId)
@@ -2158,7 +2184,7 @@ export class OrbitCore {
     try { return await opening } finally { this.delegating.delete(lock) }
   }
 
-  private async openHelper(caller: Pane, input: HelperRequest, attempt: { id: string; paneId: number }): Promise<{ pane: Pane; receipt: string[] }> {
+  private async openHelper(caller: Pane, input: ResolvedHelperRequest, attempt: { id: string; paneId: number }): Promise<{ pane: Pane; receipt: string[] }> {
     const receipt: string[] = []
     const policyRevision = routingRevision(this.store.routing())
     let decisionSource: DecisionReceipt['source'] = input.cli || input.model || input.effort || input.accountId ? 'explicit' : 'rule'
@@ -2210,7 +2236,7 @@ export class OrbitCore {
     receipt.push(`complexidade: ${difficulty} (${difficultyBy})`)
     if (input.retryReason) receipt.push(`nova execução: ${input.retryReason.trim().slice(0, 600)}`)
     const children = caller.role === 'lead' && (mission?.mode === 'agentica' || mission?.mode === 'squad') ? MAX_CHILDREN : 0
-    const { accept: _, difficulty: __, retryReason: ___, activityId: ____, newEvidence: _evidence, ...request } = input
+    const { accept: _, difficulty: __, retryReason: ___, activityId: ____, newEvidence: _evidence, initialTask: _initialTask, ...request } = input
     // A model the lead named stays; otherwise the activity's difficulty picks the tier.
     const tier = difficulty !== 'normal' && !input.model && !input.squadRoleId ? { difficulty, by: difficultyBy } : undefined
     await this.prepareDesignContext({ ...request, missionId: caller.missionId, role: 'crew', cli: input.cli ?? 'claude' })
@@ -2222,7 +2248,7 @@ export class OrbitCore {
     for (const dependency of activity?.dependencies ?? []) {
       if (this.acceptedResult(caller.missionId, dependency.activityId, new Set(), true).id !== dependency.resultId) throw new Error('A dependência mudou antes do lançamento')
     }
-    const opened = this.spawn({ missionId: caller.missionId, role: 'crew', ...request, task: input.task + acceptanceNote(accept), cli: input.cli ?? 'claude', taskTypeId }, { receipt, boss: caller, children, tier, explicitCli: input.cli, id: attempt.paneId, attemptId: attempt.id, requireReadOnlySandbox: input.requireReadOnlySandbox, decisionSource, harnessTask: { difficulty, retry: !!input.retryReason } })
+    const opened = this.spawn({ missionId: caller.missionId, role: 'crew', ...request, task: (input.initialTask ?? input.task) + acceptanceNote(accept), cli: input.cli ?? 'claude', taskTypeId }, { receipt, boss: caller, children, tier, explicitCli: input.cli, id: attempt.paneId, attemptId: attempt.id, requireReadOnlySandbox: input.requireReadOnlySandbox, decisionSource, harnessTask: { difficulty, retry: !!input.retryReason }, taskBeforePointer: input.initialTask ? input.task + acceptanceNote(accept) : undefined })
     if (accept.length) this.acceptance.set(opened.id, accept)
     this.assign(opened.id, caller.id)
     const pane = this.store.pane(opened.id) ?? opened
@@ -2854,6 +2880,7 @@ export class OrbitCore {
   /** Status from Claude's hooks; for PreToolUse, a refusal when the tool is switched off. */
   hookReport(paneId: number, payload: HookPayload, executionEpoch?: string): object | null {
     if (executionEpoch !== undefined) this.assertCurrent({ ...this.store.pane(paneId)!, id: paneId, executionEpoch })
+    if (this.store.pane(paneId) && this.panes.isAlive(paneId)) this.quietActivity.set(paneId, { at: Date.now(), reported: false })
     // Gemini CLI's hooks speak a dialect of Claude Code's: translated in, answered back in its terms.
     if (this.store.pane(paneId)?.cli === 'gemini') return geminiAnswer(this.handleHook(paneId, geminiHook(payload).payload))
     return this.handleHook(paneId, claudeHook(payload).payload)
@@ -2902,7 +2929,7 @@ export class OrbitCore {
   }
 
   /** `resume` continues that conversation of the CLI; `opened` replaces the flow's "Agente #N aberto". */
-  private spawn(input: SpawnPaneRequest, options: { resume?: string; permissionUpgrade?: boolean; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; attemptId?: string; explicitCli?: AgentCli; tier?: { difficulty: Difficulty; by: string }; keep?: AgentSeat; requireReadOnlySandbox?: boolean; decisionSource?: DecisionReceipt['source']; harnessTask?: { difficulty: Difficulty; retry: boolean } } = {}): Pane {
+  private spawn(input: SpawnPaneRequest, options: { resume?: string; permissionUpgrade?: boolean; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; attemptId?: string; explicitCli?: AgentCli; tier?: { difficulty: Difficulty; by: string }; keep?: AgentSeat; requireReadOnlySandbox?: boolean; decisionSource?: DecisionReceipt['source']; harnessTask?: { difficulty: Difficulty; retry: boolean }; taskBeforePointer?: string } = {}): Pane {
     if (this.stopping) throw new Error('Orbit está encerrando; novas execuções não são admitidas')
     const receipt = options.receipt ?? []
     receipt.push(`permissões: ${AGENT_PERMISSION_POLICY}`)
@@ -2911,6 +2938,8 @@ export class OrbitCore {
     if (!options.resume && !options.keep) this.assertSpawnBudget(mission.id)
     const workspace = this.store.workspace(mission.workspaceId)
     if (!workspace) throw new Error('Workspace da missão sumiu')
+
+    const assignmentText = options.taskBeforePointer ?? (input.briefId ? helperBrief(this.dataDir, mission.id, undefined, input.briefId)!.task : input.task ?? '')
 
     // A squad role, or a row of the task table, decides who fills the seat: CLI, model, effort.
     const squad = this.missionSquad(mission.id)
@@ -2953,7 +2982,7 @@ export class OrbitCore {
     const harnessReadOnly = !!(input.readOnly || input.requireReadOnlySandbox || taskType?.readOnly || squadRole?.readOnly)
     const eligibleAccounts = harnessAccounts(this.store.accounts(), [...this.accountStatus.values()], this.store.limits())
     const harnessExplicit = !!(options.explicitCli || input.model || input.effort || input.accountId || input.squadRoleId || taskType?.automatic === false || (taskType && taskType.automatic !== true) || options.keep)
-    const classified = options.harnessTask && !taskType ? classifyTask(`${input.title}\n${input.task ?? ''}`, routing.taskTypes, input.title ?? '') : null
+    const classified = options.harnessTask && !taskType ? classifyTask(`${input.title}\n${assignmentText}`, routing.taskTypes, input.title ?? '') : null
     const harness = options.harnessTask ? selectHarnessCandidate(
       composeHarness({
         kind: taskType?.id ?? (classified?.sure ? classified.type.id : null),
@@ -2964,7 +2993,7 @@ export class OrbitCore {
       harnessExplicit || taskType?.alt?.pinned ? [] : this.store.harnessEvidence(),
       { explicit: harnessExplicit },
     ) : undefined
-    const work = request.role === 'crew' && !['operacao', 'documentacao'].includes(taskType?.id ?? '') ? designWork(`${taskType?.id ?? ''} ${input.title} ${input.task ?? ''}`) : null
+    const work = request.role === 'crew' && !['operacao', 'documentacao'].includes(taskType?.id ?? '') ? designWork(`${taskType?.id ?? ''} ${input.title} ${assignmentText}`) : null
     const automatic = !harnessExplicit && (!harness?.selected || work) && request.role === 'crew' && (taskType || work) && this.catalog
       ? automaticTaskSeat({ catalogForAccount: this.harnessMode === 'live' ? account => this.currentAccountCatalog(account) : undefined, catalog: this.catalog, preferred: { cli: request.cli as AgentCliForRole, model: request.model, effort: request.effort ?? null }, alternate: taskType?.alt, difficulty: options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal', design: work, allowed: mission.allowedClis, rooms: cli => this.rooms(cli, this.liveByAccount()).filter(r => this.accountStatus.get(r.account.id)?.loggedIn === true && !this.accountStatus.get(r.account.id)?.busy) }) : null
     // Once a catalog is available, autonomous staffing needs a valid quota and compatible model.
@@ -3082,7 +3111,7 @@ export class OrbitCore {
 
     const skillItems = request.cli === 'shell' ? [] : missionSkills([...bundledCatalog(), ...this.catalogItems.filter(i => i.resource?.origin !== 'bundled')], request.cli, workspace.folders, new Set(this.store.disabledCatalog()), policy)
     const explicitSkills = roleSkills?.skills ?? []
-    const designSelection = request.role === 'crew' && request.cli !== 'shell' && designWork(`${input.title} ${input.task ?? ''}`) ? selectDesignSkills(skillItems, `${input.title} ${input.task ?? ''}`, this.designContexts.get(JSON.stringify(workspace.folders)) ?? '', explicitSkills, !!roleSkills?.onlySkills) : { items: [], missing: [] }
+    const designSelection = request.role === 'crew' && request.cli !== 'shell' && designWork(`${input.title} ${assignmentText}`) ? selectDesignSkills(skillItems, `${input.title} ${assignmentText}`, this.designContexts.get(JSON.stringify(workspace.folders)) ?? '', explicitSkills, !!roleSkills?.onlySkills) : { items: [], missing: [] }
     const selectedSkills = [...resolveSkillSelectors(skillItems, explicitSkills), ...designSelection.items]
     const skillDelivery = designSkillDelivery(selectedSkills, explicitSkills, designSelection.missing)
     if (selectedSkills.length || designSelection.missing.length) receipt.push(`skills de design: ${skillDelivery.delivered.map(i => i.name).join(', ') || designSelection.missing.join('; ')}`)
@@ -3145,7 +3174,7 @@ export class OrbitCore {
       hookCommand: hookCommand(process.execPath, HOOK_SCRIPT),
       statusCommand: hookCommand(process.execPath, STATUS_SCRIPT),
       apiKeyHelper: account ? this.accountFiles.apiKeyHelper(account) : undefined,
-      addDirs: [...(folder ? workspace.folders.filter((f) => f !== folder && (!mission.git || f !== workspace.path)) : workspace.folders.slice(1)), this.attachments.directory(mission.id)],
+      addDirs: [...(folder ? workspace.folders.filter((f) => f !== folder && (!mission.git || f !== workspace.path)) : workspace.folders.slice(1)), this.attachments.directory(mission.id), ...(request.briefId ? [join(this.dataDir, 'briefs', mission.id)] : [])],
       rolePrompt: roleContext.text,
       task: taskContext.text || null,
       orbitCommand: hookCommand(process.execPath, ORBIT_CLI_SCRIPT),
@@ -3212,7 +3241,7 @@ export class OrbitCore {
       processStarted = true
       if (pane.pid) this.store.bindExecutionProcess(id, executionEpoch, pane.pid)
       if (toolkit) this.toolkitDispatches.dispatched(id, request.cli, account?.id ?? null, options.resume ?? null, executionEpoch)
-      this.measurements?.start(pane, performance.now() - launchStarted, request.cli === 'shell' ? 0 : (options.resume && !refreshRole ? 0 : roleContext.bytes) + taskContext.bytes, request.cli === 'shell' ? 0 : (options.resume && !refreshRole ? 0 : roleContext.sourceBytes) + taskContext.sourceBytes, request.cli === 'shell' ? 0 : roleContext.bytes)
+      this.measurements?.start(pane, performance.now() - launchStarted, request.cli === 'shell' ? 0 : (options.resume && !refreshRole ? 0 : roleContext.bytes) + taskContext.bytes, request.cli === 'shell' ? 0 : (options.resume && !refreshRole ? 0 : roleContext.sourceBytes) + taskContext.sourceBytes, request.cli === 'shell' ? 0 : roleContext.bytes, options.taskBeforePointer ? Buffer.byteLength(options.taskBeforePointer.trim()) - taskContext.bytes : 0)
     } catch (error) {
       if (processStarted) this.panes.forget(id)
       else this.store.releaseExecution(id, executionEpoch)
@@ -3230,6 +3259,7 @@ export class OrbitCore {
     const who = [CLI_LABEL[request.cli], account && !account.builtin && account.name, request.model, request.effort && `esforço ${EFFORT_LABEL[request.effort]}`, seat].filter(Boolean).join(' · ')
     // The receipt says why: task type, CLI change, account and its room.
     const why = receipt.length ? `\n\n${receipt.map((line) => `▸ ${line}`).join('\n')}` : ''
+    this.quietActivity.set(id, { at: Date.now(), reported: false })
     this.event(mission.id, 'pane.spawned', options.opened?.(id) ?? `Agente #${id} aberto`, `${title} — ${who}${why}`, id)
     return pane
   }

@@ -890,7 +890,7 @@ export interface Card {
   updatedAt: number
 }
 
-export type MissionEventKind = 'mission.created' | 'mission.ready' | 'proposal' | 'lead.changed' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser' | 'budget' | 'rescue'
+export type MissionEventKind = 'mission.created' | 'mission.ready' | 'proposal' | 'lead.changed' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'pane.quiet' | 'handoff' | 'browser' | 'budget' | 'rescue'
 
 export interface MissionEvent {
   id: string
@@ -951,6 +951,8 @@ export interface RoutingProposal {
 }
 
 export interface SpawnPaneRequest {
+  /** Mission-scoped content-addressed assignment, resolved by the helper API. */
+  briefId?: string
   readOnly?: boolean
   requireReadOnlySandbox?: boolean
   missionId: string

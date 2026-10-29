@@ -58,7 +58,7 @@ const ADMISSION_FIELDS = {
   readOnly: z.boolean().optional().describe('Describe inspection-only assignment scope. Native file and command capabilities remain enabled by the default Orbit policy.'),
 }
 
-type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: AgentCliForRole; accountId?: string; model?: string; effort?: Effort; accept?: string[]; folder?: string; difficulty?: Difficulty; retryReason?: string; newEvidence?: string; activityId?: string; dependsOn?: string[]; requireReadOnlySandbox?: boolean; readOnly?: boolean }
+type HelperInput = { title?: string; task?: string; briefId?: string; role?: string; kind?: string; agent?: AgentCliForRole; accountId?: string; model?: string; effort?: Effort; accept?: string[]; folder?: string; difficulty?: Difficulty; retryReason?: string; newEvidence?: string; activityId?: string; dependsOn?: string[]; requireReadOnlySandbox?: boolean; readOnly?: boolean }
 
 /** In a workspace with several folders, a helper can start in the one its work is in. */
 function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
@@ -68,7 +68,7 @@ function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
 
 /** Opens a helper and returns its line of the reply: number, title and the receipt. */
 async function openHelper(core: OrbitCore, caller: Pane, h: HelperInput): Promise<string> {
-  const { pane, receipt } = await core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, accountId: h.accountId, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null, difficulty: h.difficulty ?? null, retryReason: h.retryReason, newEvidence: h.newEvidence, activityId: h.activityId, dependsOn: h.dependsOn, requireReadOnlySandbox: h.requireReadOnlySandbox, readOnly: h.readOnly })
+  const { pane, receipt } = await core.spawnHelper(caller, { title: h.title ?? '', task: h.task, briefId: h.briefId, cli: h.agent, accountId: h.accountId, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null, difficulty: h.difficulty ?? null, retryReason: h.retryReason, newEvidence: h.newEvidence, activityId: h.activityId, dependsOn: h.dependsOn, requireReadOnlySandbox: h.requireReadOnlySandbox, readOnly: h.readOnly })
   const activity = core.store.activityHistory(caller.missionId).activities.find(a => a.activeAttemptId === pane.activityAttemptId)
   const review = activity && core.reviewRequired(caller.missionId, activity.id) ? 'required' : 'not-required'
   return `#${pane.id} ${pane.title}\n  ▸ review: '${review}'\n${receipt.map((line) => `  ▸ ${line}`).join('\n')}`
@@ -182,7 +182,8 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     const agentic = core.mission(caller.missionId)?.mode === 'agentica'
     const helperFields = {
       title: z.string().max(120).optional().describe('Short role of the helper, e.g. "Map token reads" (default: the role or kind name)'),
-      task: z.string().min(1).max(20000).describe('The complete, self-contained task: context, files, what to deliver, how to verify it and what not to touch'),
+      briefId: z.string().regex(/^[a-f0-9]{12}$/).optional().describe('Reuse a brief from this mission; task becomes an optional supplement'),
+      task: z.string().min(1).max(20000).optional().describe('The complete, self-contained task: context, files, what to deliver, how to verify it and what not to touch'),
       ...roleField,
       agent: z.enum(AGENT_CLIS as unknown as [AgentCliForRole, ...AgentCliForRole[]]).optional().describe(agentic ? 'Only if the user asked for a specific CLI; otherwise Orbit picks from the table and the load' : 'Which CLI to use without a role or kind (default: claude)'),
       model: z.string().regex(MODEL_ID).optional().describe('Only if the user asked for a specific model'),
@@ -212,7 +213,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       // so each launch still sees all earlier account reservations; results retain input order.
       const lines = await Promise.all(helpers.map(async (h, i) => {
         try { return await open(h) }
-        catch (error) { return `${i + 1}. não abriu (${h.title ?? h.task.slice(0, 40)}): ${error instanceof Error ? error.message : String(error)}` }
+        catch (error) { return `${i + 1}. não abriu (${h.title ?? h.task?.slice(0, 40) ?? h.briefId}): ${error instanceof Error ? error.message : String(error)}` }
       }))
       return `Abertos:\n${lines.join('\n')}\n\nAgora encerre o turno: os retornos chegam sozinhos.`
     }))
@@ -346,7 +347,8 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       description: 'Opens a sub-helper for a large, independent part of your task (at most 2 open). Orbit picks CLI, model and account; its result reaches your terminal, and your final delivery stays yours.',
       inputSchema: {
         title: z.string().max(120).optional(),
-        task: z.string().min(1).max(20000).describe('The part of the task, self-contained: context, files, what to deliver, how to verify it'),
+        briefId: z.string().regex(/^[a-f0-9]{12}$/).optional().describe('Reuse a brief from this mission; task becomes an optional supplement'),
+        task: z.string().min(1).max(20000).optional().describe('The part of the task, self-contained: context, files, what to deliver, how to verify it'),
         kind: z.enum(kinds.map((t) => t.id) as [string, ...string[]]).optional().describe(`Kind of work (${kinds.map((t) => t.id).join(', ')}); without it Orbit classifies`),
         accountId: ACCOUNT_FIELD,
         accept: ACCEPT,
