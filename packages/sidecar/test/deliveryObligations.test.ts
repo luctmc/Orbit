@@ -69,12 +69,12 @@ test('closing a terminal does not cancel the required activity', async () => {
   } finally { await f.close() }
 })
 
-test('automatic last words and blocked reports are not accepted completion', async () => {
+test('automatic last words are informational while blocked reports require completion', async () => {
   const f = await fixture()
   try {
     f.core.hookReport(f.worker.id, { hook_event_name: 'Stop', stop_hook_active: true, last_assistant_message: 'I think it is done' })
     assert.equal(f.core.store.pane(f.worker.id)?.handoffStatus, 'auto')
-    assert.throws(() => f.core.missionReady(f.lead, 'Not verified', false), /falta retorno/)
+    assert.ok(f.core.missionReady(f.lead, 'Only automatic informational words', false).readyAt)
     f.core.handoff(f.worker, { status: 'blocked', summary: 'Missing required decision' })
     assert.throws(() => f.core.missionReady(f.lead, 'Still blocked', false), /falta retorno/)
     const { resultId } = f.core.handoff(f.worker, { status: 'done', summary: 'Verified', evidence: 'Synthetic check passed' })

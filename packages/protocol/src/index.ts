@@ -279,6 +279,8 @@ export interface ActivityAttempt {
   accountId: string | null
   sessionId: string | null
   retryReason: string | null
+  /** Evidência nova exigida no terceiro resgate. */
+  newEvidence?: string
   error: string | null
   decision?: DecisionReceipt
   /** A retained view for idempotent replies after the terminal is closed. */
@@ -473,6 +475,10 @@ export interface DeliveryNotice {
   text: string
   state: 'persisted' | 'pty_accepted' | 'agent_acknowledged' | 'superseded'
   deliveries: Array<{ paneId: number; executionEpoch: string; at: number }>
+  /** Aviso aceito pelo terminal, ainda sem confirmação do agente. */
+  repeat?: boolean
+  /** Repetição oportunista já enviada; no máximo uma por aviso. */
+  repeatedAt?: number
   acknowledgedBy: { paneId: number; executionEpoch: string; at: number } | null
   createdAt: number
 }
@@ -884,7 +890,7 @@ export interface Card {
   updatedAt: number
 }
 
-export type MissionEventKind = 'mission.created' | 'mission.ready' | 'proposal' | 'lead.changed' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser' | 'budget'
+export type MissionEventKind = 'mission.created' | 'mission.ready' | 'proposal' | 'lead.changed' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'handoff' | 'browser' | 'budget' | 'rescue'
 
 export interface MissionEvent {
   id: string

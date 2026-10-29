@@ -65,21 +65,51 @@ test('sidecar recovery replays an unacknowledged result without executing the ac
   } finally { await restored.shutdown() }
 })
 
-test('a new lead receives the unacknowledged notice addressed to the lead role', async () => {
-  const f = await fixture()
-  try {
-    f.core.handoff(f.pane, input)
-    await delay(6500)
-    const lead = await f.core.changeLead(f.pane.missionId, { kind: 'new', cli: 'claude', model: null, effort: null, accountId: null })
-    f.core.hookReport(lead.id, { hook_event_name: 'SessionStart' })
-    await delay(1300)
-    f.core.dispatchDeliveries(f.pane.missionId)
-    await delay(6500)
-    const notice = f.core.store.notifications(f.pane.missionId)[0]!
-    assert.equal(notice.deliveries.length, 2)
-    assert.equal(notice.deliveries[1]?.paneId, lead.id)
-    assert.equal(f.core.acknowledgeDelivery(lead, notice.id).state, 'agent_acknowledged')
-  } finally { await f.core.shutdown() }
+test('a new lead recovers accepted notices without another wake and receives unsent notices by PTY', async () => {
+  for (const accepted of [true, false]) {
+    const f = await fixture()
+    try {
+      const result = f.core.handoff(f.pane, input)
+      if (accepted) await delay(6500)
+      const before = f.core.store.notifications(f.pane.missionId)[0]!
+      assert.equal(before.state, accepted ? 'pty_accepted' : 'persisted')
+      assert.equal(before.deliveries.length, accepted ? 1 : 0)
+      assert.equal(before.acknowledgedBy, null)
+      if (accepted) assert.equal(before.deliveries[0]?.paneId, f.lead.id)
+      const lead = await f.core.changeLead(f.pane.missionId, { kind: 'new', cli: 'claude', model: null, effort: null, accountId: null })
+      if (accepted) {
+        const briefing = f.core.missionBriefing(lead.missionId)
+        assert.ok(briefing.includes(before.id))
+        assert.ok(briefing.includes(result.resultId))
+        assert.match(briefing, /repeat: true/)
+        assert.ok(briefing.includes(input.summary))
+      } else {
+        assert.throws(() => f.core.acknowledgeDelivery(lead, before.id), /ainda não foi enviado/)
+      }
+      f.core.hookReport(lead.id, { hook_event_name: 'SessionStart' })
+      await delay(1300)
+      f.core.dispatchDeliveries(f.pane.missionId)
+      await delay(6500)
+      const notice = f.core.store.notifications(f.pane.missionId)[0]!
+      assert.equal(notice.id, before.id)
+      assert.equal(notice.resultId, result.resultId)
+      assert.equal(notice.state, 'pty_accepted')
+      assert.equal(notice.repeat, true)
+      assert.equal(notice.deliveries.length, 1)
+      assert.equal(notice.deliveries[0]?.paneId, accepted ? f.lead.id : lead.id)
+      assert.equal(notice.deliveries[0]?.executionEpoch, accepted ? f.lead.executionEpoch : lead.executionEpoch)
+      const ack = f.core.acknowledgeDelivery(lead, notice.id)
+      assert.equal(ack.state, 'agent_acknowledged')
+      assert.equal(ack.acknowledgedBy?.paneId, lead.id)
+      assert.equal(ack.acknowledgedBy?.executionEpoch, lead.executionEpoch)
+      const history = f.core.store.activityHistory(lead.missionId)
+      assert.equal(history.attempts.length, 1)
+      assert.equal(history.results.length, 1)
+      assert.equal(history.results[0]?.id, result.resultId)
+      assert.equal(history.results[0]?.summary, input.summary)
+      assert.equal(history.results[0]?.evidence, input.evidence)
+    } finally { await f.core.shutdown() }
+  }
 })
 
 test('a failed result commit leaves neither a result nor a notification; retry commits both once', async () => {
