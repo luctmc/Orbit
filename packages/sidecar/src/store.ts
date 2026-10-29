@@ -19,6 +19,10 @@ import { deliveryPending, deliveryStatus, newDelivery, type DeliveryObligation }
 import { accountReport, type SessionBaseline } from './sessionAccounting.ts'
 import { contractHash, createAttempt, emptyActivityLedger, resultDigest, syncAttempt, type ActivityLedger } from './activityLedger.ts'
 
+/** Três tentativas malsucedidas encerram o resgate automático da atividade. */
+export const RESCUE_FAILURE_LIMIT = 3
+/** Razões e evidências precisam descrever algo além de um pedido vazio de retry. */
+export const RESCUE_MIN_TEXT_LENGTH = 20
 const EVENTS_PER_MISSION = 200
 const DEFAULT_SETTINGS: OrbitSettings = { resumeOnStart: true, smartClassify: true, agentsInEnglish: true, agentToolProfile: 'orbit' }
 const PROPOSALS_KEPT = 50
@@ -306,7 +310,7 @@ export class Store {
   }
 
   notifications(missionId?: string, pendingOnly = false): DeliveryNotice[] {
-    return structuredClone((this.state.notifications ?? []).filter(n => (!missionId || n.missionId === missionId) && (!pendingOnly || (n.state !== 'agent_acknowledged' && n.state !== 'superseded'))))
+    return structuredClone((this.state.notifications ?? []).filter(n => (!missionId || n.missionId === missionId) && (!pendingOnly || (n.state !== 'agent_acknowledged' && n.state !== 'superseded'))).map(n => ({ ...n, repeat: n.state === 'pty_accepted' })))
   }
 
   private supersedeAttemptNotices(attemptId: string): void {
@@ -321,12 +325,13 @@ export class Store {
     return pane?.role === 'crew' ? { kind: 'pane', paneId: pane.id } : { kind: 'lead' }
   }
 
-  markNoticeAccepted(id: string, pane: Pane): void {
+  markNoticeAccepted(id: string, pane: Pane, repeat = false): void {
     this.transaction(() => {
       const notice = this.state.notifications?.find(n => n.id === id && n.missionId === pane.missionId)
       if (!notice || notice.state === 'superseded' || !pane.executionEpoch || this.executionEpoch(pane.id) !== pane.executionEpoch) return
       if (!notice.deliveries.some(d => d.paneId === pane.id && d.executionEpoch === pane.executionEpoch)) notice.deliveries.push({ paneId: pane.id, executionEpoch: pane.executionEpoch, at: Date.now() })
       if (notice.state !== 'agent_acknowledged') notice.state = 'pty_accepted'
+      if (repeat) notice.repeatedAt ??= Date.now()
     })
   }
 
@@ -337,7 +342,9 @@ export class Store {
       if (notice.state === 'superseded') throw new Error('Este aviso foi substituído por uma nova tentativa')
       const current = this.pane(pane.id)
       if (!current || (notice.recipient.kind === 'lead' ? current.role !== 'lead' : current.id !== notice.recipient.paneId)) throw new Error('Só o destinatário atual confirma este aviso')
-      if (!notice.deliveries.some(d => d.paneId === pane.id && d.executionEpoch === pane.executionEpoch)) throw new Error('Este aviso ainda não foi enviado a esta execução')
+      // O destinatário atual também pode confirmar um aviso já aceito, recuperado pelo briefing/lista.
+      // Não invente outra entrega PTY nem acorde a nova execução apenas para obter ACK.
+      if (!notice.deliveries.length) throw new Error('Este aviso ainda não foi enviado a esta execução')
       if (notice.acknowledgedBy && (notice.acknowledgedBy.paneId !== pane.id || notice.acknowledgedBy.executionEpoch !== pane.executionEpoch)) throw new Error('Aviso confirmado por outra execução')
       notice.state = 'agent_acknowledged'
       notice.acknowledgedBy ??= { paneId: pane.id, executionEpoch: pane.executionEpoch, at: Date.now() }
@@ -374,20 +381,52 @@ export class Store {
     return activity
   }
 
+  private failedAttempts(activityId: string) {
+    const ledger = this.state.activityLedger!
+    return ledger.attempts.filter(a => a.activityId === activityId && (
+      !!a.error && a.error !== 'Orbit reiniciou; confira a tentativa antes de retomar ou repetir.' && !a.error.includes('rescue_duplicate')
+      || a.pane?.status === 'exited' && a.pane.exitCode !== null && a.pane.exitCode !== 0
+      || this.state.verifications?.some(v => v.verdict === 'changes_required' && ledger.results.some(r => r.id === v.resultId && r.attemptId === a.id))
+    ))
+  }
+
+  private assertRescueSeat(activityId: string, hash: string, cli: Pane['cli'], model: string | null) {
+    if (this.failedAttempts(activityId).some(a => a.contractHash === hash && a.cli === cli && a.model === model)) {
+      throw new Error('rescue_duplicate: O mesmo contrato já falhou nesta CLI/modelo. Altere o escopo ou o modelo antes de tentar novamente.')
+    }
+  }
+
   /** Reserve the pane number and attempt in one durable commit before any spawn side effect. */
-  reserveActivity(input: { missionId: string; key: string; title: string; contractHash: string; requestHash?: string; acceptance: string[]; retryReason: string | null; assignedBy: number; requiresDelivery: boolean; dependencies?: ActivityRecord['dependencies'] }) {
+  reserveActivity(input: { missionId: string; key: string; title: string; contractHash: string; requestHash?: string; acceptance: string[]; retryReason: string | null; assignedBy: number; requiresDelivery: boolean; dependencies?: ActivityRecord['dependencies']; cli?: Pane['cli']; model?: string | null; newEvidence?: string }) {
+    const existing = this.state.activityLedger!.activities.find(a => a.missionId === input.missionId && a.key === input.key)
+    if (existing && this.failedAttempts(existing.id).length >= RESCUE_FAILURE_LIMIT) {
+      const body = 'rescue_exhausted: Três tentativas falharam. Pare e pergunte ao usuário como prosseguir.'
+      this.addEvent({ missionId: input.missionId, paneId: input.assignedBy, kind: 'rescue', title: 'Resgate esgotado', body })
+      this.flush()
+      throw new Error(body)
+    }
     return this.transaction(() => {
       const ledger = this.state.activityLedger!
       let activity = ledger.activities.find(a => a.missionId === input.missionId && a.key === input.key)
       if (activity) {
         const current = ledger.attempts.find(a => a.id === activity!.activeAttemptId)!
+        const failures = this.failedAttempts(activity.id)
         const replay = input.retryReason ? ledger.attempts.find(a => a.activityId === activity!.id && a.retryReason === input.retryReason) : current
-        if (replay) {
+        if (replay && !failures.some(a => a.id === replay.id)) {
           if (replay.contractHash !== input.contractHash) throw new Error('O contrato ou critério da atividade mudou. Use retryReason com uma justificativa nova para criar uma revisão explícita.')
           if (input.requestHash && replay.requestHash !== input.requestHash) throw new Error(replay.requestHash
             ? 'O pedido da atividade mudou (instruções, modelo, esforço ou dificuldade). Use retryReason com uma justificativa nova; o trabalho anterior não foi reutilizado.'
             : 'Pedido antigo sem fingerprint verificável. Consulte activity_status e os resultados; use agent_resume para continuar ou retryReason com justificativa nova para revisar. Nenhum agente novo foi aberto.')
           return { activity: structuredClone(activity), attempt: structuredClone(replay), reused: true }
+        }
+        if (failures.length) {
+          if ((input.retryReason?.trim().length ?? 0) < RESCUE_MIN_TEXT_LENGTH) throw new Error('O resgate exige retryReason com justificativa concreta de pelo menos 20 caracteres.')
+          if (failures.length >= 2) {
+            const evidence = input.newEvidence?.trim() ?? ''
+            if (evidence.length < RESCUE_MIN_TEXT_LENGTH || ledger.attempts.some(a => a.activityId === activity!.id && a.newEvidence === evidence)) throw new Error('O terceiro resgate exige newEvidence com evidência nova de pelo menos 20 caracteres.')
+            if (!/escopo menor|apenas|somente|reduz|smaller scope|narrow|only/i.test(input.retryReason!)) throw new Error('O terceiro resgate exige escopo menor descrito em retryReason.')
+          }
+          if (input.cli) this.assertRescueSeat(activity.id, input.contractHash, input.cli, input.model ?? null)
         }
         if (activity.contractHash !== input.contractHash || input.requestHash && current.requestHash !== input.requestHash) {
           activity.revision++
@@ -401,6 +440,7 @@ export class Store {
       if (activity.activeAttemptId) this.supersedeAttemptNotices(activity.activeAttemptId)
       const attempt = createAttempt(ledger, activity, this.state.nextPaneId++, input.retryReason)
       if (input.requestHash) attempt.requestHash = input.requestHash
+      if (input.newEvidence?.trim()) attempt.newEvidence = input.newEvidence.trim()
       // A crash before opening the terminal still leaves required work, so ready cannot skip it.
       if (input.requiresDelivery) {
         const delivery: DeliveryObligation = { id: randomUUID(), missionId: input.missionId, paneId: attempt.paneId, assignedBy: input.assignedBy, title: input.title, acceptance: [...input.acceptance], status: 'pending', summary: '', createdAt: attempt.createdAt, updatedAt: attempt.createdAt, waiver: null, replacementId: null }
@@ -417,6 +457,7 @@ export class Store {
     this.transaction(() => {
       const attempt = this.state.activityLedger!.attempts.find(a => a.id === id)
       if (!attempt || attempt.state !== 'reserved') throw new Error('Reserva de tentativa inválida')
+      this.assertRescueSeat(attempt.activityId, attempt.contractHash, seat.cli, seat.model)
       Object.assign(attempt, seat, { state: 'starting', updatedAt: Date.now() })
     })
   }
@@ -489,6 +530,10 @@ export class Store {
       const stored = this.pane(pane.id)
       if (stored) Object.assign(stored, { handoffStatus: input.status, deliveredAt: input.status === 'progress' ? stored.deliveredAt : committed.result.createdAt })
       this.recordDelivery(pane, input.status, input.summary, false)
+      if (input.status !== 'auto') {
+        const mission = this.mission(pane.missionId)
+        if (mission) Object.assign(mission, { readyAt: null, readySummary: null })
+      }
       if (notification?.recipient.kind === 'pane') {
         const target = this.pane(notification.recipient.paneId)
         if (target?.role === 'crew' && target.cli !== 'shell') {

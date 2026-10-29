@@ -87,7 +87,7 @@ const RESUME_NOTE = 'O Orbit foi reaberto. Continue a tarefa de onde parou e, ao
 export interface HelperRequest {
   title: string; task: string; cli?: AgentCli; accountId?: string | null; model: string | null; effort?: Effort | null
   squadRoleId?: string | null; taskTypeId?: string | null; accept?: string[]; folder?: string | null
-  difficulty?: Difficulty | null; retryReason?: string; activityId?: string
+  difficulty?: Difficulty | null; retryReason?: string; newEvidence?: string; activityId?: string
   dependsOn?: string[]
   requireReadOnlySandbox?: boolean
   readOnly?: boolean
@@ -920,6 +920,8 @@ export class OrbitCore {
     const archived = this.store.delegations(missionId).filter((d) => !panes.some((p) => p.id === d.pane.id))
     if (archived.length) out.push(`## Closed activities (reuse completed results)\n\n${archived.map((d) => `- #${d.pane.id} ${d.pane.title}: ${d.pane.handoffStatus ?? 'stopped without delivery'}${d.result ? `; ${d.result.summary}; evidence: ${d.result.evidence}` : ''}`).join('\n')}`)
     const history = this.store.activityHistory(missionId)
+    const repeats = this.store.notifications(missionId, true).filter(n => n.repeat && n.recipient.kind === 'lead')
+    if (repeats.length) out.push(`## Receipts awaiting ACK\n\n${repeats.map(n => `- ${n.id}; resultId: ${n.resultId}; repeat: true; confirme com delivery_ack, sem refazer o trabalho.`).join('\n')}`)
     const results = history.results.slice(-8)
     if (results.length) out.push(`## Results received (submitted evidence, not independent validation)\n\n${results.map(r => `### ${r.id} (${r.status})\n${[r.summary, r.evidence && `Evidence: ${r.evidence}`, r.details].filter(Boolean).join('\n\n')}`).join('\n\n')}`)
     else {
@@ -1952,7 +1954,7 @@ export class OrbitCore {
     for (const notice of this.store.notifications(missionId, true)) {
       if (this.store.mission(notice.missionId)?.status !== 'active') continue
       const target = notice.recipient.kind === 'pane' ? this.store.pane(notice.recipient.paneId) : this.missionPanes(notice.missionId).find(p => p.role === 'lead')
-      if (!target || target.missionId !== notice.missionId || !this.panes.canReceiveDelivery(target.id) || !needsDelivery(notice, target)) continue
+      if (!target || target.missionId !== notice.missionId || !this.panes.canReceiveDelivery(target.id) || notice.deliveries.length > 0 || !needsDelivery(notice, target)) continue
       if (this.sendingNotices.has(`${notice.id}:${target.executionEpoch}`)) continue
       const group = groups.get(target.id) ?? { target: { ...target }, notices: [] }
       group.notices.push(notice)
@@ -1969,17 +1971,29 @@ export class OrbitCore {
           batch.push(notice)
           text += '\n\n' + noticeText(notice)
         }
+        // ACK pendente nunca cria um wake; cabe apenas no lote de uma entrega nova.
+        const repeats = this.store.notifications(target.missionId, true).filter(n => n.repeat && !n.repeatedAt
+          && (n.recipient.kind === 'lead' ? target.role === 'lead' : n.recipient.paneId === target.id)
+          && !this.sendingNotices.has(`${n.id}:${target.executionEpoch}`))
+        for (const notice of repeats) {
+          const extra = `${noticeText(notice)}\n[Orbit] repeat: true; confirme o recibo, sem refazer o trabalho.`
+          if (Buffer.byteLength(text + '\n\n' + extra) > 120_000) continue
+          batch.push(notice)
+          text += '\n\n' + extra
+        }
         const keys = batch.map(n => `${n.id}:${target.executionEpoch}`)
         for (const key of keys) this.sendingNotices.add(key)
         const release = () => { for (const key of keys) this.sendingNotices.delete(key) }
         const queued = this.panes.submitWithReceipt(target.id, text, () => {
           this.measurements?.wakeup(target.executionEpoch!)
-          try { for (const notice of batch) this.store.markNoticeAccepted(notice.id, target) }
+          try { for (const notice of batch) this.store.markNoticeAccepted(notice.id, target, !!notice.repeat) }
           finally { release() }
         }, { requestId: keys.join(','), rejected: release, prepare: () => {
           const pending = new Set(this.store.notifications(target.missionId, true).filter(n => needsDelivery(n, target)).map(n => n.id))
-          const current = batch.filter(n => pending.has(n.id))
-          return current.length ? current.map(noticeText).join('\n\n') : null
+          if (!batch.some(n => !n.repeat && pending.has(n.id))) return null
+          const unacked = new Set(this.store.notifications(target.missionId, true).filter(n => n.repeat && !n.repeatedAt).map(n => n.id))
+          const current = batch.filter(n => n.repeat ? unacked.has(n.id) : pending.has(n.id))
+          return current.length ? current.map(n => noticeText(n) + (n.repeat ? '\n[Orbit] repeat: true; confirme o recibo, sem refazer o trabalho.' : '')).join('\n\n') : null
         } })
         if (queued) this.measurements?.bytes(target.executionEpoch!, 'submittedBytes', text)
         else release()
@@ -2107,7 +2121,17 @@ export class OrbitCore {
     if (retry && previous && retry !== previous.retryReason && previous.state !== 'delivered' && this.panes.isAlive(previous.paneId)) {
       throw new Error(`A atividade de #${previous.paneId} ainda está em execução. Interrompa e feche a tentativa antes de substituí-la, para evitar trabalho concorrente duplicado.`)
     }
-    const ticket = this.store.reserveActivity({ missionId: caller.missionId, key, title: input.title, contractHash: contractHash(input), requestHash, acceptance: normalizedAcceptance(input.accept), retryReason: retry ?? null, assignedBy: caller.id, requiresDelivery: input.cli !== 'shell', dependencies })
+    const ticket = (() => {
+      try {
+        return this.store.reserveActivity({ missionId: caller.missionId, key, title: input.title, contractHash: contractHash(input), requestHash, acceptance: normalizedAcceptance(input.accept), retryReason: retry ?? null, assignedBy: caller.id, requiresDelivery: input.cli !== 'shell', dependencies, cli: input.cli, model: input.model, newEvidence: input.newEvidence })
+      } catch (error) {
+        if (String(error).includes('rescue_exhausted')) {
+          const event = this.missionEvents(caller.missionId, 'rescue').at(-1)
+          if (event) this.broadcast({ type: 'event.added', event })
+        }
+        throw error
+      }
+    })()
     if (ticket.reused) {
       const attempt = ticket.attempt
       const pane = attempt.state === 'delivered' ? attempt.pane : this.store.pane(attempt.paneId) ?? attempt.pane
@@ -2186,7 +2210,7 @@ export class OrbitCore {
     receipt.push(`complexidade: ${difficulty} (${difficultyBy})`)
     if (input.retryReason) receipt.push(`nova execução: ${input.retryReason.trim().slice(0, 600)}`)
     const children = caller.role === 'lead' && (mission?.mode === 'agentica' || mission?.mode === 'squad') ? MAX_CHILDREN : 0
-    const { accept: _, difficulty: __, retryReason: ___, activityId: ____, ...request } = input
+    const { accept: _, difficulty: __, retryReason: ___, activityId: ____, newEvidence: _evidence, ...request } = input
     // A model the lead named stays; otherwise the activity's difficulty picks the tier.
     const tier = difficulty !== 'normal' && !input.model && !input.squadRoleId ? { difficulty, by: difficultyBy } : undefined
     await this.prepareDesignContext({ ...request, missionId: caller.missionId, role: 'crew', cli: input.cli ?? 'claude' })
@@ -2334,7 +2358,7 @@ export class OrbitCore {
 
   /** The lead declares the objective met: the mission shows as ready and the person is told. */
   pendingDeliveries(missionId: string) {
-    return this.store.deliveries(missionId).filter(deliveryPending)
+    return this.store.deliveries(missionId).filter(d => d.status !== 'unverified' && deliveryPending(d))
   }
 
   private currentResult(missionId: string, resultId: string) {
@@ -2355,7 +2379,7 @@ export class OrbitCore {
 
   reviewRequired(missionId: string, activityId: string): boolean {
     const activity = this.store.activityHistory(missionId).activities.find(a => a.id === activityId)
-    if (!activity || !activity.verificationRequired || activity.state === 'waived') return false
+    if (!activity || !activity.verificationRequired || activity.state === 'waived' || this.autoOnly(missionId, activity.activeAttemptId)) return false
     return this.store.activityAttempt(activity.activeAttemptId)?.decision?.difficulty !== 'simples'
   }
 
@@ -2453,8 +2477,13 @@ export class OrbitCore {
     return record
   }
 
+  private autoOnly(missionId: string, attemptId: string): boolean {
+    const results = this.store.activityHistory(missionId).results.filter(r => r.attemptId === attemptId)
+    return results.length > 0 && results.every(r => r.status === 'auto')
+  }
+
   verificationStatus(missionId: string) {
-    return this.store.activityHistory(missionId).activities.filter(a => a.verificationRequired && a.state !== 'waived').map(activity => {
+    return this.store.activityHistory(missionId).activities.filter(a => a.verificationRequired && a.state !== 'waived' && !this.autoOnly(missionId, a.activeAttemptId)).map(activity => {
       try { const result = this.acceptedResult(missionId, activity.id); return { activityId: activity.id, resultId: result.id, valid: true, reason: null } }
       catch (error) { return { activityId: activity.id, resultId: null, valid: false, reason: error instanceof Error ? error.message : String(error) } }
     })
@@ -2571,7 +2600,7 @@ export class OrbitCore {
       return null
     }
     const said = oneLine(lastMessage?.trim() || this.panes.screenText(pane.id, 20)).slice(-1500) || '(nada na tela)'
-    const committed = this.store.commitActivityResult(pane, { status: 'auto', summary: said, evidence: '', details: '', deliveredTo: pane.assignedBy }, { title: `Retorno de #${pane.id} (automático)`, body: `#${pane.id} encerrou o turno sem handoff_submit. Última mensagem:\n\n${said}` }, `[Orbit] #${pane.id} (${pane.title}) encerrou o turno sem entregar. Última mensagem dele: ${said} (Confira a evidência antes de aceitar.)`)
+    const committed = this.store.commitActivityResult(pane, { status: 'auto', summary: said, evidence: '', details: '', deliveredTo: pane.assignedBy }, { title: `Retorno de #${pane.id} (automático)`, body: `#${pane.id} encerrou o turno sem handoff_submit. Última mensagem:\n\n${said}` }, `[Orbit] #${pane.id} (${pane.title}) encerrou o turno sem entregar. Última mensagem dele: ${said} (Retorno informativo, não verificado; não refaça o trabalho por este aviso.)`)
     if (committed.duplicate) return null
     this.panes.setHandoff(pane.id, { status: 'auto' })
     if (committed.event) this.broadcast({ type: 'event.added', event: committed.event })
@@ -2647,6 +2676,8 @@ export class OrbitCore {
     this.dispatchDeliveries(caller.missionId)
     if (committed.duplicate) return { deliveredTo, status, resultId, duplicate: true }
     if (committed.event) this.broadcast({ type: 'event.added', event: committed.event })
+    const updatedMission = this.store.mission(caller.missionId)
+    if (updatedMission) this.broadcast({ type: 'mission.updated', mission: updatedMission })
     this.panes.setHandoff(caller.id, { status })
     if (status === 'progress' && !target) return { deliveredTo: null, status, resultId, duplicate: false }
 

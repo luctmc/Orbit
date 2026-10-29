@@ -52,12 +52,13 @@ const agentView = (p: Pane) => ({
 const ACCEPT = z.array(z.string().min(1).max(300)).max(8).optional().describe('Acceptance criteria: what must hold for the delivery to count. The helper can only deliver done by answering each one')
 const ACCOUNT_FIELD = z.string().min(1).max(160).optional().describe('Exact account id from accounts_status (for example codex for this Mac). Pins the account and its CLI without fallback; omit for automatic selection.')
 const ADMISSION_FIELDS = {
+  newEvidence: z.string().min(1).max(2000).optional().describe('Third rescue: new evidence (at least 20 characters); retryReason must describe a smaller scope.'),
   dependsOn: z.array(z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/)).max(16).optional().describe('Existing activity ids with accepted results required before launch. For a review of an unaccepted result, put its resultId in task instead: depending on its own acceptance creates a cycle. Refused requests are not queued. New prerequisite results/revisions invalidate downstream acceptance.'),
   requireReadOnlySandbox: z.boolean().optional().describe('Legacy compatibility field: requests inspection scope; never changes the default writable process permissions or provider.'),
   readOnly: z.boolean().optional().describe('Describe inspection-only assignment scope. Native file and command capabilities remain enabled by the default Orbit policy.'),
 }
 
-type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: AgentCliForRole; accountId?: string; model?: string; effort?: Effort; accept?: string[]; folder?: string; difficulty?: Difficulty; retryReason?: string; activityId?: string; dependsOn?: string[]; requireReadOnlySandbox?: boolean; readOnly?: boolean }
+type HelperInput = { title?: string; task: string; role?: string; kind?: string; agent?: AgentCliForRole; accountId?: string; model?: string; effort?: Effort; accept?: string[]; folder?: string; difficulty?: Difficulty; retryReason?: string; newEvidence?: string; activityId?: string; dependsOn?: string[]; requireReadOnlySandbox?: boolean; readOnly?: boolean }
 
 /** In a workspace with several folders, a helper can start in the one its work is in. */
 function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
@@ -67,7 +68,7 @@ function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
 
 /** Opens a helper and returns its line of the reply: number, title and the receipt. */
 async function openHelper(core: OrbitCore, caller: Pane, h: HelperInput): Promise<string> {
-  const { pane, receipt } = await core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, accountId: h.accountId, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null, difficulty: h.difficulty ?? null, retryReason: h.retryReason, activityId: h.activityId, dependsOn: h.dependsOn, requireReadOnlySandbox: h.requireReadOnlySandbox, readOnly: h.readOnly })
+  const { pane, receipt } = await core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, accountId: h.accountId, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null, difficulty: h.difficulty ?? null, retryReason: h.retryReason, newEvidence: h.newEvidence, activityId: h.activityId, dependsOn: h.dependsOn, requireReadOnlySandbox: h.requireReadOnlySandbox, readOnly: h.readOnly })
   const activity = core.store.activityHistory(caller.missionId).activities.find(a => a.activeAttemptId === pane.activityAttemptId)
   const review = activity && core.reviewRequired(caller.missionId, activity.id) ? 'required' : 'not-required'
   return `#${pane.id} ${pane.title}\n  ▸ review: '${review}'\n${receipt.map((line) => `  ▸ ${line}`).join('\n')}`
@@ -317,7 +318,8 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       const index = after ? history.results.findIndex(r => r.id === after) : -1
       if (after && index === -1) throw new Error('Cursor de resultado não encontrado nesta missão')
       const results = resultId ? history.results.filter(r => r.id === resultId) : after ? history.results.slice(index + 1, index + 1 + (limit ?? 20)) : history.results.slice(-(limit ?? 20))
-      return results.map(r => ({ resultId: r.id, activityId: r.activityId, attemptId: r.attemptId, state: r.state, status: r.status, from: history.attempts.find(a => a.id === r.attemptId)?.paneId ?? null, at: new Date(r.createdAt).toISOString(), ...(view === 'summary' ? { summary: r.summary, evidenceAvailable: !!r.evidence, detailsAvailable: !!r.details } : { text: [r.summary, r.evidence && `Evidência: ${r.evidence}`, r.details].filter(Boolean).join('\n\n') }) }))
+      const notices = core.store.notifications(caller.missionId)
+      return results.map(r => ({ repeat: notices.some(n => n.resultId === r.id && n.repeat && n.recipient.kind === 'lead'), resultId: r.id, activityId: r.activityId, attemptId: r.attemptId, state: r.state, status: r.status, from: history.attempts.find(a => a.id === r.attemptId)?.paneId ?? null, at: new Date(r.createdAt).toISOString(), ...(view === 'summary' ? { summary: r.summary, evidenceAvailable: !!r.evidence, detailsAvailable: !!r.details } : { text: [r.summary, r.evidence && `Evidência: ${r.evidence}`, r.details].filter(Boolean).join('\n\n') }) }))
     }))
   }
 

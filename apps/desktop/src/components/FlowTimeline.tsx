@@ -12,6 +12,7 @@ const TONE: Record<MissionEventKind, string> = {
   handoff: 'idle',
   browser: 'neutral',
   budget: 'wait',
+  rescue: 'wait',
 }
 
 export function FlowTimeline({ events }: { events: MissionEvent[] }) {
