@@ -7,6 +7,7 @@ import type { AgentCli, MissionMode } from '@orbit/protocol'
 import { OrbitCore } from '../src/core.ts'
 import { buildCommand, type AgentLaunch } from '../src/command.ts'
 import { startServer } from '../src/server.ts'
+import { HarnessMeasurements } from '../src/measurements.ts'
 import { TOOLKIT_POLICY_VERSION } from '../src/toolkitPolicy.ts'
 import { connect, offline, ORIGIN, TOKEN } from './helpers.ts'
 
@@ -17,13 +18,14 @@ const text = (path?: string) => path ? readFileSync(path, 'utf8') : ''
 
 function fixture(root = mkdtempSync(join(tmpdir(), 'orbit-toolkit-journey-'))) {
   const launches: Array<{ launch: AgentLaunch; role: string; task: string; command: string }> = []
-  const core = new OrbitCore({ dataDir: join(root, 'data'), shell: '/bin/sh', browser: null, run: offline, broadcast: () => {},
+  const measurements = new HarnessMeasurements()
+  const core = new OrbitCore({ measurements, dataDir: join(root, 'data'), shell: '/bin/sh', browser: null, run: offline, broadcast: () => {},
     agentCommand: launch => {
       launches.push({ launch, role: text(launch.rolePromptPath), task: text(launch.taskPath), command: buildCommand(launch, '/bin/sh').args.join(' ') })
       return { file: '/bin/sh', args: ['-c', 'printf "LOCAL_PTY_READY\\n"; while read line; do :; done'] }
     } })
   core.setEndpoint('http://127.0.0.1:1')
-  return { core, root, launches }
+  return { core, root, launches, measurements }
 }
 async function mission(f: ReturnType<typeof fixture>, cli: AgentCli, mode: MissionMode = 'livre', model: string | null = null) {
   await f.core.handle({ type: 'workspace.open', path: f.root })
@@ -125,18 +127,40 @@ for (const cli of ['codex', 'claude', 'gemini', 'antigravity'] as const) {
       await f.core.handle({ type: 'pane.restart', paneId: pane.id, resume: true })
       const normal = f.launches.at(-1)!
       assert.equal(normal.task, '')
-      assert.equal(normal.command.includes(normal.launch.rolePromptPath!), cli === 'claude')
+      assert.equal(normal.command.includes(normal.launch.rolePromptPath!), false)
+      assert.equal(normal.launch.refreshRole === true, false)
+      assert.equal(f.measurements.snapshot().at(-1)!.initialBytes, 0)
+      const inherited = JSON.parse(readFileSync(join(f.root, 'data/panes', String(pane.id), 'context.json'), 'utf8'))
+      assert.equal(inherited.toolkit.delivery, 'inherited')
       rmSync(join(f.root, 'data/toolkit-dispatches', `${pane.id}.json`))
       await f.core.handle({ type: 'pane.restart', paneId: pane.id, resume: true })
       const legacy = f.launches.at(-1)!
       const effective = (legacy.command.includes(legacy.launch.rolePromptPath!) ? legacy.role : '') + legacy.task
       assert.equal(count(effective), 1)
+      assert.equal(legacy.launch.refreshRole === true, cli === 'claude')
+      assert.equal(f.measurements.snapshot().at(-1)!.initialBytes, Buffer.byteLength(effective))
       assert.equal(count(legacy.task), cli === 'claude' ? 0 : 1)
       const context = JSON.parse(readFileSync(join(f.root, 'data/panes', String(pane.id), 'context.json'), 'utf8'))
       assert.equal(context.toolkit.delivery, cli === 'claude' ? 'role' : 'session-upgrade')
       assert.equal(context.toolkit.compliance, 'not-observed')
       await f.core.handle({ type: 'pane.restart', paneId: pane.id, resume: true })
       assert.equal(f.launches.at(-1)!.task, '')
+      if (cli === 'claude') {
+        const receiptPath = join(f.root, 'data/toolkit-dispatches', `${pane.id}.json`)
+        const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'))
+        writeFileSync(receiptPath, JSON.stringify({ ...receipt, version: 'politica-anterior' }))
+        await f.core.handle({ type: 'pane.restart', paneId: pane.id, resume: true })
+        const refreshed = f.launches.at(-1)!
+        assert.equal(refreshed.launch.refreshRole, true)
+        assert.ok(refreshed.command.includes(refreshed.launch.rolePromptPath!))
+        assert.equal(count(refreshed.role), 1)
+        assert.equal(refreshed.task, '')
+        const context = JSON.parse(readFileSync(join(f.root, 'data/panes', String(pane.id), 'context.json'), 'utf8'))
+        assert.equal(context.toolkit.delivery, 'role')
+        assert.equal(f.measurements.snapshot().at(-1)!.initialBytes, Buffer.byteLength(refreshed.role))
+        await f.core.handle({ type: 'pane.restart', paneId: pane.id, resume: true })
+        assert.equal(f.launches.at(-1)!.command.includes(refreshed.launch.rolePromptPath!), false)
+      }
     } finally { await f.core.shutdown() }
   })
 }

@@ -21,7 +21,7 @@ export function MessageComposer({ pane, inputRef, active = true, suggestions = [
   const draftKey = `pane-${pane.id}`
   const draft = client.inputDrafts.get(draftKey)
   const [translationAccountId, setTranslationAccountId] = useState(draft?.allowOriginal ? '' : draft?.accountId ?? '')
-  const [dispatch, setDispatch] = useState<'new-task' | 'continue'>(draft?.dispatch ?? (pane.role === 'lead' && pane.cli !== 'shell' ? 'new-task' : 'continue'))
+  const [dispatch, setDispatch] = useState<'new-task' | 'continue'>(draft?.dispatch ?? 'continue')
   const allowOriginal = !translationAccountId
   const [pending, setPending] = useState(client.inputPending(draftKey))
   const [text, setText] = useState(draft?.text ?? '')

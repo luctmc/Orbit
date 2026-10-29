@@ -106,3 +106,22 @@ test('bypass defaults survive fresh/resumed panes and both MCP profiles without 
     assert.match(line, cli === 'gemini' ? /--approval-mode yolo/ : /--dangerously-skip-permissions/)
   }
 })
+
+test('Claude retoma sem reenviar o role e mantém a próxima mensagem', () => {
+  const launch = { cli: 'claude' as const, model: null, rolePromptPath: '/tmp/role.md', taskPath: '/tmp/task.md' }
+  assert.match(buildCommand(launch, '/bin/sh').args[2]!, /--append-system-prompt/)
+  const resumed = buildCommand({ ...launch, resume: '11111111-2222-4333-8444-555555555555' }, '/bin/sh').args[2]!
+  assert.doesNotMatch(resumed, /--append-system-prompt|role\.md/)
+  assert.match(resumed, /--resume/)
+  assert.match(resumed, /task\.md/)
+})
+
+test('Claude reaplica o role no resume somente quando refreshRole é explícito', () => {
+  const launch = { cli: 'claude' as const, model: null, rolePromptPath: '/tmp/role.md', taskPath: '/tmp/task.md', resume: '11111111-2222-4333-8444-555555555555' }
+  for (const refreshRole of [false, true]) {
+    const command = buildCommand({ ...launch, refreshRole }, '/bin/sh').args[2]!
+    assert.equal(command.includes('--append-system-prompt'), refreshRole)
+    assert.equal(command.includes(launch.rolePromptPath), refreshRole)
+    assert.ok(command.includes(launch.taskPath))
+  }
+})

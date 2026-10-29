@@ -31,6 +31,8 @@ export interface AgentLaunch {
   disabledMcp?: string[]
   /** Continue this conversation of the CLI instead of starting one (no first prompt then). */
   resume?: string
+  /** Claude: reaplica o role no resume quando a política do toolkit não foi herdada. */
+  refreshRole?: boolean
   /** Gemini: settings file with Orbit's MCP server and hooks (GEMINI_CLI_SYSTEM_SETTINGS_PATH). */
   systemSettingsPath?: string
   /** Folder with the `orbit` command, put first on the agent's PATH. */
@@ -100,7 +102,8 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
       parts.push('--strict-mcp-config')
     }
     if (launch.settingsPath) parts.push('--settings', shellQuote(launch.settingsPath))
-    if (launch.rolePromptPath) parts.push('--append-system-prompt', fromFile(launch.rolePromptPath))
+    // Retenção comprovada pelo Maestro em Claude 2.1.312 -p; modo interativo não foi testado.
+    if ((!resume || launch.refreshRole) && launch.rolePromptPath) parts.push('--append-system-prompt', fromFile(launch.rolePromptPath))
     // On resume the task is the next message of the same conversation.
     if (launch.taskPath) parts.push('--', fromFile(launch.taskPath))
   } else {
