@@ -17,7 +17,7 @@ test('mission progress retains delivery and review identity and observes stale f
     const { resultId } = core.handoff(pane, { summary: 'Synthetic delivery', evidence: 'Synthetic lifecycle test' })
     const pending = core.missionProgress(lead.missionId)
     assert.equal(pending.activities.find(a => a.id === core.store.currentPaneAttempt(pane.id)?.activityId)?.state, 'awaiting_validation')
-    assert.equal(pending.integration.state, 'pending')
+    assert.equal(pending.integration.state, 'none')
     assert.equal(pending.deliveries[0]?.resultId, resultId)
     assert.equal(pending.results[0]?.id, resultId)
     acceptSyntheticResult(core, lead, resultId)

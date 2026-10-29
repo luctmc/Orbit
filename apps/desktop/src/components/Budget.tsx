@@ -43,7 +43,7 @@ export function BudgetChip({ mission, onEdit }: { mission: Mission; onEdit: () =
   const coverage = budgetStatus(mission.usage,b)
   const text = b.tokens ? `${tokensText(mission.usage.total)} / ${tokensText(b.tokens)}` : coverage.cost !== 'reported' ? `Custo ${coverage.cost === 'partial' ? 'parcial' : 'indisponível'} / US$ ${usd(b.costUsd!)}` : `US$ ${usd(mission.usage.costUsd!)} / ${usd(b.costUsd!)}`
   return (
-    <button type="button" className="budget-chip" data-level={level} onClick={onEdit} title={b.exceeded ? 'Orçamento atingido: o trabalho continua. Clique para ajustar o aviso.' : 'Orçamento da missão'}>
+    <button type="button" className="budget-chip" data-level={level} onClick={onEdit} title={b.exceeded ? b.enforce ? 'Orçamento atingido: novos agentes pausados. Clique para ajustar.' : 'Orçamento atingido: o trabalho continua. Clique para ajustar o aviso.' : 'Orçamento da missão'}>
       <span className="limit__bar" aria-hidden="true"><span style={{ width: `${Number.isFinite(share) ? Math.min(100, share * 100) : 0}%` }} /></span>
       {b.exceeded ? 'Orçamento atingido' : text}
     </button>
@@ -53,16 +53,18 @@ export function BudgetChip({ mission, onEdit }: { mission: Mission; onEdit: () =
 export function BudgetDialog({ mission, onClose }: { mission: Mission; onClose: () => void }) {
   const client = useOrbitClient()
   const [tokens, setTokens] = useState(mission.budget?.tokens ? String(mission.budget.tokens / 1000) : '')
+  const [enforce, setEnforce] = useState(mission.budget?.enforce === true)
   const [cost, setCost] = useState(mission.budget?.costUsd ? String(mission.budget.costUsd) : '')
   return (
     <Dialog eyebrow={mission.title} title="Orçamento da missão" submitLabel="Salvar" onClose={onClose} onSubmit={() => {
       const limits = budgetFrom(tokens, cost)
-      client.send({ type: 'mission.budget', missionId: mission.id, tokens: limits?.tokens ?? null, costUsd: limits?.costUsd ?? null })
+      client.send({ type: 'mission.budget', missionId: mission.id, tokens: limits?.tokens ?? null, costUsd: limits?.costUsd ?? null, enforce })
       onClose()
     }}>
       <p className="muted">Usado até agora: {tokensText(mission.usage.total)} tokens{costText(mission.usage.costUsd) ? ` · ${costText(mission.usage.costUsd)} (Claude)` : ''}.</p>
       <BudgetFields idPrefix="budget" tokens={tokens} cost={cost} onTokens={setTokens} onCost={setCost} />
-      <p className="note">Aos 80% o Orbit avisa. Ao atingir o valor, avisa novamente. O orçamento é informativo: não interrompe turnos, não recusa ferramentas e não impede abrir ou retomar agentes. O custo só considera valores relatados. Custo ausente ou parcial não representa o total gasto. O valor do Claude é uma estimativa de preço de API e pode diferir da cobrança. Deixe os dois em branco para remover os avisos.</p>
+      <label><input type="checkbox" checked={enforce} onChange={e => setEnforce(e.target.checked)} /> Pausar novos agentes ao atingir o limite</label>
+      <p className="note">Aos 80% o Orbit avisa. Ao atingir o valor, avisa novamente. Por padrão, o orçamento é informativo. Com a opção ligada, atingir o limite impede novos agentes até aumentar o limite ou desligar a opção. Turnos, ferramentas e retomadas continuam disponíveis. O custo só considera valores relatados. Custo ausente ou parcial não representa o total gasto. O valor do Claude é uma estimativa de preço de API e pode diferir da cobrança. Deixe os dois em branco para remover os avisos.</p>
     </Dialog>
   )
 }

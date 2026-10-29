@@ -99,7 +99,9 @@ export interface MissionBudget {
   costUsd: number | null
   /** 80% reached (warned once). */
   warned: boolean
-  /** 100% reached: agents were interrupted and Claude's tools are refused until it is raised. */
+  /** Opt-in: recusa novos agentes ao atingir o limite; execuções e ferramentas continuam. */
+  enforce?: boolean
+  /** Limite atingido; informativo quando enforce está desligado. */
   exceeded: boolean
 }
 
@@ -356,6 +358,8 @@ export interface HarnessDecision {
 }
 
 export interface DecisionReceipt {
+  /** Dificuldade efetiva da tentativa; ausente em registros históricos. */
+  difficulty?: Difficulty
   version: 1
   policyRevision: string
   catalogRevision: string | null
@@ -973,7 +977,7 @@ export type ClientMessage =
   /** `isolation: 'worktrees'` gives every agent its own git worktree and branch. */
   | { type: 'mission.create'; requestId?: string; translationAccountId?: string; allowOriginal?: boolean; workspaceId: string; title: string; objective: string; mode: MissionMode; adaptiveLead?: boolean; squadId?: string | null; isolation?: 'worktrees' | null; lead: Omit<SpawnPaneRequest, 'missionId' | 'role'>; cards?: string[]; allowedClis?: AgentCliForRole[]; budget?: { tokens: number | null; costUsd: number | null } | null }
   /** Sets (or clears, with both null) a mission's budget. */
-  | { type: 'mission.budget'; missionId: string; tokens: number | null; costUsd: number | null }
+  | { type: 'mission.budget'; missionId: string; tokens: number | null; costUsd: number | null; enforce?: boolean }
   /** The usage ledger of a month, YYYY-MM (answered to this connection). */
   | { type: 'ledger.get'; month: string }
   /** The mission's report in Markdown (answered to this connection). */

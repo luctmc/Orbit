@@ -68,7 +68,9 @@ function folderField(core: OrbitCore, caller: Pane): Record<string, z.ZodType> {
 /** Opens a helper and returns its line of the reply: number, title and the receipt. */
 async function openHelper(core: OrbitCore, caller: Pane, h: HelperInput): Promise<string> {
   const { pane, receipt } = await core.spawnHelper(caller, { title: h.title ?? '', task: h.task, cli: h.agent, accountId: h.accountId, model: h.model ?? null, effort: h.effort ?? null, squadRoleId: h.role ?? null, taskTypeId: h.kind ?? null, accept: h.accept, folder: h.folder ?? null, difficulty: h.difficulty ?? null, retryReason: h.retryReason, activityId: h.activityId, dependsOn: h.dependsOn, requireReadOnlySandbox: h.requireReadOnlySandbox, readOnly: h.readOnly })
-  return `#${pane.id} ${pane.title}\n${receipt.map((line) => `  ▸ ${line}`).join('\n')}`
+  const activity = core.store.activityHistory(caller.missionId).activities.find(a => a.activeAttemptId === pane.activityAttemptId)
+  const review = activity && core.reviewRequired(caller.missionId, activity.id) ? 'required' : 'not-required'
+  return `#${pane.id} ${pane.title}\n  ▸ review: '${review}'\n${receipt.map((line) => `  ▸ ${line}`).join('\n')}`
 }
 
 /** One MCP server per request (stateless), scoped to the calling pane's identity and role. */

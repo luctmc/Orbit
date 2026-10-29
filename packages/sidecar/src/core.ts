@@ -481,13 +481,20 @@ export class OrbitCore {
 
   // ---- budget ----
 
-  /** Budgets are advisory: retain usage and warnings without interrupting executions. */
+  /** O teto opt-in recusa novas aberturas, preservando execuções e ferramentas. */
+  private assertSpawnBudget(missionId: string): void {
+    const mission = this.store.mission(missionId)
+    if (mission?.budget?.enforce && (mission.budget.exceeded || (budgetUse(mission, mission.budget) ?? -1) >= 1)) {
+      throw new Error('Orçamento atingido: novos agentes pausados. Pergunte ao usuário se deseja aumentar o limite ou desligar o teto.')
+    }
+  }
+
   private checkBudget(mission: Mission): Mission {
     const budget = mission.budget
     if (!budget || budget.exceeded) return mission
     const use = budgetUse(mission, budget)
     if (use !== null && use >= 1) {
-      this.event(mission.id, 'budget', 'Orçamento atingido', `A missão chegou a ${budgetText(mission, budget)}. Agentes e ferramentas continuam disponíveis; o orçamento é informativo.`, null)
+      this.event(mission.id, 'budget', 'Orçamento atingido', `A missão chegou a ${budgetText(mission, budget)}. ${budget.enforce ? 'Novos agentes pausados; pergunte ao usuário se deseja aumentar o limite ou desligar o teto. Agentes em execução e ferramentas continuam disponíveis.' : 'Agentes e ferramentas continuam disponíveis; o orçamento é informativo.'}`, null)
       return this.store.updateMission(mission.id, { budget: { ...budget, warned: true, exceeded: true } }) ?? mission
     }
     if (use !== null && use >= BUDGET_WARN_AT && !budget.warned) {
@@ -1865,7 +1872,7 @@ export class OrbitCore {
       case 'mission.budget': {
         const mission = this.store.mission(message.missionId)
         if (!mission) throw new Error('Missão desconhecida')
-        const limits = budgetLimits({ tokens: message.tokens, costUsd: message.costUsd })
+        const limits = budgetLimits({ tokens: message.tokens, costUsd: message.costUsd, enforce: message.enforce })
         // A new limit is judged against what the mission already used: no warning twice.
         const budget = limits && { ...limits, warned: false, exceeded: false }
         const updated = this.store.updateMission(mission.id, { budget: budget && { ...budget, warned: (budgetUse(mission, budget) ?? -1) >= BUDGET_WARN_AT, exceeded: (budgetUse(mission, budget) ?? -1) >= 1 } })
@@ -2044,6 +2051,7 @@ export class OrbitCore {
   async spawnHelper(caller: Pane, input: HelperRequest): Promise<{ pane: Pane; receipt: string[] }> {
     this.assertCurrent(caller)
     this.activeMission(caller.missionId)
+    this.assertSpawnBudget(caller.missionId)
     if (input.accountId) {
       const account = this.store.account(input.accountId)
       if (!account) throw new Error('Conta desconhecida')
@@ -2116,8 +2124,9 @@ export class OrbitCore {
     }
     let taskTypeId = input.taskTypeId ?? null
     const assessed = assessDifficulty(input.title, input.task)
-    let difficulty: Difficulty = input.difficulty ?? assessed.difficulty
-    let difficultyBy = input.difficulty ? 'líder' : assessed.why
+    const sensitive = /dados pessoais|personal data|migra[cç][aã]o|migration|seguran[cç]a|security/i.test(`${input.title}\n${input.task}`)
+    let difficulty: Difficulty = assessed.difficulty === 'dificil' || sensitive ? 'dificil' : input.difficulty ?? assessed.difficulty
+    let difficultyBy = sensitive ? 'escopo sensível' : assessed.difficulty === 'dificil' ? assessed.why : input.difficulty ? 'líder' : assessed.why
     if ((mission?.mode === 'agentica' || caller.role === 'crew') && !taskTypeId && !input.squadRoleId && !input.cli && !input.model) {
       const text = `${input.title}\n${input.task}`
       const types = this.store.routing().taskTypes
@@ -2140,7 +2149,7 @@ export class OrbitCore {
         if (decided) {
           decisionSource = 'classifier';
           ({ type, via } = { type: decided.type, via: `decidido pelo Haiku${via === 'padrão' ? '' : ` (as palavras: ${via})`}: ${decided.why}` })
-          if (!input.difficulty && assessed.difficulty === 'normal') [difficulty, difficultyBy] = [decided.difficulty, 'Haiku']
+          if (!input.difficulty && !sensitive && assessed.difficulty === 'normal') [difficulty, difficultyBy] = [decided.difficulty, 'Haiku']
         }
         else via = `${via}; o decisor não respondeu`
       }
@@ -2321,13 +2330,24 @@ export class OrbitCore {
     return source
   }
 
+  reviewRequired(missionId: string, activityId: string): boolean {
+    const activity = this.store.activityHistory(missionId).activities.find(a => a.id === activityId)
+    if (!activity || !activity.verificationRequired || activity.state === 'waived') return false
+    return this.store.activityAttempt(activity.activeAttemptId)?.decision?.difficulty !== 'simples'
+  }
+
+  private integrationRequired(missionId: string): boolean {
+    const history = this.store.activityHistory(missionId)
+    return history.activities.filter(a => this.reviewRequired(missionId, a.id) && history.attempts.find(t => t.id === a.activeAttemptId)?.cli !== 'shell').length >= 2
+  }
+
   private integrationState(missionId: string) {
     const mission = this.store.mission(missionId)
     const workspace = this.missionWorkspace(missionId)
     if (!mission || !workspace) throw new Error('Missão ou workspace inexistente')
     const source = sourceRevision(copyRoots([mission.git?.leadPath ?? workspace.path, ...workspace.folders.slice(1)]), [this.dataDir])
     const history = this.store.activityHistory(missionId)
-    const contracts = history.activities.filter(a => a.verificationRequired && a.state !== 'waived').map(a => [a.id, a.revision, a.contractHash, a.activeAttemptId, history.results.findLast(r => r.attemptId === a.activeAttemptId && r.status === 'done')?.id ?? null])
+    const contracts = history.activities.filter(a => this.reviewRequired(missionId, a.id)).map(a => [a.id, a.revision, a.contractHash, a.activeAttemptId, history.results.findLast(r => r.attemptId === a.activeAttemptId && r.status === 'done')?.id ?? null])
     return { source, contractDigest: createHash('sha256').update(JSON.stringify([mission.objective, workspace.instructions, contracts])).digest('hex') }
   }
 
@@ -2342,7 +2362,8 @@ export class OrbitCore {
     const reviews = this.store.verifications(missionId).filter(v => v.resultId === result.id && v.scope === 'result')
     if (reviews.some(v => v.verdict === 'changes_required')) throw new Error(`Resultado rejeitado da atividade ${activityId} exige nova entrega`)
     const review = reviews.at(-1)
-    if (!review || review.verdict !== 'accepted' || review.source.digest !== result.source?.digest) throw new Error(`Falta revisão independente da atividade ${activityId}`)
+    if (this.reviewRequired(missionId, activity.id) && (!review || review.verdict !== 'accepted' || review.source.digest !== result.source?.digest)) throw new Error(`Falta revisão independente da atividade ${activityId}`)
+    if (!result.evidence.trim()) throw new Error(`Falta evidência do executor da atividade ${activityId}`)
     if (currentSource) this.refreshSource(result)
     for (const dependency of activity.dependencies ?? []) {
       const upstream = this.acceptedResult(missionId, dependency.activityId, new Set(seen))
@@ -2421,7 +2442,7 @@ export class OrbitCore {
     const history = this.store.activityHistory(missionId)
     const verifications = this.store.verifications(missionId)
     const validation = this.verificationStatus(missionId)
-    const managed = history.activities.some(a => a.verificationRequired && a.state !== 'waived' && history.attempts.find(t => t.id === a.activeAttemptId)?.cli !== 'shell')
+    const managed = this.integrationRequired(missionId)
     const review = verifications.findLast(v => v.scope === 'integration')
     let integration: MissionProgress['integration'] = { state: managed ? 'pending' : 'none', reviewId: review?.id ?? null, checkedAt: null, reason: managed ? 'Falta revisão final da integração.' : 'Sem resultado gerenciado com revisão final obrigatória.' }
     if (review) {
@@ -2440,7 +2461,12 @@ export class OrbitCore {
     const pending = this.pendingDeliveries(missionId)
     const history = this.store.activityHistory(missionId)
     const unverified = this.verificationStatus(missionId).filter(v => !v.valid && history.attempts.find(a => a.id === history.activities.find(t => t.id === v.activityId)?.activeAttemptId)?.cli !== 'shell')
-    const hasManagedResults = history.activities.some(a => a.verificationRequired && a.state !== 'waived' && history.results.some(r => r.activityId === a.id && r.status === 'done' && history.attempts.find(t => t.id === r.attemptId)?.cli !== 'shell'))
+    const hasManagedResults = this.integrationRequired(missionId)
+    if (!hasManagedResults && !unverified.length) {
+      for (const item of this.verificationStatus(missionId)) {
+        if (item.resultId) this.refreshSource(this.currentResult(missionId, item.resultId).result)
+      }
+    }
     const integration = hasManagedResults ? this.integrationState(missionId) : null
     const integrationReviewed = !integration || (acceptedIntegration?.integration.digest === integration.source.digest && acceptedIntegration.contractDigest === integration.contractDigest) || this.store.verifications(missionId).findLast(v => v.scope === 'integration' && v.integration.digest === integration.source.digest && v.contractDigest === integration.contractDigest)?.verdict === 'accepted'
     return { pending, unverified, integrationReviewed }
@@ -2828,6 +2854,7 @@ export class OrbitCore {
     receipt.push(`permissões: ${AGENT_PERMISSION_POLICY}`)
     const mission = this.store.mission(input.missionId)
     if (!mission || mission.status !== 'active') throw new Error('Missão inexistente ou arquivada')
+    if (!options.resume && !options.keep) this.assertSpawnBudget(mission.id)
     const workspace = this.store.workspace(mission.workspaceId)
     if (!workspace) throw new Error('Workspace da missão sumiu')
 
@@ -3098,6 +3125,7 @@ export class OrbitCore {
           'Capacidades vêm do contrato do adapter, não de certificação de toda versão do provedor',
         ].filter((s): s is string => !!s),
       }, { routing, squad, allowedClis: mission.allowedClis, requireReadOnlySandbox: requiresSandbox })
+      decision.difficulty = options.harnessTask?.difficulty ?? options.tier?.difficulty
       if (options.attemptId) this.store.startingAttempt(options.attemptId, { cli: request.cli, model: request.model, accountId: account?.id ?? null, decision })
       if (request.cli !== 'shell') writeFileSync(join(this.paneDir(id), 'context.json'), JSON.stringify({ version: 1, executionEpoch, role: roleContext, task: taskContext, decision,
         toolkit: { version: TOOLKIT_POLICY_VERSION, delivery: !options.resume || refreshRole ? 'role' : toolkitMigration ? 'session-upgrade' : 'inherited', references: toolkit?.references, compliance: 'not-observed' },
@@ -3329,15 +3357,15 @@ function untilText(at: number): string {
 }
 
 /** Limits from the UI or a template: positive numbers, or null; both null = no budget. */
-function budgetLimits(input: unknown): { tokens: number | null; costUsd: number | null } | null {
+function budgetLimits(input: unknown): Pick<MissionBudget, 'tokens' | 'costUsd' | 'enforce'> | null {
   if (!input || typeof input !== 'object') return null
-  const raw = input as { tokens?: unknown; costUsd?: unknown }
+  const raw = input as { tokens?: unknown; costUsd?: unknown; enforce?: unknown }
   const tokens = typeof raw.tokens === 'number' && Number.isFinite(raw.tokens) && raw.tokens > 0 ? Math.min(Math.round(raw.tokens), 1e10) : null
   const costUsd = typeof raw.costUsd === 'number' && Number.isFinite(raw.costUsd) && raw.costUsd > 0 ? Math.min(Math.round(raw.costUsd * 100) / 100, 1e5) : null
-  return tokens === null && costUsd === null ? null : { tokens, costUsd }
+  return tokens === null && costUsd === null ? null : { tokens, costUsd, ...(typeof raw.enforce === 'boolean' ? { enforce: raw.enforce } : {}) }
 }
 
-function freshBudget(limits: { tokens: number | null; costUsd: number | null } | null): MissionBudget | null {
+function freshBudget(limits: Pick<MissionBudget, 'tokens' | 'costUsd' | 'enforce'> | null): MissionBudget | null {
   return limits && { ...limits, warned: false, exceeded: false }
 }
 
