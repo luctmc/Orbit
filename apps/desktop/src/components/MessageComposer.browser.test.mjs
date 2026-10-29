@@ -3,13 +3,13 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 import { BrowserHost, findBrowser } from '../../../../packages/sidecar/src/browser.ts'
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url))
-const evidence = resolve(root, 'docs/plans/2026-10-18-orbit-compact-task-composer')
+const evidence = await mkdtemp(join(tmpdir(), 'orbit-composer-evidence-'))
 const phase = process.env.COMPOSER_QA_PHASE || 'after'
 test('compact composer preserves routing, keyboard and tools in the real browser', { timeout: 120_000 }, async () => {
   const engine = findBrowser()
@@ -59,9 +59,9 @@ test('compact composer preserves routing, keyboard and tools in the real browser
     assert.equal(await evaluate('document.querySelector("[id^=translator-]").value'), '', 'An original-text draft cannot silently opt into translation')
     await viewport(1280, 800)
     await open()
-    assert.equal(await evaluate('document.querySelector("[id^=dispatch-]").value'), 'new-task')
+    assert.equal(await evaluate('document.querySelector("[id^=dispatch-]").value'), 'continue')
     await click('.composer__mode-help > summary')
-    assert.match(await host.text(mission, 10000).then(r => r.text), /mesma conta do líder/)
+    assert.match(await host.text(mission, 10000).then(r => r.text), /mantendo o contexto atual/)
     await key('Escape')
     assert.equal(await evaluate('document.querySelector(".composer__mode-help").open'), false)
     assert.equal(await evaluate('document.activeElement.matches(".composer__mode-help > summary")'), true)
@@ -71,19 +71,22 @@ test('compact composer preserves routing, keyboard and tools in the real browser
     assert.match(await evaluate('document.querySelector("textarea").value'), /\n/)
     await key('Enter')
     await wait('window.qa.submissions.length === 1')
-    assert.equal(await evaluate('window.qa.submissions[0].dispatch'), 'new-task')
+    assert.equal(await evaluate('window.qa.submissions[0].dispatch'), 'continue')
     assert.equal(await evaluate('window.qa.submissions[0].allowOriginal'), true)
     assert.equal(await evaluate('Boolean(window.qa.submissions[0].translationAccountId)'), false)
     await wait('document.activeElement.matches("textarea") && !document.querySelector("[id^=dispatch-]").disabled')
-    await key('Tab', 8); await key('Tab', 8)
+    for (let i = 0; i < 8 && !await evaluate('document.activeElement.id === "dispatch-76"'); i++) await key('Tab', 8)
     assert.equal(await evaluate('document.activeElement.id'), 'dispatch-76', 'Mode is reachable by keyboard')
     assert.equal(await evaluate('window.qa.submissions.length'), 1, 'Keyboard mode navigation never submits')
-    // The mission driver cannot select the native macOS popup reliably. Verify its unchanged
-    // change boundary and payload separately; native popup selection remains an explicit QA gap.
-    await evaluate('document.querySelector("[id^=dispatch-]").value = "continue"; document.querySelector("[id^=dispatch-]").dispatchEvent(new Event("change", {bubbles:true}))')
-    await click('textarea'); await host.type(mission, 'Continuar no contexto', 'test')
+    await click('textarea'); await host.type(mission, 'Segunda mensagem ao líder', 'test')
     await click('.composer__send'); await wait('window.qa.submissions.length === 2')
-    assert.equal(await evaluate('window.qa.submissions[1].dispatch'), 'continue')
+    assert.deepEqual(await evaluate('window.qa.submissions.map(s => ({paneId:s.paneId, dispatch:s.dispatch}))'), [
+      { paneId: 76, dispatch: 'continue' }, { paneId: 76, dispatch: 'continue' },
+    ])
+    // O dispatch explícito continua salvo no rascunho e pode voltar para continue.
+    await evaluate('document.querySelector("[id^=dispatch-]").value = "new-task"; document.querySelector("[id^=dispatch-]").dispatchEvent(new Event("change", {bubbles:true}))')
+    await wait('window.qa.client.inputDrafts.get("pane-76").dispatch === "new-task"')
+    await evaluate('document.querySelector("[id^=dispatch-]").value = "continue"; document.querySelector("[id^=dispatch-]").dispatchEvent(new Event("change", {bubbles:true}))')
     await click('.composer__language > summary')
     await evaluate('document.querySelector("[id^=translator-]").value = "codex-acc-2"; document.querySelector("[id^=translator-]").dispatchEvent(new Event("change", {bubbles:true}))')
     await key('Escape')
@@ -114,6 +117,21 @@ test('compact composer preserves routing, keyboard and tools in the real browser
     assert.equal(await evaluate('document.querySelector(".composer__leader").getBoundingClientRect().height >= 44'), true)
     await click('.composer__leader'); await wait('document.querySelector("textarea").id === "message-76"')
     await wait('document.querySelector("textarea").value.includes("Texto ditado")')
+    await evaluate(`(async () => {
+      const React = await import('/node_modules/.vite/deps/react.js');
+      const { createElement } = React.default ?? React;
+      const ReactDOM = await import('/node_modules/.vite/deps/react-dom_client.js');
+      const { createRoot } = ReactDOM.default ?? ReactDOM;
+      const { OrbitProvider } = await import('/apps/desktop/src/orbit/context.tsx');
+      const { MessageComposer } = await import('/apps/desktop/src/components/MessageComposer.tsx');
+      window.qa.client.inputDrafts.set('pane-76', { text: 'Rascunho explícito', dispatch: 'new-task' });
+      const container = document.createElement('div'); container.id = 'saved-draft-test'; document.body.append(container);
+      const pane = window.qa.client.getState().panes[0];
+      createRoot(container).render(createElement(OrbitProvider, { client: window.qa.client },
+        createElement(MessageComposer, { pane, inputRef: { current: null } })));
+    })()`)
+    await wait('Boolean(document.querySelector("#saved-draft-test select[id^=dispatch-]"))')
+    assert.equal(await evaluate('document.querySelector("#saved-draft-test select[id^=dispatch-]").value'), 'new-task', 'Saved explicit dispatch survives mounting')
     await open('?suggest')
     await click('textarea'); await host.type(mission, 'Verifique', 'test')
     await wait('Boolean(document.querySelector(".composer__suggestion"))')

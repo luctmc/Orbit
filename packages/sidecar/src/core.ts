@@ -3033,10 +3033,12 @@ export class OrbitCore {
     const toolProfile = request.cli === 'claude' || request.cli === 'codex' ? this.store.settings().agentToolProfile ?? 'orbit' : 'inherit'
     const lead = this.missionPanes(mission.id).find((p) => p.role === 'lead')
     const toolkit = request.cli === 'shell' ? null : this.toolkitContext(mission.id)
-    // Claude reattaches the current role as a system append. Other adapters skip role.md on resume.
-    // Migrate old/unknown conversations once; normal resumes never prepend the contract again.
+    // Claude 2.1.312 -p reteve o role na prova do Maestro; modo interativo não foi testado.
+    // Sem receipt válido, Claude reaplica o role; os demais adapters migram pela mensagem.
+    const toolkitInherited = !options.resume || this.toolkitDispatches.inherited(id, request.cli, account?.id ?? null, options.resume)
+    const refreshRole = request.cli === 'claude' && !toolkitInherited
     const toolkitMigration = toolkit && options.resume && request.cli !== 'claude'
-      && !this.toolkitDispatches.inherited(id, request.cli, account?.id ?? null, options.resume)
+      && !toolkitInherited
       ? toolkit.text : ''
     const roleContext = this.contextPack(mission.id, [
       { id: 'default-working-agreements', text: toolkit?.text ?? '', required: true },
@@ -3073,6 +3075,7 @@ export class OrbitCore {
     // Capabilities never depend on assignment scope, role or legacy persisted sandbox hints.
     if (request.cli === 'codex') launch.sandbox = 'danger-full-access'
     if (options.resume) launch.resume = options.resume
+    if (refreshRole) launch.refreshRole = true
 
     let pane: Pane
     let processStarted = false
@@ -3097,7 +3100,7 @@ export class OrbitCore {
       }, { routing, squad, allowedClis: mission.allowedClis, requireReadOnlySandbox: requiresSandbox })
       if (options.attemptId) this.store.startingAttempt(options.attemptId, { cli: request.cli, model: request.model, accountId: account?.id ?? null, decision })
       if (request.cli !== 'shell') writeFileSync(join(this.paneDir(id), 'context.json'), JSON.stringify({ version: 1, executionEpoch, role: roleContext, task: taskContext, decision,
-        toolkit: { version: TOOLKIT_POLICY_VERSION, delivery: !options.resume || request.cli === 'claude' ? 'role' : toolkitMigration ? 'session-upgrade' : 'inherited', references: toolkit?.references, compliance: 'not-observed' },
+        toolkit: { version: TOOLKIT_POLICY_VERSION, delivery: !options.resume || refreshRole ? 'role' : toolkitMigration ? 'session-upgrade' : 'inherited', references: toolkit?.references, compliance: 'not-observed' },
       }, null, 2), { mode: 0o600 })
       const launchStarted = performance.now()
       pane = this.panes.spawn({
@@ -3127,7 +3130,7 @@ export class OrbitCore {
       processStarted = true
       if (pane.pid) this.store.bindExecutionProcess(id, executionEpoch, pane.pid)
       if (toolkit) this.toolkitDispatches.dispatched(id, request.cli, account?.id ?? null, options.resume ?? null, executionEpoch)
-      this.measurements?.start(pane, performance.now() - launchStarted, request.cli === 'shell' ? 0 : (options.resume ? 0 : roleContext.bytes) + taskContext.bytes, request.cli === 'shell' ? 0 : (options.resume ? 0 : roleContext.sourceBytes) + taskContext.sourceBytes)
+      this.measurements?.start(pane, performance.now() - launchStarted, request.cli === 'shell' ? 0 : (options.resume && !refreshRole ? 0 : roleContext.bytes) + taskContext.bytes, request.cli === 'shell' ? 0 : (options.resume && !refreshRole ? 0 : roleContext.sourceBytes) + taskContext.sourceBytes, request.cli === 'shell' ? 0 : roleContext.bytes)
     } catch (error) {
       if (processStarted) this.panes.forget(id)
       else this.store.releaseExecution(id, executionEpoch)
