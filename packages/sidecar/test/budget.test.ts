@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type { AgentLaunch } from '../src/command.ts'
 import { startServer } from '../src/server.ts'
 import { connect, offline, ORIGIN, TOKEN } from './helpers.ts'
@@ -14,6 +16,7 @@ test('a mission budget warns at 80%, keeps agents and tools running at 100% and 
   const fake = (_launch: AgentLaunch, shell: string) => ({ file: shell, args: ['-c', `exec ${shell}`] })
   const server = await startServer({ port: 0, token: TOKEN, allowedOrigins: [ORIGIN], dataDir, shell: '/bin/sh', run: offline, agentCommand: fake, browser: null, scheduler: false })
   const ui = connect(server.port)
+  let mcp: Client | null = null
   try {
     await ui.opened
     ui.send({ type: 'workspace.open', path: realpathSync(mkdtempSync(join(tmpdir(), 'orbit-ws-'))) })
@@ -51,11 +54,28 @@ test('a mission budget warns at 80%, keeps agents and tools running at 100% and 
     assert.equal(server.core.liveTerminalCount(), 2)
     assert.equal(server.core.store.pane(pane.id)!.pid, before.pid)
 
+    mcp = new Client({ name: 'budget-test', version: '1' })
+    await mcp.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.port}/mcp`), { requestInit: { headers: { authorization: `Bearer ${token}` } } }))
+    const textOf = (result: unknown) => (result as { content: Array<{ text?: string }> }).content.map(c => c.text ?? '').join('\n')
+    ui.send({ type: 'mission.budget', missionId: mission.id, tokens: 50_000, costUsd: null, enforce: true })
+    await ui.next('mission.updated', m => m.mission.budget?.enforce === true)
+    const denied = await mcp.callTool({ name: 'agent_spawn', arguments: { title: 'Recusado MCP', task: 'Run npm test', agent: 'claude' } })
+    assert.equal(denied.isError, true)
+    assert.match(textOf(denied), /pergunte ao usuário/i)
+    const batch = await mcp.callTool({ name: 'agent_spawn_many', arguments: { helpers: [{ title: 'A', task: 'Run npm test', agent: 'claude' }, { title: 'B', task: 'Run npm test', agent: 'claude' }] } })
+    assert.equal((textOf(batch).match(/não abriu/g) ?? []).length, 2)
+    assert.equal(server.core.liveTerminalCount(), 2)
+    assert.equal((await post('/hooks', tool)).status, 204, 'teto não bloqueia ferramentas de agentes existentes')
+
     // Raising it resets the warning; existing executions never lost their permissions.
     ui.send({ type: 'mission.budget', missionId: mission.id, tokens: 200_000, costUsd: null })
     const raised = await ui.next('mission.updated', (m) => m.mission.budget?.tokens === 200_000)
     assert.deepEqual([raised.mission.budget!.warned, raised.mission.budget!.exceeded], [false, false])
     assert.equal((await post('/hooks', tool)).status, 204)
+    const simple = await mcp.callTool({ name: 'agent_spawn', arguments: { title: 'Operação', task: 'Run npm test', agent: 'claude' } })
+    assert.match(textOf(simple), /review: 'not-required'/)
+    const normal = await mcp.callTool({ name: 'agent_spawn', arguments: { title: 'Feature', task: 'Implement feature', agent: 'claude' } })
+    assert.match(textOf(normal), /review: 'required'/)
 
     ui.send({ type: 'mission.budget', missionId: mission.id, tokens: null, costUsd: null })
     await ui.next('mission.updated', (m) => m.mission.id === mission.id && m.mission.budget === null)
@@ -66,7 +86,33 @@ test('a mission budget warns at 80%, keeps agents and tools running at 100% and 
     assert.deepEqual(entries.map((e) => [e.missionId, e.cli, e.model, e.tokens]), [[mission.id, 'claude', 'opus', 60_000]])
     assert.equal(entries[0]!.costUsd, 0.6)
   } finally {
+    await mcp?.close()
     ui.ws.close()
     await server.close()
   }
+})
+
+
+test('teto opt-in recusa apenas novos agentes e libera ao elevar ou desligar', async () => {
+  const { fixture } = await import('./r2Fixture.ts')
+  const { core, lead, pane } = await fixture()
+  try {
+    const mission = core.store.mission(lead.missionId)!
+    core.store.addUsage(mission.id, 'claude', { input: 100, output: 0, cacheRead: 0, cacheWrite: 0, total: 100, costUsd: null })
+    await core.handle({ type: 'mission.budget', missionId: mission.id, tokens: 100, costUsd: null, enforce: true })
+    const before = core.liveTerminalCount()
+    await assert.rejects(core.spawnHelper(lead, { title: 'Recusado', task: 'Run npm test', cli: 'claude', model: null }), /pergunte ao usuário/i)
+    const attempts = core.store.activityHistory(mission.id).attempts.length
+    const batch = await Promise.allSettled([1, 2].map(i => core.spawnHelper(lead, { title: `Batch ${i}`, task: 'Run npm test', cli: 'claude', model: null })))
+    assert.ok(batch.every(result => result.status === 'rejected'))
+    assert.equal(core.store.activityHistory(mission.id).attempts.length, attempts, 'recusa antes de reservar atividades')
+    assert.equal(core.liveTerminalCount(), before)
+    assert.equal(core.store.pane(pane.id)?.executionEpoch, pane.executionEpoch)
+    assert.ok(core.missionProgress(mission.id), 'leitura permanece disponível')
+    core.handoff(pane, { summary: 'Continua', evidence: 'synthetic check: exit 0, ok' })
+    await core.handle({ type: 'mission.budget', missionId: mission.id, tokens: 200, costUsd: null, enforce: true })
+    assert.ok((await core.spawnHelper(lead, { title: 'Liberado', task: 'Read fixture', cli: 'claude', model: null })).pane.pid)
+    await core.handle({ type: 'mission.budget', missionId: mission.id, tokens: 100, costUsd: null, enforce: false })
+    assert.ok((await core.spawnHelper(lead, { title: 'Informativo', task: 'Read fixture', cli: 'claude', model: null })).pane.pid)
+  } finally { await core.shutdown() }
 })

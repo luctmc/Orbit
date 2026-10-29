@@ -60,6 +60,6 @@ test('review persistence fails closed and rolls back acceptance when disk commit
     const saved = core.verifyResult(lead, review)
     assert.equal(core.verifyResult(lead, review).id, saved.id)
     assert.equal(core.verificationStatus(lead.missionId)[0]!.valid, true)
-    assert.throws(() => core.missionReady(lead, 'No final review', false), /código integrado/)
+    assert.ok(core.missionReady(lead, 'Atividade revisada sem integração obrigatória', false).readyAt)
   } finally { rmSync(blocked, { recursive: true, force: true }); await core.shutdown() }
 })
