@@ -12,7 +12,7 @@ test('default role budgets preserve independent review, recovery and user langua
   for (const text of [lead, worker]) {
     for (const required of ['Brazilian Portuguese', 'result_inspect', 'verification_submit', 'changes_required', 'delivery_ack']) assert.ok(text.includes(required), required)
   }
-  for (const required of ['activityId', 'retryReason', 'readOnly', 'requireReadOnlySandbox', 'dependsOn', 'mission_briefing', 'readySummary']) assert.ok(lead.includes(required), required)
+  for (const required of ['activityId', 'retryReason', 'readOnly', 'requireReadOnlySandbox', 'dependsOn', 'mission_briefing', 'readySummary', 'briefId', 'pane.quiet']) assert.ok(lead.includes(required), required)
 })
 
 test('coordination and factory methods preserve gates with proportional checks', () => {

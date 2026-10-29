@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fixture } from './r2Fixture.ts'
 
@@ -38,9 +38,18 @@ test('large optional memory is retrievable while task acceptance and user instru
     assert.ok(page.nextOffset)
     const end = core.readContext(lead, sha256, page.nextOffset!, 16000)
     assert.equal(end.nextOffset, null)
-    const { pane } = await core.spawnHelper(lead, { title: 'Long contract', task: 'x'.repeat(19999), cli: 'claude', readOnly: true, model: null, accept: ['Do not publish. Preserve the complete contract.'] })
+    const fullTask = 'x'.repeat(19999)
+    const { pane, receipt } = await core.spawnHelper(lead, { title: 'Long contract', task: fullTask, cli: 'claude', readOnly: true, model: null, accept: ['Do not publish. Preserve the complete contract.'] })
     const task = readFileSync(join(root, 'data/panes', String(pane.id), 'task.md'), 'utf8')
-    assert.ok(task.length > 20000)
+    // F10 keeps the complete assignment in a private brief; the launch carries its pointer.
+    const briefId = receipt.find(line => line.startsWith('brief: '))?.slice(7)
+    assert.match(briefId ?? '', /^[a-f0-9]{12}$/)
+    const briefPath = join(root, 'data', 'briefs', lead.missionId, `${briefId}.md`)
+    assert.equal(readFileSync(briefPath, 'utf8'), fullTask)
+    assert.equal(statSync(briefPath).mode & 0o777, 0o600)
+    assert.ok(task.includes(briefPath))
+    assert.ok(task.length < 1200)
+    assert.match(task, /handoff_submit/)
     assert.match(task, /Do not publish\. Preserve the complete contract\./)
     assert.match(readFileSync(join(root, 'data/panes', String(pane.id), 'role.md'), 'utf8'), /Never publish this repository/)
     const metrics = JSON.parse(readFileSync(join(root, 'data/panes', String(pane.id), 'context.json'), 'utf8'))

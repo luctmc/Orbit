@@ -9,6 +9,7 @@ const TONE: Record<MissionEventKind, string> = {
   'pane.spawned': 'live',
   'pane.exited': 'off',
   'pane.waiting': 'wait',
+  'pane.quiet': 'neutral',
   handoff: 'idle',
   browser: 'neutral',
   budget: 'wait',

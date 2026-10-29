@@ -61,6 +61,7 @@ export interface ExecutionMeasurement {
   firstPtyOutputMs: number | null
   /** Bytes do role preparado localmente; não comprovam retenção ou cobrança no provedor. */
   preparedRoleBytes: number
+  initialBytesBeforePointer: number
   initialBytes: number
   sourceBytes: number
   contextReadBytes: number
@@ -75,9 +76,9 @@ export interface ExecutionMeasurement {
 /** Optional, in-memory measurement. No content, model calls or per-chunk disk writes. */
 export class HarnessMeasurements {
   private readonly records = new Map<string, { record: ExecutionMeasurement; clock: number; totals: TokenUsage }>()
-  start(pane: Pane, spawnMs: number, initialBytes: number, sourceBytes: number, preparedRoleBytes = 0): void {
+  start(pane: Pane, spawnMs: number, initialBytes: number, sourceBytes: number, preparedRoleBytes = 0, pointerBytesSaved = 0): void {
     if (!pane.executionEpoch) return
-    this.records.set(pane.executionEpoch, { clock: performance.now() - spawnMs, totals: {input:0,output:0,cacheRead:0,cacheWrite:0,total:0,costUsd:null}, record: { usageSources: [], epoch: pane.executionEpoch, paneId: pane.id, missionId: pane.missionId, cli: pane.cli, model: pane.model, role: pane.role, spawnMs, firstPtyOutputMs: null, initialBytes, sourceBytes, preparedRoleBytes, contextReadBytes: 0, skillReadBytes: 0, submittedBytes: 0, submittedMessages: 0, ptyAcceptedWakeups: 0, reports: 0, usage: unknownUsage() } })
+    this.records.set(pane.executionEpoch, { clock: performance.now() - spawnMs, totals: {input:0,output:0,cacheRead:0,cacheWrite:0,total:0,costUsd:null}, record: { usageSources: [], epoch: pane.executionEpoch, paneId: pane.id, missionId: pane.missionId, cli: pane.cli, model: pane.model, role: pane.role, spawnMs, firstPtyOutputMs: null, initialBytesBeforePointer: initialBytes + pointerBytesSaved, initialBytes, sourceBytes, preparedRoleBytes, contextReadBytes: 0, skillReadBytes: 0, submittedBytes: 0, submittedMessages: 0, ptyAcceptedWakeups: 0, reports: 0, usage: unknownUsage() } })
   }
   output(epoch: string): void {
     const item = this.records.get(epoch)

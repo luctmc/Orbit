@@ -1,5 +1,6 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { createHash } from 'node:crypto'
+import { mkdirSync, rmSync, writeFileSync, readFileSync, chmodSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import type { AgentCli, Effort } from '@orbit/protocol'
 import { shellQuote, type AgentLaunch } from './command.ts'
 
@@ -90,4 +91,32 @@ export function removeAgentFiles(paneDir: string): void {
 
 export function hookCommand(nodePath: string, scriptPath: string): string {
   return `${shellQuote(nodePath)} ${shellQuote(scriptPath)}`
+}
+
+/** Long assignments remain private and addressable without resending their content. */
+export const BRIEF_POINTER_MIN = 1200
+export function helperBrief(dataDir: string, missionId: string, task?: string, briefId?: string): { id: string; path: string; task: string } | null {
+  if (!/^[a-zA-Z0-9_-]+$/.test(missionId)) throw new Error('Missão inválida para brief')
+  const directory = resolve(dataDir, 'briefs', missionId)
+  if (briefId !== undefined) {
+    if (!/^[a-f0-9]{12}$/.test(briefId)) throw new Error('Identificador de brief inválido')
+    const path = join(directory, `${briefId}.md`)
+    let content: string
+    try { content = readFileSync(path, 'utf8') }
+    catch { throw new Error('Brief não encontrado nesta missão') }
+    if (createHash('sha256').update(content).digest('hex').slice(0, 12) !== briefId) throw new Error('Conteúdo do brief não corresponde ao identificador')
+    return { id: briefId, path, task: content }
+  }
+  if (!task?.trim()) throw new Error('Informe uma tarefa ou briefId')
+  if (task.length <= BRIEF_POINTER_MIN) return null
+  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  const id = createHash('sha256').update(task).digest('hex').slice(0, 12)
+  const path = join(directory, `${id}.md`)
+  try { writeFileSync(path, task, { mode: 0o600, flag: 'wx' }) }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+    if (readFileSync(path, 'utf8') !== task) throw new Error('Colisão de conteúdo no brief')
+  }
+  chmodSync(path, 0o600)
+  return { id, path, task }
 }
