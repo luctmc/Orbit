@@ -2,7 +2,7 @@ import type { HarnessModule, ActivityRecord, MissionProgress as Progress, Pane }
 import { CLI_LABEL, EFFORT_LABEL } from '../orbit/labels.ts'
 
 const STATE: Record<ActivityRecord['state'], string> = { reserved: 'Preparada', running: 'Em execução', stopped: 'Interrompida', blocked: 'Bloqueada', awaiting_validation: 'Aguardando revisão', accepted: 'Aceita', waived: 'Dispensada' }
-const RECEIPT = { persisted: 'Resultado salvo; envio pendente', pty_accepted: 'Enviado ao terminal; confirmação pendente', agent_acknowledged: 'Recebimento confirmado pelo agente' }
+const RECEIPT = { persisted: 'Resultado salvo; envio pendente', pty_accepted: 'Enviado ao terminal; confirmação pendente', agent_acknowledged: 'Recebimento confirmado pelo agente', superseded: 'Substituído por nova tentativa' }
 const DECISION = { benchmark: 'Benchmark comparável', explicit: 'Escolha explícita', rule: 'Regra do maestro', classifier: 'Classificador', fallback: 'Alternativa do maestro' }
 const MODULE: Record<HarnessModule, string> = { inspect: 'Inspecionar', recover: 'Retomar com evidências', reproduce: 'Reproduzir', implement: 'Implementar', review: 'Revisar', verify: 'Verificar', deliver: 'Entregar' }
 const HARNESS = { measured: 'Escolha por benchmark', fallback: 'Amostra insuficiente; usando regra do maestro', explicit: 'Sua escolha preservada' }

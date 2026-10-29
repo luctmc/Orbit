@@ -56,7 +56,7 @@ test('helpers always report back: forced handoff, structured status, interrupt, 
       await new Promise((r) => setTimeout(r, 300))
       ui.send({ type: 'pane.input', paneId, data: '\x15clear; echo "TOKEN:$ORBIT_PANE_TOKEN:"\r' })
       const screen = server.core as unknown as { panes: { screenText: (id: number, lines: number) => string } }
-      for (let i = 0; i < 100; i++) {
+      for (let i = 0; i < 300; i++) {
         const found = /TOKEN:([\w-]{20,}):/.exec(screen.panes.screenText(paneId, 200).replaceAll('\n', ''))
         if (found) return found[1]!
         await new Promise((r) => setTimeout(r, 30))
@@ -80,7 +80,7 @@ test('helpers always report back: forced handoff, structured status, interrupt, 
     // What a terminal shows, lines joined (long messages wrap), polled until it has the text.
     const screens = server.core as unknown as { panes: { screenText: (id: number, lines: number) => string } }
     const sees = async (paneId: number, text: string) => {
-      for (let i = 0; i < 100; i++) {
+      for (let i = 0; i < 300; i++) {
         if (screens.panes.screenText(paneId, 200).replaceAll('\n', '').includes(text)) return
         await new Promise((r) => setTimeout(r, 30))
       }

@@ -471,7 +471,7 @@ export interface DeliveryNotice {
   resultId: string
   recipient: { kind: 'lead' } | { kind: 'pane'; paneId: number }
   text: string
-  state: 'persisted' | 'pty_accepted' | 'agent_acknowledged'
+  state: 'persisted' | 'pty_accepted' | 'agent_acknowledged' | 'superseded'
   deliveries: Array<{ paneId: number; executionEpoch: string; at: number }>
   acknowledgedBy: { paneId: number; executionEpoch: string; at: number } | null
   createdAt: number

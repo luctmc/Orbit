@@ -306,7 +306,14 @@ export class Store {
   }
 
   notifications(missionId?: string, pendingOnly = false): DeliveryNotice[] {
-    return structuredClone((this.state.notifications ?? []).filter(n => (!missionId || n.missionId === missionId) && (!pendingOnly || n.state !== 'agent_acknowledged')))
+    return structuredClone((this.state.notifications ?? []).filter(n => (!missionId || n.missionId === missionId) && (!pendingOnly || (n.state !== 'agent_acknowledged' && n.state !== 'superseded'))))
+  }
+
+  private supersedeAttemptNotices(attemptId: string): void {
+    const results = new Set(this.state.activityLedger!.results.filter(r => r.attemptId === attemptId).map(r => r.id))
+    for (const notice of this.state.notifications ?? []) {
+      if (results.has(notice.resultId) && notice.state === 'persisted' && !notice.deliveries.length) notice.state = 'superseded'
+    }
   }
 
   private noticeRecipient(paneId: number | null): DeliveryNotice['recipient'] {
@@ -317,7 +324,7 @@ export class Store {
   markNoticeAccepted(id: string, pane: Pane): void {
     this.transaction(() => {
       const notice = this.state.notifications?.find(n => n.id === id && n.missionId === pane.missionId)
-      if (!notice || !pane.executionEpoch || this.executionEpoch(pane.id) !== pane.executionEpoch) return
+      if (!notice || notice.state === 'superseded' || !pane.executionEpoch || this.executionEpoch(pane.id) !== pane.executionEpoch) return
       if (!notice.deliveries.some(d => d.paneId === pane.id && d.executionEpoch === pane.executionEpoch)) notice.deliveries.push({ paneId: pane.id, executionEpoch: pane.executionEpoch, at: Date.now() })
       if (notice.state !== 'agent_acknowledged') notice.state = 'pty_accepted'
     })
@@ -327,6 +334,7 @@ export class Store {
     return this.transaction(() => {
       const notice = this.state.notifications?.find(n => n.id === id && n.missionId === pane.missionId)
       if (!notice || !pane.executionEpoch || this.executionEpoch(pane.id) !== pane.executionEpoch) throw new Error('Aviso ou execução inválida')
+      if (notice.state === 'superseded') throw new Error('Este aviso foi substituído por uma nova tentativa')
       const current = this.pane(pane.id)
       if (!current || (notice.recipient.kind === 'lead' ? current.role !== 'lead' : current.id !== notice.recipient.paneId)) throw new Error('Só o destinatário atual confirma este aviso')
       if (!notice.deliveries.some(d => d.paneId === pane.id && d.executionEpoch === pane.executionEpoch)) throw new Error('Este aviso ainda não foi enviado a esta execução')
@@ -390,6 +398,7 @@ export class Store {
       activity.dependencies = structuredClone(input.dependencies ?? [])
       activity.verificationRequired = true
       activity.deliveryId = null
+      if (activity.activeAttemptId) this.supersedeAttemptNotices(activity.activeAttemptId)
       const attempt = createAttempt(ledger, activity, this.state.nextPaneId++, input.retryReason)
       if (input.requestHash) attempt.requestHash = input.requestHash
       // A crash before opening the terminal still leaves required work, so ready cannot skip it.
@@ -442,9 +451,15 @@ export class Store {
 
   private appendResult(pane: Pane, input: Pick<ActivityResult, 'status' | 'summary' | 'evidence' | 'details' | 'deliveredTo'> & Pick<Partial<ActivityResult>, 'source'>) {
     const ledger = this.state.activityLedger!
+    const current = this.currentPaneAttempt(pane.id)
+    if (!this.initializing && pane.activityAttemptId !== undefined && pane.activityAttemptId !== current?.id) throw new Error('stale_dispatch: A tentativa foi substituída; consulte a atribuição atual.')
     const activity = this.ensureActivity(pane)
     const attempt = ledger.attempts.find(a => a.id === activity.activeAttemptId)!
     const payload = { ...input, activityId: activity.id, attemptId: attempt.id, activityRevision: attempt.activityRevision }
+    if (input.status === 'auto') {
+      const real = ledger.results.findLast(r => r.attemptId === attempt.id && r.status !== 'auto')
+      if (real) return { result: structuredClone(real), duplicate: true }
+    }
     const digest = resultDigest(payload)
     const existing = ledger.results.find(r => r.attemptId === attempt.id && r.digest === digest)
     if (existing) return { result: structuredClone(existing), duplicate: true }
@@ -980,8 +995,20 @@ export class Store {
   }
 
   /** Start or continue required work; completed assignments remain immutable history. */
-  assignDelivery(pane: Pane, acceptance: string[]): void {
-    this.transaction(() => this.assignDeliveryRecord(pane, acceptance))
+  assignDelivery(pane: Pane, acceptance: string[], replace = false): void {
+    this.transaction(() => {
+      const previous = this.state.deliveryObligations?.findLast(d => d.missionId === pane.missionId && d.paneId === pane.id)
+      const attempt = this.currentPaneAttempt(pane.id)
+      if (replace && attempt) this.supersedeAttemptNotices(attempt.id)
+      if (replace && previous && deliveryPending(previous)) {
+        previous.status = 'superseded'
+        previous.updatedAt = Date.now()
+        const activity = this.state.activityLedger!.activities.find(a => a.deliveryId === previous.id)
+        if (activity) activity.state = 'waived'
+      }
+      this.assignDeliveryRecord(pane, acceptance)
+      if (previous?.status === 'superseded') previous.replacementId = this.state.deliveryObligations?.findLast(d => d.paneId === pane.id)?.id ?? null
+    })
   }
 
   private assignDeliveryRecord(pane: Pane, acceptance: string[]): void {
@@ -1040,16 +1067,18 @@ export class Store {
 
   /** An explicit retry replaces unresolved work; keep its history and point to the new owner. */
   replaceDelivery(missionId: string, previousPaneId: number, nextPaneId: number, by: number, reason: string): void {
-    const records = this.state.deliveryObligations ?? []
-    const replacement = records.findLast(d => d.missionId === missionId && d.paneId === nextPaneId)
-    if (!replacement) return
-    const at = Date.now()
-    for (const record of records) {
-      if (record.missionId === missionId && record.paneId === previousPaneId && deliveryPending(record)) {
-        Object.assign(record, { status: 'superseded', replacementId: replacement.id, updatedAt: at, waiver: { by, reason, at } })
+    this.transaction(() => {
+      const records = this.state.deliveryObligations ?? []
+      const replacement = records.findLast(d => d.missionId === missionId && d.paneId === nextPaneId)
+      if (!replacement) return
+      const at = Date.now()
+      for (const record of records) {
+        if (record.missionId === missionId && record.paneId === previousPaneId && deliveryPending(record)) {
+          Object.assign(record, { status: 'superseded', replacementId: replacement.id, updatedAt: at, waiver: { by, reason, at } })
+        }
       }
-    }
-    this.flush()
+      for (const attempt of this.state.activityLedger!.attempts.filter(a => a.paneId === previousPaneId)) this.supersedeAttemptNotices(attempt.id)
+    })
   }
 
   removePane(id: number): void {

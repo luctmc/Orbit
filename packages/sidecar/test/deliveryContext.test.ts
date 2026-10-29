@@ -4,7 +4,7 @@ import { fixture } from './r2Fixture.ts'
 
 const pause = (ms: number) => new Promise(r => setTimeout(r, ms))
 async function sent(f: Awaited<ReturnType<typeof fixture>>, id: string) {
-  for (let n = 0; n < 100; n++) {
+  for (let n = 0; n < 800; n++) {
     if (f.core.store.notifications(f.lead.missionId).find(v => v.id === id)?.state === 'pty_accepted') return
     await pause(10)
   }

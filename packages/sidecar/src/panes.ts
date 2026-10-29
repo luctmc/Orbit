@@ -36,6 +36,7 @@ export class SubmitError extends Error {
   constructor(message:string,uncertain=false){super(message);this.uncertain=uncertain}
 }
 export interface SubmitOptions {
+  prepare?: () => string | null
   requestId?:string
   signal?:AbortSignal
   queueTimeoutMs?:number
@@ -43,6 +44,7 @@ export interface SubmitOptions {
   rejected?:(error:SubmitError)=>void
 }
 interface SubmitItem {
+  prepare?: () => string | null
   text:string
   accepted?:()=>void
   id:string
@@ -235,7 +237,7 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
     if ([...live.queue,...live.active ?? []].some(item => item.id === requestId)) return reject('Pedido já presente na fila; consulte o recibo existente')
     if (live.queue.length >= SUBMIT_LIMITS.maxQueued || live.queue.reduce((sum,item)=>sum+Buffer.byteLength(item.text),0)+bytes > SUBMIT_LIMITS.maxQueuedBytes) return reject('Fila do terminal cheia (32 pedidos / 256 KiB); aguarde ou cancele um pedido')
     const queueMs = Math.max(1,Math.min(60_000,options.queueTimeoutMs ?? SUBMIT_LIMITS.queueTimeoutMs))
-    const item:SubmitItem={text:clean,accepted,id:requestId,rejected:options.rejected,cleanup:()=>{},expiresAt:Date.now()+queueMs,dispatchTimeoutMs:Math.max(1,Math.min(60_000,options.dispatchTimeoutMs ?? SUBMIT_LIMITS.dispatchTimeoutMs))}
+    const item:SubmitItem={prepare:options.prepare,text:clean,accepted,id:requestId,rejected:options.rejected,cleanup:()=>{},expiresAt:Date.now()+queueMs,dispatchTimeoutMs:Math.max(1,Math.min(60_000,options.dispatchTimeoutMs ?? SUBMIT_LIMITS.dispatchTimeoutMs))}
     const cancel = () => this.cancelSubmit(id,requestId)
     const timer = setTimeout(() => this.removeQueued(live,item,new SubmitError('Prazo de espera na fila esgotado; nenhum texto foi enviado')),queueMs)
     options.signal?.addEventListener('abort',cancel,{once:true})
@@ -272,6 +274,13 @@ export class PaneManager extends EventEmitter<PaneManagerEvents> {
   private pasteAndSubmit(id: number, live: LivePane, items: LivePane['queue']): boolean {
     const now=Date.now()
     items=items.filter(item=>{item.cleanup();if(item.expiresAt<=now){this.rejectItem(item,new SubmitError('Prazo da fila esgotado; nenhum texto foi enviado'));return false}item.dispatchedAt=now;return true})
+    items = items.filter(item => {
+      if (!item.prepare) return true
+      const text = item.prepare()
+      if (text === null) { this.rejectItem(item, new SubmitError('Entrega substituída antes do envio')); return false }
+      item.text = text.replaceAll('\x1b', '')
+      return true
+    })
     if(!items.length){live.submitTimer=null;return true}
     live.active=items
     const text = items.map(item => item.text).join('\n\n')

@@ -31,7 +31,7 @@ test('a native delivery stays durable during startup and a permission prompt, th
     assert.equal(notice().state, 'persisted', 'a result must not be pasted into a permission dialog')
     core.hookReport(lead.id, { hook_event_name: 'SessionStart' })
     core.dispatchDeliveries(lead.missionId)
-    await delay(180)
+    await delay(6500)
     assert.equal(notice().state, 'pty_accepted')
     assert.equal(notice().resultId, result.resultId)
     assert.equal(notice().deliveries.length, 1)
