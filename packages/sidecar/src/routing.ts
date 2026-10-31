@@ -57,7 +57,7 @@ const row = (id: string, name: string, description: string, model: string | null
 
 /** The table Orbit ships with; the user edits a copy in Settings. */
 export const DEFAULT_ROUTING: Routing = {
-  // Start cheap, rise with a concrete reason: the difficulty gate (assessDifficulty) lifts hard work to Opus.
+  // Start cheap; only an explicit hard tier promotes the model. Risk rules suggest higher effort.
   lead: { cli: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' },
   taskTypes: [
     row('operacao', 'Execução e build', 'Executar o projeto, instalar dependências ou verificar build e testes existentes.', 'claude-haiku-5-5', 'low'),

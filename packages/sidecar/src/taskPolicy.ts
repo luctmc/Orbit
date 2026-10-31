@@ -11,7 +11,7 @@ export function designWork(text: string): DesignWork {
 /** Seats are drawn from the local catalog. Quota is per account, never per provider. */
 export function automaticTaskSeat(input: {
   catalogForAccount?: (account: AccountRoom['account']) => import('@orbit/protocol').CliCatalog
-  catalog: Catalog; preferred: AgentSeat; alternate?: AgentSeat | null; difficulty: Difficulty;
+  catalog: Catalog; preferred: AgentSeat; alternate?: AgentSeat | null; difficulty: Difficulty; difficultyExplicit?: boolean;
   design: DesignWork; allowed: AgentCliForRole[]; rooms: (cli: AgentCliForRole) => AccountRoom[];
 }): (AgentSeat & { accountId?: string }) | null {
   const { catalog, preferred, alternate, difficulty, design, allowed, rooms } = input
@@ -50,7 +50,7 @@ export function automaticTaskSeat(input: {
       seat = { cli, model: model.id, effort }
     } else {
       const levels = (model: string | null) => list.find(m => m.id === model)?.efforts ?? catalog[cli].efforts
-      const tier = seatForDifficulty(cli, base.model, base.effort, difficulty, levels, catalog[cli])
+      const tier = seatForDifficulty(cli, base.model, base.effort, difficulty, levels, catalog[cli], input.difficultyExplicit === true)
       // A null model means the CLI's configured default, which can be an expensive frontier model.
       const normal = list.find(m => /sol|sonnet|workhorse/i.test(`${m.id} ${m.description}`))
       seat = { cli, model: list.some(m => m.id === tier.model) ? tier.model : normal?.id ?? null, effort: tier.effort }

@@ -119,6 +119,8 @@ export interface CoreOptions {
   browser?: BrowserEngine | null
 }
 
+const SENSITIVE_SCOPE = /dados pessoais|personal data|migra[cç][aã]o|migration|seguran[cç]a|security/i
+
 /** Orbit's domain logic: UI messages, MCP tool calls and hook reports all land here. */
 export class OrbitCore {
   private readonly appPlugins:AppPlugins
@@ -480,11 +482,13 @@ export class OrbitCore {
     for (const card of templateCards(message.cards)) this.addCard(mission.id, 'modelo', { title: card })
     // Agentic and squad leads start working on the objective right away.
     const task = mission.mode !== 'livre' && mission.objective ? `${objectiveTask(mission)}\n\n${RESPONSE_LANGUAGE}` : null
-    const assessment = assessDifficulty(mission.title, mission.objective)
+    const assessment = SENSITIVE_SCOPE.test(`${mission.title}\n${mission.objective}`)
+      ? { difficulty: 'dificil' as const, why: 'escopo sensível' }
+      : assessDifficulty(mission.title, mission.objective)
     const automatic = message.adaptiveLead === true && mission.mode === 'agentica'
     // Adapt resources within the requested provider; never replace the person's leader/account.
     const lead = message.lead
-    this.spawn({ ...lead, missionId: mission.id, role: 'lead', task }, automatic ? { tier: { difficulty: assessment.difficulty, by: assessment.why } } : {})
+    this.spawn({ ...lead, missionId: mission.id, role: 'lead', task }, automatic ? { tier: { difficulty: assessment.difficulty, by: assessment.why, explicit: false } } : {})
     return mission
   }
 
@@ -2200,9 +2204,9 @@ export class OrbitCore {
     }
     let taskTypeId = input.taskTypeId ?? null
     const assessed = assessDifficulty(input.title, input.task)
-    const sensitive = /dados pessoais|personal data|migra[cç][aã]o|migration|seguran[cç]a|security/i.test(`${input.title}\n${input.task}`)
+    const sensitive = SENSITIVE_SCOPE.test(`${input.title}\n${input.task}`)
     let difficulty: Difficulty = assessed.difficulty === 'dificil' || sensitive ? 'dificil' : input.difficulty ?? assessed.difficulty
-    let difficultyBy = sensitive ? 'escopo sensível' : assessed.difficulty === 'dificil' ? assessed.why : input.difficulty ? 'líder' : assessed.why
+    let difficultyBy = input.difficulty === 'dificil' ? 'líder' : sensitive ? 'escopo sensível' : assessed.difficulty === 'dificil' ? assessed.why : input.difficulty ? 'líder' : assessed.why
     if ((mission?.mode === 'agentica' || caller.role === 'crew') && !taskTypeId && !input.squadRoleId && !input.cli && !input.model) {
       const text = `${input.title}\n${input.task}`
       const types = this.store.routing().taskTypes
@@ -2242,8 +2246,8 @@ export class OrbitCore {
     if (input.retryReason) receipt.push(`nova execução: ${input.retryReason.trim().slice(0, 600)}`)
     const children = caller.role === 'lead' && (mission?.mode === 'agentica' || mission?.mode === 'squad') ? MAX_CHILDREN : 0
     const { accept: _, difficulty: __, retryReason: ___, activityId: ____, newEvidence: _evidence, initialTask: _initialTask, ...request } = input
-    // A model the lead named stays; otherwise the activity's difficulty picks the tier.
-    const tier = difficulty !== 'normal' && !input.model && !input.squadRoleId ? { difficulty, by: difficultyBy } : undefined
+    // Risk still gates review; only an explicit hard tier may promote the model family.
+    const tier = difficulty !== 'normal' && !input.model && !input.squadRoleId ? { difficulty, by: difficultyBy, explicit: input.difficulty === 'dificil' } : undefined
     await this.prepareDesignContext({ ...request, missionId: caller.missionId, role: 'crew', cli: input.cli ?? 'claude' })
     // Classification may have awaited a model; enforce the sub-helper cap at launch too.
     if (caller.role === 'crew' && this.childSlots(caller) === 0) throw new Error('Não há vaga para outro sub-ajudante; aguarde ou feche um que entregou')
@@ -2947,7 +2951,7 @@ export class OrbitCore {
   }
 
   /** `resume` continues that conversation of the CLI; `opened` replaces the flow's "Agente #N aberto". */
-  private spawn(input: SpawnPaneRequest, options: { resume?: string; permissionUpgrade?: boolean; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; attemptId?: string; explicitCli?: AgentCli; tier?: { difficulty: Difficulty; by: string }; keep?: AgentSeat; requireReadOnlySandbox?: boolean; decisionSource?: DecisionReceipt['source']; harnessTask?: { difficulty: Difficulty; retry: boolean }; taskBeforePointer?: string } = {}): Pane {
+  private spawn(input: SpawnPaneRequest, options: { resume?: string; permissionUpgrade?: boolean; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; attemptId?: string; explicitCli?: AgentCli; tier?: { difficulty: Difficulty; by: string; explicit: boolean }; keep?: AgentSeat; requireReadOnlySandbox?: boolean; decisionSource?: DecisionReceipt['source']; harnessTask?: { difficulty: Difficulty; retry: boolean }; taskBeforePointer?: string } = {}): Pane {
     if (this.stopping) throw new Error('Orbit está encerrando; novas execuções não são admitidas')
     const receipt = options.receipt ?? []
     receipt.push(`permissões: ${AGENT_PERMISSION_POLICY}`)
@@ -2979,6 +2983,9 @@ export class OrbitCore {
       : taskType
         ? { ...input, role: 'crew', cli: taskType.cli, model: taskType.model, effort: taskType.effort }
         : { ...input }
+    if (squadRole) receipt.push(`tier explícito: papel do squad (${squadRole.name}); modelo ${request.model ?? 'padrão'}`)
+    else if (input.model) receipt.push(`tier explícito: líder; modelo nomeado ${input.model}`)
+    else if (taskType) receipt.push(`${taskType.automatic !== true ? 'tier explícito: tabela' : 'modelo base: tabela'}; ${request.model ?? 'padrão'}`)
     let fallbackUsed = false
     if (options.explicitCli && request.cli !== options.explicitCli) {
       request.cli = options.explicitCli
@@ -3013,7 +3020,7 @@ export class OrbitCore {
     ) : undefined
     const work = request.role === 'crew' && !['operacao', 'documentacao'].includes(taskType?.id ?? '') ? designWork(`${taskType?.id ?? ''} ${input.title} ${assignmentText}`) : null
     const automatic = !harnessExplicit && (!harness?.selected || work) && request.role === 'crew' && (taskType || work) && this.catalog
-      ? automaticTaskSeat({ catalogForAccount: this.harnessMode === 'live' ? account => this.currentAccountCatalog(account) : undefined, catalog: this.catalog, preferred: { cli: request.cli as AgentCliForRole, model: request.model, effort: request.effort ?? null }, alternate: taskType?.alt, difficulty: options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal', design: work, allowed: mission.allowedClis, rooms: cli => this.rooms(cli, this.liveByAccount()).filter(r => this.accountStatus.get(r.account.id)?.loggedIn === true && !this.accountStatus.get(r.account.id)?.busy) }) : null
+      ? automaticTaskSeat({ catalogForAccount: this.harnessMode === 'live' ? account => this.currentAccountCatalog(account) : undefined, catalog: this.catalog, preferred: { cli: request.cli as AgentCliForRole, model: request.model, effort: request.effort ?? null }, alternate: taskType?.alt, difficulty: options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal', difficultyExplicit: options.tier?.explicit === true, design: work, allowed: mission.allowedClis, rooms: cli => this.rooms(cli, this.liveByAccount()).filter(r => this.accountStatus.get(r.account.id)?.loggedIn === true && !this.accountStatus.get(r.account.id)?.busy) }) : null
     // Once a catalog is available, autonomous staffing needs a valid quota and compatible model.
     if (!harnessExplicit && request.role === 'crew' && (taskType || work) && !automatic && (!harness?.selected || work)) throw new Error('Roteamento automático: nenhuma conta com quota válida e modelo compatível. Atualize os limites em Contas ou escolha uma conta explicitamente.')
     const measured = work ? automatic : harness?.selected ?? automatic
@@ -3092,17 +3099,23 @@ export class OrbitCore {
       chosen = choice.account
       receipt.push(`conta: ${choice.reason}`)
     }
-    // The difficulty moves the seat within the chosen CLI: a cheaper model or a stronger one.
+    // Suggested risk raises effort only; an explicit hard tier may also change the model family.
     if (chosen?.kind === 'api' && chosen.model && !input.model) request.model = chosen.model
-    if (!measured && (!harnessExplicit || request.role === 'lead') && options.tier && request.cli !== 'shell' && !(chosen?.kind === 'api' && chosen.model)) {
+    const applyTier = !harnessExplicit || request.role === 'lead' || (options.tier?.difficulty === 'dificil' && !input.model && !input.effort && !input.squadRoleId && !options.keep)
+    if (!measured && applyTier && options.tier && request.cli !== 'shell' && !(chosen?.kind === 'api' && chosen.model)) {
       const selectedCatalog = chosen && this.harnessMode !== 'simulated' ? this.currentAccountCatalog(chosen) : this.catalog?.[request.cli]
       const selectionCatalog = selectedCatalog ? { ...this.catalog, [request.cli]: selectedCatalog } as Catalog : this.catalog
-      const seat = seatForDifficulty(request.cli, request.model ?? null, request.effort ?? null, options.tier.difficulty, (model) => effortsFor(selectionCatalog, request.cli, model), selectedCatalog)
+      const seat = seatForDifficulty(request.cli, request.model ?? null, request.effort ?? null, options.tier.difficulty, (model) => effortsFor(selectionCatalog, request.cli, model), selectedCatalog, options.tier.explicit)
       if (seat.changed) {
         request.model = seat.model
         request.effort = request.role === 'crew' ? input.effort ?? seat.effort : seat.effort
         receipt.push(`dificuldade: ${options.tier.difficulty === 'dificil' ? 'difícil' : 'simples'} (${options.tier.by}) → ${[seat.model ?? 'modelo padrão', seat.effort && `esforço ${EFFORT_LABEL[seat.effort]}`].filter(Boolean).join(', ')}`)
       }
+    }
+    if (options.tier?.difficulty === 'dificil') {
+      receipt.push(options.tier.explicit
+        ? `tier explícito: líder; modelo ${request.model ?? 'padrão'}; esforço ${request.effort ?? 'padrão'}`
+        : `sugestão da regra: ${options.tier.by}; modelo mantido (tabela); esforço ${request.effort ?? 'padrão'}. Passe difficulty: "dificil" para subir o modelo.`)
     }
     const account = chosen ?? this.accountFor(request.cli, request.accountId)
     if (account) receipt.push(`conta efetiva: ${account.name} (${account.id})${input.accountId ? ' · escolha explícita, sem substituição' : ' · automática'}`)

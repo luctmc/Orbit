@@ -119,9 +119,10 @@ const LADDER: Partial<Record<AgentCliForRole, { cheap: string; strong: string }>
 /**
  * The seat for an activity's difficulty: simple goes to the CLI's cheaper model (or less effort),
  * hard to its stronger model with more effort (or just more effort). `efforts` are the levels the
- * resulting model takes, in order; an effort it does not take is dropped.
+ * resulting model takes, in order; an effort it does not take is dropped. With `explicit: false`,
+ * hard risk keeps the model and only suggests supported effort up to high.
  */
-export function seatForDifficulty(cli: AgentCliForRole, model: string | null, effort: Effort | null, difficulty: Difficulty, effortsOf: (model: string | null) => readonly Effort[], catalog?: CliCatalog): { model: string | null; effort: Effort | null; changed: boolean } {
+export function seatForDifficulty(cli: AgentCliForRole, model: string | null, effort: Effort | null, difficulty: Difficulty, effortsOf: (model: string | null) => readonly Effort[], catalog?: CliCatalog, explicit = true): { model: string | null; effort: Effort | null; changed: boolean } {
   if (difficulty === 'normal') return { model, effort, changed: false }
   const ladder = LADDER[cli]
   // Catalog order is the CLI's preference. Select known families only, never invent a Codex id.
@@ -129,9 +130,10 @@ export function seatForDifficulty(cli: AgentCliForRole, model: string | null, ef
   const family = difficulty === 'simples' ? /luna|mini|haiku|flash|fast and affordable|lightweight|cost.efficient/i : /astra|opus|frontier|most demanding/i
   const candidate = !ladder ? candidates.find((m) => family.test(`${m.id} ${m.description}`)) : undefined
   const proposed = candidate?.id ?? (ladder ? (difficulty === 'simples' ? ladder.cheap : ladder.strong) : model)
-  const nextModel = catalog && proposed && !candidates.some(m => m.id === proposed) ? model : proposed
-  const levels = effortsOf(nextModel)
-  let nextEffort: Effort | null = effort
+  const nextModel = difficulty === 'dificil' && !explicit ? model : catalog && proposed && !candidates.some(m => m.id === proposed) ? model : proposed
+  const advertised = effortsOf(nextModel)
+  const levels = difficulty === 'dificil' && !explicit ? advertised.filter(e => e === 'low' || e === 'medium' || e === 'high') : advertised
+  let nextEffort: Effort | null = difficulty === 'dificil' && !explicit && effort && !levels.includes(effort) ? null : effort
   if (levels.length) {
     if (difficulty === 'simples') nextEffort = levels[0]!
     else {
