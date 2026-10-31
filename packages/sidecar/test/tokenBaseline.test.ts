@@ -21,7 +21,7 @@ test('baseline mede o catálogo real, mensagens continuam no líder e resume dis
     return { roundBefore: roundPrior, roundSavedBytes: roundFixedBefore - fixedAfter, before: prior, after, fixedBefore, fixedAfter, savedBytes: fixedBefore - fixedAfter, savedPercent: 100 * (fixedBefore - fixedAfter) / fixedBefore }
   })
   assert.equal(result.components[0]!.toolCount, 40)
-  assert.equal(result.components[0]!.mcpTools.bytes, 26882, 'catálogo do líder permanece intacto')
+  assert.equal(result.components[0]!.mcpTools.bytes, 27000, 'catálogo do líder muda só pelo texto do unverified (F18) e pelo campo ledger (F16)')
   assert.equal(result.components[1]!.toolCount, 14)
   assert.ok(result.components[1]!.mcpTools.bytes < 15502)
   assert.ok(comparison[1]!.savedPercent >= 30, 'a remoção dos grupos reduz o contexto fixo real da fixture')

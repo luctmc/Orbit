@@ -18,6 +18,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { budgetStatus, ATTACHMENT_LIMITS, ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type MemoryEntry, type MemoryKind, MEMORY_KINDS, MEMORY_LIMITS, type Difficulty, type AgentSeat, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { Attachments } from './attachments.ts'
+import { delegationLines } from './missionLedger.ts'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { bundledCatalog, codexDisabledMcp, gateTool, missionSkills, readSkill, scanCatalog, type SkillPolicy } from './skills.ts'
@@ -933,6 +934,8 @@ export class OrbitCore {
     const archived = this.store.delegations(missionId).filter((d) => !panes.some((p) => p.id === d.pane.id))
     if (archived.length) out.push(`## Closed activities (reuse completed results)\n\n${archived.map((d) => `- #${d.pane.id} ${d.pane.title}: ${d.pane.handoffStatus ?? 'stopped without delivery'}${d.result ? `; ${d.result.summary}; evidence: ${d.result.evidence}` : ''}`).join('\n')}`)
     const history = this.store.activityHistory(missionId)
+    const ledger = delegationLines({ ...history, verifications: this.store.verifications(missionId), deliveries: this.store.deliveries(missionId) })
+    if (ledger.length) out.push(`## Delegations\n\n${ledger.join('\n')}`)
     const repeats = this.store.notifications(missionId, true).filter(n => n.repeat && n.recipient.kind === 'lead')
     if (repeats.length) out.push(`## Receipts awaiting ACK\n\n${repeats.map(n => `- ${n.id}; resultId: ${n.resultId}; repeat: true; confirme com delivery_ack, sem refazer o trabalho.`).join('\n')}`)
     const results = history.results.slice(-8)
@@ -949,7 +952,7 @@ export class OrbitCore {
     const flow = this.missionEvents(missionId).filter((e) => e.kind !== 'handoff').slice(-25)
     if (flow.length) out.push(`## Recent flow\n\n${flow.map((e) => `- ${new Date(e.at).toISOString().slice(5, 16).replace('T', ' ')} ${e.title}${e.kind === 'pane.quiet' ? ` — ${e.body}` : ''}`).join('\n')}`)
     out.push('## How to carry on\n\nHelpers that owe a result now deliver it to you. Write important decisions down with mission_note. Submitted results are not independently validated. Pending required results block mission_ready. Retrieve referenced details with context_read; handoff_list supports resultId and after cursors. To read this briefing again, call mission_briefing.')
-    const optional = /^(## Project memory|## Board|## Closed activities|## Results received|## End of the previous|## Recent flow)/
+    const optional = /^(## Project memory|## Board|## Closed activities|## Delegations|## Results received|## End of the previous|## Recent flow)/
     return this.contextPack(missionId, out.map((text, i) => ({ id: `briefing-${i}`, text, required: !optional.test(text), maxBytes: 3000 })), 18_000).text
   }
 

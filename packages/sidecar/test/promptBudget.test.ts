@@ -9,6 +9,9 @@ test('default role budgets preserve independent review, recovery and user langua
   const worker = crewRole(mission, { id: 2 }, {}, undefined, DEFAULT_ROUTING.taskTypes.find(t => t.id === 'revisao'))
   assert.ok(Buffer.byteLength(lead) <= 6000, `leader bytes: ${Buffer.byteLength(lead)}`)
   assert.ok(Buffer.byteLength(worker) <= 2800, `worker bytes: ${Buffer.byteLength(worker)}`)
+  assert.match(lead, /unverified = NOT_PROVEN/)
+  assert.match(lead, /nunca accepted/)
+  assert.match(lead, /não é changes_required/)
   for (const text of [lead, worker]) {
     for (const required of ['Brazilian Portuguese', 'result_inspect', 'verification_submit', 'changes_required', 'delivery_ack']) assert.ok(text.includes(required), required)
   }
