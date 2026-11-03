@@ -149,7 +149,7 @@ export function PaneView({ pane, selected, onSelect, suggestions = [], suggestio
       {!alive && pane.cli !== 'shell' && (
         <div className="ended" role="status">
           <span className="ended__text">{pane.sessionId ? 'O agente encerrou. A conversa continua salva na CLI.' : 'O agente encerrou.'}</span>
-          {pane.sessionId && <button type="button" className="btn btn--sm btn--primary" onClick={() => client.send({ type: 'pane.restart', paneId: pane.id, resume: true })}>Retomar conversa</button>}
+          {pane.sessionId && <button type="button" className="btn btn--sm btn--ghost" onClick={() => client.send({ type: 'pane.restart', paneId: pane.id, resume: true })}>Retomar conversa</button>}
           <button type="button" className="btn btn--sm btn--ghost" onClick={() => client.send({ type: 'pane.restart', paneId: pane.id, resume: false })}>Conversa nova</button>
         </div>
       )}

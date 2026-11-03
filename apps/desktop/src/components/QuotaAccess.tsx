@@ -50,7 +50,7 @@ export function QuotaAccess({ account, limits, status, compact = false }: { acco
     <div className="quota-access__windows" title={limits ? limitReadLabel(limits, now) : 'Sem leitura confirmada'}>
       {([['5 h', limits?.fiveHour], ['Semana', limits?.weekly]] as const).map(([name, window]) => {
         const view = window && limits ? limitWindowView(window, limits, now) : null
-        return <div key={name}><span>{name}</span><strong>{view?.percent !== null && view?.percent !== undefined ? `${Math.round(view.percent)}% ${view.metric}` : 'Sem leitura atual'}</strong>{window && !compact && <small>{window.resetsAt <= now ? 'Aguardando nova leitura' : `Renova ${fullDate(window.resetsAt)}`}</small>}</div>
+        return <div key={name}><span>{name}</span><strong title={view?.remaining != null ? `${view.remaining}% restante` : undefined}>{view?.used != null ? `${Math.round(view.used)}% usado` : 'Sem leitura atual'}</strong>{window && !compact && <small>{window.resetsAt <= now ? 'Aguardando nova leitura' : `Renova ${fullDate(window.resetsAt)}`}</small>}</div>
       })}
     </div>
     <QuotaDetails compact={compact} label={`Renovação e resets${limits?.resetCredits && fresh ? ` · ${limits.resetCredits.availableCount} ${limits.resetCredits.availableCount === 1 ? 'disponível' : 'disponíveis'}` : ''}`}>

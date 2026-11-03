@@ -32,7 +32,7 @@ export function DeleteDialog({ eyebrow, title, gone, kept, options = [], confirm
       onConfirm(choices)
       onClose()
     }}>
-      <p className="delete__warn">Não dá para desfazer.</p>
+      <p className="delete__warn">Não dá para desfazer</p>
       <div className="delete__lists">
         <div>
           <div className="eyebrow">Sai do Orbit</div>

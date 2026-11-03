@@ -1,8 +1,8 @@
 import type { AccountLimits, RateWindow } from '@orbit/protocol'
 
 export const LIMIT_FRESH_MS = 90000
-/** Match each provider's own meter so the same quota has the same visible percentage. */
-export const limitMetric = (cli: AccountLimits['cli'] | undefined) => cli === 'claude' ? 'usado' : 'restante'
+/** One metric for every provider, so the same quota never shows opposite numbers on two screens. */
+export const limitMetric = (_cli?: AccountLimits['cli']) => 'usado' as const
 
 export function limitWindowView(window: RateWindow | null, limits: Pick<AccountLimits, 'updatedAt' | 'refreshError'> & Partial<Pick<AccountLimits, 'cli'>>, now: number) {
   const label = !window || window.windowMinutes === 300 ? '5 h' : window.windowMinutes === 10080 ? 'semana' : window.windowMinutes % 60 === 0 ? `${window.windowMinutes / 60} h` : `${window.windowMinutes} min`

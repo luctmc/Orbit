@@ -20,6 +20,10 @@ export function Dialog({ title, eyebrow, onClose, onSubmit, submitLabel, childre
   useEffect(() => {
     const dialog = ref.current
     dialog?.showModal()
+    // showModal() focuses the close button first; start on the first field instead.
+    if (dialog && document.activeElement === dialog.querySelector('.dialog__head .icon-btn')) {
+      dialog.querySelector<HTMLElement>('.dialog__body :is(input:not([type="hidden"]), select, textarea):not(:disabled)')?.focus()
+    }
     return () => dialog?.close()
   }, [])
 
