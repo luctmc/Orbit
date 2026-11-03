@@ -3,9 +3,10 @@ import assert from 'node:assert/strict'
 import {mkdtempSync,readFileSync,writeFileSync,statSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
+import {fileURLToPath} from 'node:url'
 import {ensureRuntimeDaemon,startRuntimeBridge} from '../src/runtimeDaemon.ts'
 import {connect,ORIGIN,TOKEN} from './helpers.ts'
-const entry=new URL('./fixtures/runtime-daemon.mjs',import.meta.url).pathname
+const entry=fileURLToPath(new URL('./fixtures/runtime-daemon.mjs',import.meta.url))
 
 test('UI/sidecar bridges restart while daemon PTY, epoch, token and durable history stay intact',async()=>{
  const dataDir=mkdtempSync(join(tmpdir(),'orbit-daemon-'))
