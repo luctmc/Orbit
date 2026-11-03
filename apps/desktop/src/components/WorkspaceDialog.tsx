@@ -42,7 +42,7 @@ function FolderListField({ folders, onChange }: { folders: string[]; onChange: (
             <li key={f} className="folder-row">
               <FolderIcon size={15} />
               <span className="folder-row__text">
-                <span className="folder-row__name">{baseName(f)}{i === 0 && <span className="chip chip--main">principal</span>}</span>
+                <span className="folder-row__name"><span className="folder-row__label" title={baseName(f)}>{baseName(f)}</span>{i === 0 && <span className="chip chip--main">principal</span>}</span>
                 <span className="folder-row__path" title={f}>{pathText(f)}</span>
               </span>
               {i > 0 && (
@@ -62,7 +62,7 @@ function FolderListField({ folders, onChange }: { folders: string[]; onChange: (
         )}
         <label className="sr-only" htmlFor={`${id}-typed`}>Caminho absoluto de uma pasta</label>
         <input id={`${id}-typed`} className="mono" value={typed} onChange={(e) => setTyped(e.target.value)} spellCheck={false}
-          placeholder={isTauri ? 'ou cole um caminho: /Users/voce/projetos/api' : '/Users/voce/projetos/meu-app'}
+          placeholder={isTauri ? 'Ou cole o caminho da pasta' : '/Users/voce/projetos/meu-app'}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add([typed]); setTyped('') } }} />
         <button type="button" className="btn btn--ghost btn--sm" disabled={!typed.trim() || folders.length >= WORKSPACE_LIMITS.folders} onClick={() => { add([typed]); setTyped('') }}><PlusIcon size={14} />Adicionar</button>
       </div>

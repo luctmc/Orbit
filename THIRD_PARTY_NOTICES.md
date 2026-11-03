@@ -115,3 +115,15 @@ text panels, worker-local commands and sanitized status events, explicit hash-pi
 and no Node/native/filesystem/network authority. Its iframe/Web Worker host is an Orbit
 implementation, not a port of Orca's Node plugin worker. The MIT notice above applies to the
 manifest adaptation (Copyright (c) 2026 Lovecast Inc.). No third-party plugin is shipped.
+
+## unslop — Damir Sokolovsky (@heydamir)
+
+Source: https://github.com/heydamir/unslop
+Commit: a6f121e
+License: Creative Commons Attribution 4.0 International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/
+
+Orbit uses the `unslop` skill as the visual standard of its desktop interface. The audit,
+direction and redline passes that shaped `apps/desktop/src/styles.css` and the desktop
+components follow its method (spacing, color, icons, copy, type, layout, details, visuals and
+motion). No skill files, scripts, images or other assets are included in Orbit. unslop by
+Damir Sokolovsky (@heydamir), CC BY 4.0.

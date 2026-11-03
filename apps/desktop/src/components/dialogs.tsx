@@ -7,9 +7,9 @@ import { Dialog } from './Dialog.tsx'
 import { BudgetFields, budgetFrom } from './Budget.tsx'
 
 const MODE_HINT: Record<MissionMode, string> = {
-  livre: 'Um agente, você no comando.',
-  squad: 'Um time fixo que segue um roteiro.',
-  agentica: 'Você descreve o objetivo; o líder monta o time.',
+  livre: 'Um agente, você no comando',
+  squad: 'Um time fixo que segue um roteiro',
+  agentica: 'Você descreve o objetivo, o líder monta o time',
 }
 
 export interface AgentChoice {
@@ -137,7 +137,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
   }
 
   return (
-    <Dialog eyebrow={`Nova missão · ${workspaceName}`} title="O que vamos fazer?" submitLabel={checking ? 'Consultando pedido…' : pending ? 'Conferir pedido' : 'Lançar missão'} busy={launching} submitDisabled={launching || checking} onClose={onClose} onSubmit={async () => {
+    <Dialog eyebrow={workspaceName} title="Nova missão" submitLabel={checking ? 'Consultando pedido…' : pending ? 'Conferir pedido' : 'Lançar missão'} busy={launching} submitDisabled={launching || checking} onClose={onClose} onSubmit={async () => {
       if (launching || checking) return
       if (client.inputPending(`mission-${workspaceId}`)) { await checkPending(); return }
       if (!title.trim()) return setError('Dê um título para a missão.')
@@ -153,7 +153,7 @@ export function NewMissionDialog({ workspaceId, workspaceName, onClose, onManage
     }}>
       {pending && <p className="note note--warn" role="status">Há um pedido anterior sem confirmação. Você pode editar este rascunho; “Conferir pedido” consulta apenas o envio anterior e não abre agentes.</p>}
       {receipt && <p className="note" role="status">{receipt}</p>}
-      <fieldset disabled={launching} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      <fieldset disabled={launching} className="dialog__fields">
       {settings?.agentsInEnglish && <div className="field">
         <label htmlFor="mission-translator">Traduzir objetivo para inglês · {TRANSLATION_LABEL}</label>
         <select id="mission-translator" disabled={allowOriginal} value={translationAccountId} onChange={e => setTranslationAccountId(e.target.value)}>

@@ -10,18 +10,18 @@
 .home--base .home__main { gap: 32px; }
 .home--base .home__hero { display: grid; gap: 24px; padding-bottom: 32px; border-bottom: 1px solid var(--line); }
 .home--base .home__hero-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
-.home--base .home__overline { font-size: 10px; letter-spacing: .1em; color: var(--text-3); }
+.home--base .home__overline { font-size: 12px; color: var(--text-3); }
 .home--base .home__engine { padding: 0; font-size: 11px; color: var(--muted); }
 .home--base .home__greeting h1 { margin: 0; max-width: 18ch; font-size: clamp(30px, 3.1vw, 42px); font-weight: 500; line-height: 1.15; letter-spacing: -.045em; text-wrap: balance; }
 .home--base .home__greeting p { margin-top: 12px; max-width: 52ch; color: var(--text-3); font-size: 14px; line-height: 1.6; }
 .home--base .home__start-actions { display: flex; flex-wrap: wrap; gap: 12px; }
-.home--base .home__start-actions .btn { min-height: 48px; padding: 0 20px; gap: 10px; }
+.home--base .home__start-actions .btn { min-height: 48px; padding: 0 20px; gap: 12px; }
 .home--base .home__start-actions .btn--primary { min-width: 184px; justify-content: space-between; }
 .home--base .home__start-hint { color: var(--muted); font-size: 13px; }
 .home--base .home__section { gap: 16px; }
 .home--base .home__mission-heading { align-items: center; gap: 16px; }
-.home--base .home__mission-heading h2, .home--base .home__projects h2 { font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
-.home--base .home__pulse { margin-top: 8px; font-size: 11px; gap: 6px; color: var(--muted); }
+.home--base .home__mission-heading h2, .home--base .home__projects h2 { font-size: 16px; font-weight: 500; }
+.home--base .home__pulse { margin-top: 8px; font-size: 11px; gap: 8px; color: var(--muted); }
 .home--base .home__search { width: 248px; min-width: 0; min-height: 44px; background: var(--bg-deep); }
 .home--base .home__search input { width: 100%; min-width: 0; }
 .home--base .home__filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
@@ -34,25 +34,25 @@
 .home--base .home-card__main { display: flex; flex-wrap: nowrap; align-items: flex-start; padding: 20px; gap: 12px; }
 .home--base .home-card__glyph { color: var(--text-3); display: grid; place-items: center; width: 36px; height: 44px; flex: none; }
 .home--base .home-card__text { flex: 1; min-width: 0; gap: 8px; }
-.home--base .home-card__title { align-items: center; gap: 6px 8px; }
+.home--base .home-card__title { align-items: center; gap: 8px 8px; }
 .home--base .home-card__title h3 { flex-basis: 100%; font-size: 16px; line-height: 1.4; font-weight: 500; }
 .home--base .home-card__title h3 button { min-height: 44px; margin: 0; padding: 0; border: 0; background: transparent; text-align: left; font: inherit; color: var(--text); overflow-wrap: anywhere; }
 .home--base .home-card__title h3 button:hover { color: var(--accent); }
-.home--base .home-card__latest-label { color: var(--text-3); font-size: 10px; }
-.home--base .home-card__title .badge { font-size: 9px; }
+.home--base .home-card__latest-label { color: var(--text-3); font-size: 11px; }
+.home--base .home-card__title .badge { font-size: 11px; }
 .home--base .home-card__text > .muted { color: var(--muted); font-size: 11px; white-space: normal; line-height: 1.5; overflow-wrap: anywhere; }
 .home--base .home-card__objective { font-size: 13px; line-height: 1.5; max-width: 65ch; margin-top: 0; color: var(--text-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; overflow: hidden; overflow-wrap: anywhere; }
-.home--base .home-card__state { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-3); }
+.home--base .home-card__state { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-3); }
 .home--base .home-card__actions { display: flex; align-items: center; gap: 4px; flex: none; }
 .home--base .home-card__actions .btn { min-height: 44px; margin: 0; gap: 8px; }
 .home--base .home-card__actions .icon-btn { display: inline-grid; width: 44px; height: 44px; }
 .home--base .home-card__team { padding: 0 20px; border-top: 1px solid var(--line); }
-.home--base .home-card__team > summary { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 8px 0; font-size: 11px; color: var(--text-3); list-style: none; }
+.home--base .home-card__team > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 0; font-size: 11px; color: var(--text-3); list-style: none; }
 .home--base summary::-webkit-details-marker { display: none; }
 .home--base summary > svg { flex: none; transition: transform 180ms var(--ease-orbit); }
 .home--base details[open] > summary > svg { transform: rotate(90deg); }
 .home--base .home-card__crew { padding: 0 0 16px; border: 0; gap: 8px; }
-.home--base .home-card__crew li { flex-wrap: wrap; font-size: 12px; gap: 6px; }
+.home--base .home-card__crew li { flex-wrap: wrap; font-size: 12px; gap: 8px; }
 .home--base .home-card__crew .muted { white-space: normal; overflow-wrap: anywhere; }
 .home--base .home__empty { padding: 32px 24px; display: grid; justify-items: start; gap: 12px; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; }
 .home--base .home__empty > svg { color: var(--text-3); }
@@ -74,8 +74,8 @@
 .home--base .ws-item { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 4px 12px; padding: 12px; min-height: 76px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; }
 .home--base .ws-item > svg { color: var(--text-3); grid-row: 1 / 3; align-self: start; margin-top: 2px; }
 .home--base .ws-item__name { font-size: 13px; overflow-wrap: anywhere; }
-.home--base .ws-item__path { margin-top: 4px; font-size: 10px; }
-.home--base .ws-item__when { grid-column: 2; color: var(--muted); font-size: 10px; }
+.home--base .ws-item__path { margin-top: 4px; font-size: 11px; }
+.home--base .ws-item__when { grid-column: 2; color: var(--muted); font-size: 11px; }
 .home--base .home__project-note { color: var(--muted); font-size: 11px; }
 .home--base .home__accounts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding-top: 24px; border-top: 1px solid var(--line); }
 .home--base .home__accounts .home__section-head { flex-wrap: wrap; }

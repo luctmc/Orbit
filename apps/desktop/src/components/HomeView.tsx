@@ -91,10 +91,10 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
           <header className="home__hero">
             <div className="home__hero-top">
               <span className="eyebrow home__overline"><OrbitMark size={16} />Base de operações</span>
-              <span className="home__engine" role="status"><span className={`dot ${connection === 'open' ? 'dot--live' : 'dot--warn'}`} />{connection === 'open' ? 'Motor conectado' : connection === 'connecting' ? 'Conectando…' : 'Motor desconectado'}</span>
+              <span className="home__engine" role="status"><span className={`dot ${connection === 'open' ? 'dot--live' : 'dot--wait'}`} />{connection === 'open' ? 'Motor conectado' : connection === 'connecting' ? 'Conectando…' : 'Motor desconectado'}</span>
             </div>
             <div className="home__greeting">
-              <h1>O que vamos construir hoje?</h1>
+              <h1>Comande sua equipe de agentes</h1>
               <p>{workspaces.length ? 'Dê um novo objetivo à sua equipe ou retome de onde parou.' : 'Abra um projeto para reunir suas pastas, missões e agentes.'}</p>
             </div>
             <div className="home__start-actions">
@@ -153,7 +153,7 @@ export function HomeView({ onOpenMission, onOpenWorkspace, onNewMission, onAddFo
           {sortedWorkspaces.length === 0 && <p className="muted">{needle ? 'Nenhuma pasta encontrada.' : 'Nenhuma pasta aberta ainda.'}</p>}
           {busy.length > 0 && <WorkspaceGroup label="Em atividade" workspaces={busy} live={liveByWorkspace} onOpen={onOpenWorkspace} />}
           {quiet.length > 0 && <WorkspaceGroup label={busy.length ? 'Recentes' : 'Por último uso'} workspaces={quiet} live={liveByWorkspace} onOpen={onOpenWorkspace} />}
-          <p className="home__project-note"><FolderIcon size={16} />Pastas e contexto para suas missões.</p>
+          <p className="home__project-note"><FolderIcon size={16} />Pastas e contexto para suas missões</p>
           </section>
           <HomeAccounts onOpenAccounts={onOpenAccounts} />
         </aside>
@@ -181,7 +181,7 @@ function MissionCard({ summary, latest, squadName, onOpen, onDelete }: { latest:
             {mission.readyAt && <span className="badge" title="Conclusão declarada pelo líder. Abra a missão para conferir a revisão do código atual.">Conclusão declarada</span>}
           </div>
           <p className="muted">{meta}</p>
-          {mission.objective && <p className="home-card__objective" title={mission.objective}>{mission.objective}</p>}
+          {mission.objective && mission.objective.trim() !== mission.title.trim() && <p className="home-card__objective" title={mission.objective}>{mission.objective}</p>}
           <span className="home-card__state"><span className={`dot ${live > 0 ? 'dot--live' : 'dot--off'}`} />{live > 0 ? `${live} ${live === 1 ? 'agente ativo' : 'agentes ativos'}` : 'Sem agentes ativos'}</span>
         </div>
         <div className="home-card__actions"><button type="button" className="btn btn--ghost btn--sm" onClick={onOpen} aria-label={`Abrir missão ${mission.title}`}>{mission.status === 'active' && !mission.readyAt ? 'Retomar' : 'Abrir'}<SendIcon size={15} /></button>

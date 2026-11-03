@@ -5,7 +5,7 @@ import { untilTime } from '../orbit/time.ts'
 import { useAppUpdater } from '../orbit/updater.ts'
 import { HomeIcon, OrbitMark, PlusIcon, ReloadIcon, SettingsIcon } from './icons.tsx'
 import { useOrbitClient } from '../orbit/context.tsx'
-import { limitWindowView, limitReadLabel, limitMetric } from '../orbit/limitPresentation.ts'
+import { limitWindowView, limitReadLabel } from '../orbit/limitPresentation.ts'
 import { useLimitClock } from '../orbit/useLimitClock.ts'
 import { ActionMenu } from './ActionMenu.tsx'
 
@@ -49,23 +49,23 @@ export function TitleBar({ connection, liveAgents, limits, accounts, onAbout }: 
 
 const level = (percent: number) => (percent >= 90 ? 'danger' : percent >= 70 ? 'wait' : 'ok')
 
-/** Each provider's native metric: Claude used, Codex remaining. */
+/** One metric for every provider: the bar and the figure show the share used; the remaining share is in the tooltip. */
 function LimitMeter({ limits, name: label, now }: { limits: AccountLimits; name: string; now: number }) {
   const windows = [limits.fiveHour, limits.weekly].filter(raw => raw !== null).map(raw => ({ ...limitWindowView(raw, limits, now), reset: raw.resetsAt > now ? `renova ${untilTime(raw.resetsAt, now)}` : 'aguardando atualização' }))
   const name = `${label}${limits.plan ? ` (${limits.plan})` : ''}`
-  const detail = `${windows.map(w => `${w.label}: ${w.percent === null ? 'sem leitura atual' : `${w.percent}% ${w.metric}`}, ${w.reset}`).join('\n')}\n${limitReadLabel(limits, now)}`
+  const detail = `${windows.map(w => `${w.label}: ${w.used === null ? 'sem leitura atual' : `${Math.round(w.used)}% usado, ${w.remaining}% restante`}, ${w.reset}`).join('\n')}\n${limitReadLabel(limits, now)}`
   return (
     <span className="limit" role="group" aria-label={`Limites de ${name}. ${detail}`} title={`Limites de ${name}\n${detail}`}>
-      <span className="limit__cli">{label} · {limitMetric(limits.cli)}</span>
+      <span className="limit__cli">{label}</span>
       {windows.length === 0 && <span className="limit__label">sem leitura</span>}
       {windows.map(w => (
         <span key={w.label} className="limit__window" data-level={level(w.used ?? 0)}>
           <span className="limit__label">{w.label}</span>
-          <span className="limit__bar" aria-hidden="true"><span style={{ width: `${w.percent ?? 0}%` }} /></span>
-          <span className="limit__value">{w.percent === null ? '—' : `${w.percent}%`}</span>
+          <span className="limit__bar" aria-hidden="true"><span style={{ width: `${w.used ?? 0}%` }} /></span>
+          <span className="limit__value">{w.used === null ? '—' : `${Math.round(w.used)}%`}</span>
         </span>
       ))}
-      {limits.refreshError && <span title={limits.refreshError} aria-label="Falha na atualização dos limites">!</span>}
+      {limits.refreshError && <span className="limit__error" title={limits.refreshError}>falha ao ler</span>}
     </span>
   )
 }
