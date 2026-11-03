@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
 import { AGENT_CLIS, BROWSER_KEYS, type AgentCliForRole, type Difficulty, BROWSER_VIEWPORT, CARD_COLUMNS, CARD_LIMITS, EFFORTS, MODEL_ID, type CardColumn, type Effort, type HandoffStatus, type Pane } from '@orbit/protocol'
+import { crewUsesSharedTools, crewUsesVerificationTools } from './prompts.ts'
 import type { OrbitCore } from './core.ts'
 import type { VerificationInput } from '@orbit/protocol'
 
@@ -149,19 +150,22 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     inputSchema: { limit: z.number().int().min(1).max(100).optional() },
   }, guarded(({ limit }: { limit?: number }) => core.store.notifications(caller.missionId).slice(-(limit ?? 20)).map(({ text: _, ...notice }) => notice)))
 
-  server.registerTool('result_inspect', {
-    description: 'Inspect a current done result and bind a review to your execution/assignment. Result scope requires unchanged producer source. Integration scope reviews the final mission tree/contracts after individual acceptance, even when later work advanced that tree. Inspect the returned roots/criteria and run checks through your CLI permissions before reporting a verdict.',
-    inputSchema: { resultId: z.string().min(1).max(100), scope: z.enum(['result', 'integration']).optional().describe('Default result: current producer source and activity criteria. integration: final mission source/contracts after all results are accepted; historical result acceptance is kept separate.') },
-  }, guarded(({ resultId, scope }: { resultId: string; scope?: 'result' | 'integration' }) => core.inspectResult(caller, resultId, scope)))
+  const spec = core.store.paneSpec(caller.id)
+  if (caller.role === 'lead' || crewUsesVerificationTools(spec?.squadRoleId, spec?.taskTypeId)) {
+    server.registerTool('result_inspect', {
+      description: 'Inspect a current done result and bind a review to your execution/assignment. Result scope requires unchanged producer source. Integration scope reviews the final mission tree/contracts after individual acceptance, even when later work advanced that tree. Inspect the returned roots/criteria and run checks through your CLI permissions before reporting a verdict.',
+      inputSchema: { resultId: z.string().min(1).max(100), scope: z.enum(['result', 'integration']).optional().describe('Default result: current producer source and activity criteria. integration: final mission source/contracts after all results are accepted; historical result acceptance is kept separate.') },
+    }, guarded(({ resultId, scope }: { resultId: string; scope?: 'result' | 'integration' }) => core.inspectResult(caller, resultId, scope)))
 
-  server.registerTool('verification_submit', {
-    description: 'Record an independent review for your inspection. Orbit rechecks source, identity, checks and every criterion; you cannot accept your own result. A new inspection is needed to change a verdict. Lead only: readySummary on an accepted integration review commits final acceptance and mission completion together, without force. A completion receipt means no separate mission_ready call is needed. Checks are reviewer reports, not commands executed by this tool.',
-    inputSchema: { inspectionId: z.string().min(1).max(100), verdict: z.enum(['accepted', 'changes_required', 'unverified']), summary: z.string().min(1).max(2000), checks: z.array(z.object({ command: z.string().min(1).max(2000), exitCode: z.number().int(), summary: z.string().min(1).max(2000) })).max(20), criteria: z.array(z.object({ item: z.number().int().min(1).max(8), met: z.boolean(), how: z.string().min(1).max(500) })).max(8), readySummary: z.string().min(1).max(4000).optional().describe('Lead only, accepted integration scope: final user-facing summary in Portuguese; atomically declares ready after all normal gates. Omit for ordinary reviews.') },
-  }, guarded(({ readySummary, ...input }: VerificationInput & { readySummary?: string }) => core.verifyResult(caller, input, readySummary)))
+    server.registerTool('verification_submit', {
+      description: 'Record an independent review for your inspection. Orbit rechecks source, identity, checks and every criterion; you cannot accept your own result. A new inspection is needed to change a verdict. Lead only: readySummary on an accepted integration review commits final acceptance and mission completion together, without force. A completion receipt means no separate mission_ready call is needed. Checks are reviewer reports, not commands executed by this tool.',
+      inputSchema: { inspectionId: z.string().min(1).max(100), verdict: z.enum(['accepted', 'changes_required', 'unverified']), summary: z.string().min(1).max(2000), checks: z.array(z.object({ command: z.string().min(1).max(2000), exitCode: z.number().int(), summary: z.string().min(1).max(2000) })).max(20), criteria: z.array(z.object({ item: z.number().int().min(1).max(8), met: z.boolean(), how: z.string().min(1).max(500) })).max(8), readySummary: z.string().min(1).max(4000).optional().describe('Lead only, accepted integration scope: final user-facing summary in Portuguese; atomically declares ready after all normal gates. Omit for ordinary reviews.') },
+    }, guarded(({ readySummary, ...input }: VerificationInput & { readySummary?: string }) => core.verifyResult(caller, input, readySummary)))
 
-  server.registerTool('verification_status', {
-    description: 'Historical acceptance validity of current R4 results/dependency bindings and durable review records. Individual acceptance does not certify the current integrated tree: a separate integration review is required by mission_ready. Legacy work is not retroactively certified.',
-  }, guarded(() => ({ current: core.verificationStatus(caller.missionId), records: core.store.verifications(caller.missionId) })))
+    server.registerTool('verification_status', {
+      description: 'Historical acceptance validity of current R4 results/dependency bindings and durable review records. Individual acceptance does not certify the current integrated tree: a separate integration review is required by mission_ready. Legacy work is not retroactively certified.',
+    }, guarded(() => ({ current: core.verificationStatus(caller.missionId), records: core.store.verifications(caller.missionId) })))
+  }
 
   server.registerTool('delivery_ack', {
     description: 'Confirm that you read a result notification addressed to this execution. includeResult returns bounded result evidence, original criteria and current activity identity, avoiding repeated handoff/status reads. Truncated fields have a detail lookup. Receipt does not accept code or check source freshness.',
@@ -337,8 +341,10 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     inputSchema: { agent: z.number().int().describe('The agent\'s number'), lines: z.number().int().min(1).max(400).optional().describe('How many last lines (default 60)') },
   }, guarded(({ agent, lines }: { agent: number; lines?: number }) => core.readScreen(caller, agent, lines ?? 60) || '(tela vazia)'))
 
-  registerBrowserTools(server, core, caller)
-  registerBoardTools(server, core, caller)
+  if (caller.role === 'lead' || crewUsesSharedTools(spec?.squadRoleId, spec?.taskTypeId)) {
+    registerBrowserTools(server, core, caller)
+    registerBoardTools(server, core, caller)
+  }
 
   // Helpers the lead opened may open a couple of sub-helpers; their results come back to them.
   if (caller.role === 'crew' && (core.childSlots(caller) > 0 || core.missionPanes(caller.missionId).some((p) => p.assignedBy === caller.id))) {
