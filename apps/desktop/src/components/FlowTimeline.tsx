@@ -14,6 +14,7 @@ const TONE: Record<MissionEventKind, string> = {
   browser: 'neutral',
   budget: 'wait',
   rescue: 'wait',
+  worktree: 'idle',
 }
 
 export function FlowTimeline({ events }: { events: MissionEvent[] }) {

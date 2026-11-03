@@ -79,7 +79,7 @@ test('líder mantém catálogo completo e acesso ao quadro', async () => {
     const tools = (await client.listTools()).tools
     assert.deepEqual(tools.map(t => t.name).sort(), leader)
     assert.equal(tools.length, 40)
-    assert.equal(Buffer.byteLength(JSON.stringify(tools)), 26882)
+    assert.equal(Buffer.byteLength(JSON.stringify(tools)), 27000)
     assert.equal((await client.callTool({ name: 'board_list', arguments: {} })).isError, undefined)
   })
 })

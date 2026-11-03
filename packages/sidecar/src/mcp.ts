@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { AGENT_CLIS, BROWSER_KEYS, type AgentCliForRole, type Difficulty, BROWSER_VIEWPORT, CARD_COLUMNS, CARD_LIMITS, EFFORTS, MODEL_ID, type CardColumn, type Effort, type HandoffStatus, type Pane } from '@orbit/protocol'
 import { crewUsesSharedTools, crewUsesVerificationTools } from './prompts.ts'
 import type { OrbitCore } from './core.ts'
+import { delegationLines } from './missionLedger.ts'
 import type { VerificationInput } from '@orbit/protocol'
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
@@ -130,6 +131,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
       squad: squad && { name: squad.name, playbook: squad.playbook, roles: squad.roles.map((r) => ({ id: r.id, name: r.name, agent: r.cli, model: r.model })) },
       agents: core.missionPanes(caller.missionId).map(agentView),
       pendingDeliveries: core.pendingDeliveries(caller.missionId),
+      ledger: delegationLines({ ...core.store.activityHistory(caller.missionId), verifications: core.store.verifications(caller.missionId), deliveries: core.store.deliveries(caller.missionId) }),
       events: core.missionEvents(caller.missionId).slice(-(events ?? 20)).map((e) => ({ at: new Date(e.at).toISOString(), title: e.title, body: e.body })),
     }
   }))
@@ -158,7 +160,7 @@ function buildServer(core: OrbitCore, caller: Pane): McpServer {
     }, guarded(({ resultId, scope }: { resultId: string; scope?: 'result' | 'integration' }) => core.inspectResult(caller, resultId, scope)))
 
     server.registerTool('verification_submit', {
-      description: 'Record an independent review for your inspection. Orbit rechecks source, identity, checks and every criterion; you cannot accept your own result. A new inspection is needed to change a verdict. Lead only: readySummary on an accepted integration review commits final acceptance and mission completion together, without force. A completion receipt means no separate mission_ready call is needed. Checks are reviewer reports, not commands executed by this tool.',
+      description: 'Record an independent review for your inspection. Orbit rechecks source, identity, checks and every criterion; you cannot accept your own result. A new inspection is needed to change a verdict. unverified = NOT_PROVEN: use quando não puder provar um critério; nunca accepted; também não é changes_required. Lead only: readySummary on an accepted integration review commits final acceptance and mission completion together, without force. A completion receipt means no separate mission_ready call is needed. Checks are reviewer reports, not commands executed by this tool.',
       inputSchema: { inspectionId: z.string().min(1).max(100), verdict: z.enum(['accepted', 'changes_required', 'unverified']), summary: z.string().min(1).max(2000), checks: z.array(z.object({ command: z.string().min(1).max(2000), exitCode: z.number().int(), summary: z.string().min(1).max(2000) })).max(20), criteria: z.array(z.object({ item: z.number().int().min(1).max(8), met: z.boolean(), how: z.string().min(1).max(500) })).max(8), readySummary: z.string().min(1).max(4000).optional().describe('Lead only, accepted integration scope: final user-facing summary in Portuguese; atomically declares ready after all normal gates. Omit for ordinary reviews.') },
     }, guarded(({ readySummary, ...input }: VerificationInput & { readySummary?: string }) => core.verifyResult(caller, input, readySummary)))
 

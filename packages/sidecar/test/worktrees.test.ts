@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -115,6 +115,13 @@ test('each agent works in its own worktree and branch, and the mission becomes a
     assert.deepEqual(summary.commits.map((c) => c.subject), ['Cálculo de frete'])
     assert.deepEqual(summary.files.map((f) => [f.path, f.added]), [['app/frete.js', 1]])
 
+    // F17: a clean delivered copy and current independent acceptance precede land.
+    rmSync(join(helperTree, 'app', 'rascunho.txt'))
+    const delivered = server.core.handoff(server.core.store.pane(helper.id)!, { summary: 'Frete pronto e cópia limpa', evidence: 'npm test' })
+    const currentLead = server.core.store.pane(lead.id)!
+    const inspection = server.core.inspectResult(currentLead, delivered.resultId)
+    server.core.verifyResult(currentLead, { inspectionId: inspection.id, verdict: 'accepted', summary: 'Revisado', checks: [{ command: 'npm test', exitCode: 0, summary: 'passou' }], criteria: [] })
+
     ui.send({ type: 'git.pr.create', missionId: mission.id, title: 'Novo cálculo de frete', body: 'O que mudou', draft: true })
     const pr = await ui.next('git.pr')
     assert.deepEqual([pr.status.number, pr.status.checks.length], [7, 3])
@@ -129,12 +136,15 @@ test('each agent works in its own worktree and branch, and the mission becomes a
     const { pane: again } = await ui.next('pane.updated', (m) => m.pane.id === helper.id && m.pane.title === 'Frete')
     assert.deepEqual([again.branch, again.cwd], [helper.branch, helper.cwd])
 
-    // Archiving removes clean copies and keeps the one with uncommitted work; branches stay.
+    // F17: archiving still works with uncommitted work, but every copy stays and the flow says why.
+    writeFileSync(join(helperTree, 'app', 'rascunho.txt'), 'ideias\n')
     ui.send({ type: 'mission.archive', missionId: mission.id })
-    await ui.next('event.added', (m) => m.event.title === 'Cópias mantidas' && m.event.body.includes(`de #${helper.id}`))
-    assert.equal(existsSync(join(dataDir, 'worktrees', mission.id, 'lider')), false)
+    await ui.next('mission.updated', (m) => m.mission.id === mission.id && m.mission.status === 'archived')
+    assert.equal(existsSync(join(dataDir, 'worktrees', mission.id, 'lider')), true)
     assert.equal(existsSync(helperTree), true)
     assert.match(git(work, 'branch', '--list', 'orbit/*'), new RegExp(branch.replace('/', '\\/')))
+
+    ui.inbox.length = 0
 
     // Not a repository: the option is refused.
     const plain = realpathSync(mkdtempSync(join(tmpdir(), 'orbit-plain-')))

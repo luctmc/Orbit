@@ -4,6 +4,8 @@ import { useOrbit, useOrbitClient } from '../orbit/context.tsx'
 import { openExternal } from '../orbit/open.ts'
 import { CloseIcon } from './icons.tsx'
 
+const WORKTREE_LABEL = { working: 'trabalhando', blocked: 'bloqueada', review: 'em revisão', done: 'concluída' } as const
+
 const CHECK_LABEL: Record<PrStatus['checks'][number]['state'], string> = { ok: 'passou', fail: 'falhou', pending: 'rodando', skip: 'pulado' }
 
 /** The PR text Orbit suggests: the objective, what the board says is done, the helpers' deliveries. */
@@ -89,6 +91,7 @@ export function PrDialog({ mission, onClose }: { mission: Mission; onClose: () =
 
         {!summary ? <p className="muted">Lendo o branch…</p> : (
           <>
+            {summary.agents.length > 0 && <ul className="plain-list pr__list" aria-label="Cópias dos agentes">{summary.agents.map(a => <li key={a.paneId}>#{a.paneId} {a.title}{a.status && <span className="chip">{WORKTREE_LABEL[a.status]}</span>}</li>)}</ul>}
             {pending.length > 0 && <p className="note pr__warn">Ainda não integrado: {pending.map((a) => `#${a.paneId} (${a.ahead} commit${a.ahead > 1 ? 's' : ''} em ${a.branch})`).join(', ')}. O líder integra com git merge.</p>}
             {dirty.length > 0 && <p className="note pr__warn">Sem commit: {dirty.map((a) => `#${a.paneId} (${a.dirty.length} arquivo${a.dirty.length > 1 ? 's' : ''})`).join(', ')}.</p>}
             <div className="pr__cols">

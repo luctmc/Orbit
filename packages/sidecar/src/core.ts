@@ -1,3 +1,4 @@
+import { worktreeStatus } from './worktreeStatus.ts'
 import { providerSetup } from './providerSetup.ts'
 import { catalogRevision as revisionOfCatalog } from './catalogRevision.ts'
 import { AppPlugins } from './appPlugins.ts'
@@ -18,6 +19,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { budgetStatus, ATTACHMENT_LIMITS, ACCOUNT_LIMITS, BUDGET_WARN_AT, CLI_NAME, AGENT_CLIS, AGENT_INFO, CARD_COLUMNS, CARD_LIMITS, MODEL_ID, SCHEDULE_LIMITS, TEMPLATE_LIMITS, type MissionBudget, type MissionTemplate, type MissionTemplateInput, EFFORT_LABEL, EFFORTS, SESSION_ID, type Card, type CardColumn, WORKSPACE_LIMITS, effortsFor, type Account, type AccountInput, type AccountStatus, type AgentCli, type BrowserInput, type CatalogItem, type GitSummary, type HandoffStatus, type RoutingChange, type RoutingProposal, type LeadTarget, type MissionNote, type MemoryEntry, type MemoryKind, MEMORY_KINDS, MEMORY_LIMITS, type Difficulty, type AgentSeat, NOTE_LIMITS, CARD_COLUMN_LABEL, type MissionGit, type PrStatus, type Schedule, type ScheduleInput, type AgentCliForRole, type Catalog, type CliStatus, type ClientMessage, type Effort, type Mission, type MissionEvent, type MissionEventKind, type MissionMode, type Pane, type ServerMessage, type SpawnPaneRequest, type Squad, type TaskType } from '@orbit/protocol'
 import { Attachments } from './attachments.ts'
+import { delegationLines } from './missionLedger.ts'
 import { BrowserHost, findBrowser, type BrowserEngine } from './browser.ts'
 import { AccountFiles, blankAccountStatus, keyHint, normalizeAccount, pickAccount, userConfigDir, validKey } from './accounts.ts'
 import { bundledCatalog, codexDisabledMcp, gateTool, missionSkills, readSkill, scanCatalog, type SkillPolicy } from './skills.ts'
@@ -119,8 +121,13 @@ export interface CoreOptions {
   browser?: BrowserEngine | null
 }
 
+const WORKTREE_LABEL = { working: 'trabalhando', blocked: 'bloqueada', review: 'em revisão', done: 'concluída' } as const
+
+const SENSITIVE_SCOPE = /dados pessoais|personal data|migra[cç][aã]o|migration|seguran[cç]a|security/i
+
 /** Orbit's domain logic: UI messages, MCP tool calls and hook reports all land here. */
 export class OrbitCore {
+  private readonly worktreeStates = new Map<string, NonNullable<GitSummary['agents'][number]['status']>>()
   private readonly appPlugins:AppPlugins
   private readonly inputJournal: InputJournal
   private readonly translate: Translate
@@ -217,7 +224,12 @@ export class OrbitCore {
     for(const pane of this.store.snapshot().panes)this.panes.restoreHistory(pane)
     this.panes.on('terminated', (id, epoch) => this.store.releaseExecution(id, epoch))
     this.panes.on('receiptError', () => { /* Keep the persisted notice pending for a later dispatch. */ })
-    this.deliveryTimer = setInterval(() => this.dispatchDeliveries(), 2000)
+    this.deliveryTimer = setInterval(() => {
+      this.dispatchDeliveries()
+      for (const mission of this.store.snapshot().missions) {
+        if (mission.git && mission.status !== 'archived') safe(() => this.observeWorktrees(mission.id), undefined)
+      }
+    }, 2000)
     this.deliveryTimer.unref()
     this.panes.on('data', (paneId, data) => {
       if (data) this.quietActivity.set(paneId, { at: Date.now(), reported: false })
@@ -380,13 +392,80 @@ export class OrbitCore {
     return git.sub && pane.cwd.endsWith(`/${git.sub}`) ? pane.cwd.slice(0, -(git.sub.length + 1)) : pane.cwd
   }
 
+  /** Includes retained attempts, so closing a terminal cannot hide its unfinished copy. */
+  private worktreePanes(missionId: string): Pane[] {
+    const history = this.store.activityHistory(missionId)
+    const panes = [
+      ...this.missionPanes(missionId),
+      ...history.attempts.flatMap(a => a.pane ? [a.pane] : []),
+      ...this.store.delegations(missionId).map(d => d.pane),
+    ]
+    const unique = new Map<number, Pane>()
+    for (const pane of panes) if (!unique.has(pane.id)) unique.set(pane.id, pane)
+    return [...unique.values()]
+  }
+
+  private worktreeAgents(missionId: string): GitSummary['agents'] {
+    const git = this.store.mission(missionId)?.git
+    if (!git) return []
+    const history = this.store.activityHistory(missionId)
+    const agents: GitSummary['agents'] = this.worktreePanes(missionId).filter(p => p.branch && p.branch !== git.branch).map(p => {
+      const dirty = dirtyFiles(this.worktreeOf(p, git))
+      const attempt = this.store.currentPaneAttempt(p.id)
+      const activity = attempt && history.activities.find(a => a.id === attempt.activityId)
+      const result = activity && history.results.findLast(r => r.attemptId === activity.activeAttemptId && r.activityRevision === activity.revision && r.status !== 'auto')
+      const required = !!activity && this.reviewRequired(missionId, activity.id)
+      const accepted = !!activity && safe(() => { this.acceptedResult(missionId, activity.id, new Set(), true); return true }, false)
+      return { paneId: p.id, title: p.title, branch: p.branch!, ahead: safe(() => commitsAhead(git.repo, git.branch, p.branch!).length, 0), dirty,
+        status: worktreeStatus({ alive: this.panes.isAlive(p.id), waiting: p.status === 'waiting', dirty: dirty.length > 0, result: result?.status ?? null, reviewRequired: required, accepted }) }
+    })
+    // UI-created terminals may close before an activity/result was ever recorded.
+    const root = join(this.dataDir, 'worktrees', missionId)
+    for (const entry of safe(() => readdirSync(root), [] as string[])) {
+      if (!/^\d+$/.test(entry) || agents.some(a => a.paneId === Number(entry))) continue
+      const path = join(root, entry)
+      if (!statSync(path).isDirectory()) continue
+      const branch = repoInfo(path).branch ?? `${git.branch}--${entry}`
+      agents.push({ paneId: Number(entry), title: `Agente #${entry}`, branch, ahead: safe(() => commitsAhead(git.repo, git.branch, branch).length, 0), dirty: dirtyFiles(path), status: 'working' })
+    }
+    return agents
+  }
+
+  /** Initial observation is silent, including after reopening the app. Never writes to a PTY. */
+  private observeWorktrees(missionId: string, agents = this.worktreeAgents(missionId)): void {
+    for (const agent of agents) {
+      const key = `${missionId}:${agent.paneId}`
+      const previous = this.worktreeStates.get(key)
+      const status = agent.status!
+      this.worktreeStates.set(key, status)
+      if (previous && previous !== status) this.event(missionId, 'worktree', `Cópia de #${agent.paneId}: ${WORKTREE_LABEL[status]}`, `${agent.branch}: ${WORKTREE_LABEL[previous]} → ${WORKTREE_LABEL[status]}`, agent.paneId)
+    }
+  }
+
+  /** Read-only admission: every refusal precedes push, PR files, terminal closure and removal. */
+  private landCheck(missionId: string): void {
+    const git = this.store.mission(missionId)?.git
+    if (!git) return
+    const pending: string[] = []
+    for (const agent of this.worktreeAgents(missionId)) {
+      if (agent.status !== 'done' || agent.dirty.length) pending.push(`#${agent.paneId} (${agent.branch}): ${WORKTREE_LABEL[agent.status!]}${agent.dirty.length ? `; ${agent.dirty.length} arquivo(s) sem commit` : ''}`)
+    }
+    const root = join(this.dataDir, 'worktrees', missionId)
+    for (const entry of safe(() => readdirSync(root), [] as string[])) {
+      const path = join(root, entry)
+      if (!statSync(path).isDirectory()) continue
+      const dirty = dirtyFiles(path)
+      if (dirty.length) pending.push(`${path}: ${dirty.length} arquivo(s) sem commit; cópia mantida`)
+    }
+    if (pending.length) throw new Error(`Cópias pendentes; nenhuma cópia foi removida nem branch enviado:\n${pending.join('\n')}`)
+  }
+
   /** Commits and files of the mission branch against its base, and every agent's branch. */
   gitSummary(missionId: string): GitSummary {
     const git = this.store.mission(missionId)?.git
     if (!git) throw new Error('Esta missão não usa um branch por agente')
-    const agents = this.missionPanes(missionId)
-      .filter((p) => p.branch && p.branch !== git.branch)
-      .map((p) => ({ paneId: p.id, title: p.title, branch: p.branch!, ahead: safe(() => commitsAhead(git.repo, git.branch, p.branch!).length, 0), dirty: safe(() => dirtyFiles(this.worktreeOf(p, git)), []) }))
+    const agents = this.worktreeAgents(missionId)
+    this.observeWorktrees(missionId, agents)
     return {
       base: git.base,
       branch: git.branch,
@@ -402,10 +481,14 @@ export class OrbitCore {
     const mission = this.store.mission(missionId)
     const git = mission?.git
     if (!mission || !git) throw new Error('Esta missão não usa um branch por agente')
-    if (git.pr) return this.prStatus(missionId)
+    if (git.pr) {
+      this.landCheck(missionId)
+      return this.prStatus(missionId)
+    }
     const title = requireText(rawTitle, 'título do PR', 200)
     if (!hasRemote(git.repo)) throw new Error('O repositório não tem um remoto "origin" para enviar o branch')
     if (commitsAhead(git.repo, git.base, git.branch).length === 0) throw new Error(`O branch ${git.branch} ainda não tem commits além de ${git.base}`)
+    this.landCheck(missionId)
     pushBranch(git.leadPath, git.branch)
     const bodyFile = join(this.dataDir, 'worktrees', missionId, 'pr-body.md')
     writeFileSync(bodyFile, String(body ?? '').slice(0, 60_000), { mode: 0o600 })
@@ -432,6 +515,11 @@ export class OrbitCore {
     const mission = this.store.mission(missionId)
     const git = mission?.git
     if (!git) return
+    // Archiving is never refused: with pending work every copy stays and the reasons go to the flow.
+    try { this.landCheck(missionId) } catch (error) {
+      this.event(missionId, 'pane.exited', 'Cópias mantidas', (error as Error).message, null)
+      return
+    }
     const root = join(this.dataDir, 'worktrees', missionId)
     const kept: string[] = []
     for (const entry of safe(() => readdirSync(root), [] as string[])) {
@@ -480,11 +568,13 @@ export class OrbitCore {
     for (const card of templateCards(message.cards)) this.addCard(mission.id, 'modelo', { title: card })
     // Agentic and squad leads start working on the objective right away.
     const task = mission.mode !== 'livre' && mission.objective ? `${objectiveTask(mission)}\n\n${RESPONSE_LANGUAGE}` : null
-    const assessment = assessDifficulty(mission.title, mission.objective)
+    const assessment = SENSITIVE_SCOPE.test(`${mission.title}\n${mission.objective}`)
+      ? { difficulty: 'dificil' as const, why: 'escopo sensível' }
+      : assessDifficulty(mission.title, mission.objective)
     const automatic = message.adaptiveLead === true && mission.mode === 'agentica'
     // Adapt resources within the requested provider; never replace the person's leader/account.
     const lead = message.lead
-    this.spawn({ ...lead, missionId: mission.id, role: 'lead', task }, automatic ? { tier: { difficulty: assessment.difficulty, by: assessment.why } } : {})
+    this.spawn({ ...lead, missionId: mission.id, role: 'lead', task }, automatic ? { tier: { difficulty: assessment.difficulty, by: assessment.why, explicit: false } } : {})
     return mission
   }
 
@@ -929,6 +1019,8 @@ export class OrbitCore {
     const archived = this.store.delegations(missionId).filter((d) => !panes.some((p) => p.id === d.pane.id))
     if (archived.length) out.push(`## Closed activities (reuse completed results)\n\n${archived.map((d) => `- #${d.pane.id} ${d.pane.title}: ${d.pane.handoffStatus ?? 'stopped without delivery'}${d.result ? `; ${d.result.summary}; evidence: ${d.result.evidence}` : ''}`).join('\n')}`)
     const history = this.store.activityHistory(missionId)
+    const ledger = delegationLines({ ...history, verifications: this.store.verifications(missionId), deliveries: this.store.deliveries(missionId) })
+    if (ledger.length) out.push(`## Delegations\n\n${ledger.join('\n')}`)
     const repeats = this.store.notifications(missionId, true).filter(n => n.repeat && n.recipient.kind === 'lead')
     if (repeats.length) out.push(`## Receipts awaiting ACK\n\n${repeats.map(n => `- ${n.id}; resultId: ${n.resultId}; repeat: true; confirme com delivery_ack, sem refazer o trabalho.`).join('\n')}`)
     const results = history.results.slice(-8)
@@ -945,7 +1037,7 @@ export class OrbitCore {
     const flow = this.missionEvents(missionId).filter((e) => e.kind !== 'handoff').slice(-25)
     if (flow.length) out.push(`## Recent flow\n\n${flow.map((e) => `- ${new Date(e.at).toISOString().slice(5, 16).replace('T', ' ')} ${e.title}${e.kind === 'pane.quiet' ? ` — ${e.body}` : ''}`).join('\n')}`)
     out.push('## How to carry on\n\nHelpers that owe a result now deliver it to you. Write important decisions down with mission_note. Submitted results are not independently validated. Pending required results block mission_ready. Retrieve referenced details with context_read; handoff_list supports resultId and after cursors. To read this briefing again, call mission_briefing.')
-    const optional = /^(## Project memory|## Board|## Closed activities|## Results received|## End of the previous|## Recent flow)/
+    const optional = /^(## Project memory|## Board|## Closed activities|## Delegations|## Results received|## End of the previous|## Recent flow)/
     return this.contextPack(missionId, out.map((text, i) => ({ id: `briefing-${i}`, text, required: !optional.test(text), maxBytes: 3000 })), 18_000).text
   }
 
@@ -2200,9 +2292,9 @@ export class OrbitCore {
     }
     let taskTypeId = input.taskTypeId ?? null
     const assessed = assessDifficulty(input.title, input.task)
-    const sensitive = /dados pessoais|personal data|migra[cç][aã]o|migration|seguran[cç]a|security/i.test(`${input.title}\n${input.task}`)
+    const sensitive = SENSITIVE_SCOPE.test(`${input.title}\n${input.task}`)
     let difficulty: Difficulty = assessed.difficulty === 'dificil' || sensitive ? 'dificil' : input.difficulty ?? assessed.difficulty
-    let difficultyBy = sensitive ? 'escopo sensível' : assessed.difficulty === 'dificil' ? assessed.why : input.difficulty ? 'líder' : assessed.why
+    let difficultyBy = input.difficulty === 'dificil' ? 'líder' : sensitive ? 'escopo sensível' : assessed.difficulty === 'dificil' ? assessed.why : input.difficulty ? 'líder' : assessed.why
     if ((mission?.mode === 'agentica' || caller.role === 'crew') && !taskTypeId && !input.squadRoleId && !input.cli && !input.model) {
       const text = `${input.title}\n${input.task}`
       const types = this.store.routing().taskTypes
@@ -2242,8 +2334,8 @@ export class OrbitCore {
     if (input.retryReason) receipt.push(`nova execução: ${input.retryReason.trim().slice(0, 600)}`)
     const children = caller.role === 'lead' && (mission?.mode === 'agentica' || mission?.mode === 'squad') ? MAX_CHILDREN : 0
     const { accept: _, difficulty: __, retryReason: ___, activityId: ____, newEvidence: _evidence, initialTask: _initialTask, ...request } = input
-    // A model the lead named stays; otherwise the activity's difficulty picks the tier.
-    const tier = difficulty !== 'normal' && !input.model && !input.squadRoleId ? { difficulty, by: difficultyBy } : undefined
+    // Risk still gates review; only an explicit hard tier may promote the model family.
+    const tier = difficulty !== 'normal' && !input.model && !input.squadRoleId ? { difficulty, by: difficultyBy, explicit: input.difficulty === 'dificil' } : undefined
     await this.prepareDesignContext({ ...request, missionId: caller.missionId, role: 'crew', cli: input.cli ?? 'claude' })
     // Classification may have awaited a model; enforce the sub-helper cap at launch too.
     if (caller.role === 'crew' && this.childSlots(caller) === 0) throw new Error('Não há vaga para outro sub-ajudante; aguarde ou feche um que entregou')
@@ -2489,6 +2581,7 @@ export class OrbitCore {
     }
     const alreadyCompleted = readySummary !== undefined && this.store.verifications(caller.missionId).some(v => v.inspectionId === input.inspectionId && v.completion)
     const record = this.store.saveVerification(inspection, result, input, readySummary)
+    if (this.store.mission(caller.missionId)?.git) this.observeWorktrees(caller.missionId)
     // Terminate the exact accepted execution, retaining the pane and its durable terminal history.
     // A report, process exit or rejected review alone never triggers automatic closure.
     if (inspection.scope === 'result' && input.verdict === 'accepted') {
@@ -2703,6 +2796,7 @@ export class OrbitCore {
     const policy = this.store.executionPolicy(caller.id)
     const source = status === 'done' && caller.cli !== 'shell' ? sourceRevision(policy?.roots ?? copyRoots([caller.cwd]), [this.dataDir]) : undefined
     const committed = this.store.commitActivityResult(caller, { status, summary: text, evidence, details: [criteria, details].filter(Boolean).join('\n\n'), deliveredTo, ...(source ? { source } : {}) }, { title, body }, result => this.handoffWake(caller, result, notificationText, met))
+    if (this.store.mission(caller.missionId)?.git) this.observeWorktrees(caller.missionId)
     const resultId = committed.result.id
     this.dispatchDeliveries(caller.missionId)
     if (committed.duplicate) return { deliveredTo, status, resultId, duplicate: true }
@@ -2947,7 +3041,7 @@ export class OrbitCore {
   }
 
   /** `resume` continues that conversation of the CLI; `opened` replaces the flow's "Agente #N aberto". */
-  private spawn(input: SpawnPaneRequest, options: { resume?: string; permissionUpgrade?: boolean; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; attemptId?: string; explicitCli?: AgentCli; tier?: { difficulty: Difficulty; by: string }; keep?: AgentSeat; requireReadOnlySandbox?: boolean; decisionSource?: DecisionReceipt['source']; harnessTask?: { difficulty: Difficulty; retry: boolean }; taskBeforePointer?: string } = {}): Pane {
+  private spawn(input: SpawnPaneRequest, options: { resume?: string; permissionUpgrade?: boolean; opened?: (id: number) => string; worktree?: { path: string; branch: string }; receipt?: string[]; boss?: Pane; children?: number; id?: number; attemptId?: string; explicitCli?: AgentCli; tier?: { difficulty: Difficulty; by: string; explicit: boolean }; keep?: AgentSeat; requireReadOnlySandbox?: boolean; decisionSource?: DecisionReceipt['source']; harnessTask?: { difficulty: Difficulty; retry: boolean }; taskBeforePointer?: string } = {}): Pane {
     if (this.stopping) throw new Error('Orbit está encerrando; novas execuções não são admitidas')
     const receipt = options.receipt ?? []
     receipt.push(`permissões: ${AGENT_PERMISSION_POLICY}`)
@@ -2979,6 +3073,9 @@ export class OrbitCore {
       : taskType
         ? { ...input, role: 'crew', cli: taskType.cli, model: taskType.model, effort: taskType.effort }
         : { ...input }
+    if (squadRole) receipt.push(`tier explícito: papel do squad (${squadRole.name}); modelo ${request.model ?? 'padrão'}`)
+    else if (input.model) receipt.push(`tier explícito: líder; modelo nomeado ${input.model}`)
+    else if (taskType) receipt.push(`${taskType.automatic !== true ? 'tier explícito: tabela' : 'modelo base: tabela'}; ${request.model ?? 'padrão'}`)
     let fallbackUsed = false
     if (options.explicitCli && request.cli !== options.explicitCli) {
       request.cli = options.explicitCli
@@ -3013,7 +3110,7 @@ export class OrbitCore {
     ) : undefined
     const work = request.role === 'crew' && !['operacao', 'documentacao'].includes(taskType?.id ?? '') ? designWork(`${taskType?.id ?? ''} ${input.title} ${assignmentText}`) : null
     const automatic = !harnessExplicit && (!harness?.selected || work) && request.role === 'crew' && (taskType || work) && this.catalog
-      ? automaticTaskSeat({ catalogForAccount: this.harnessMode === 'live' ? account => this.currentAccountCatalog(account) : undefined, catalog: this.catalog, preferred: { cli: request.cli as AgentCliForRole, model: request.model, effort: request.effort ?? null }, alternate: taskType?.alt, difficulty: options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal', design: work, allowed: mission.allowedClis, rooms: cli => this.rooms(cli, this.liveByAccount()).filter(r => this.accountStatus.get(r.account.id)?.loggedIn === true && !this.accountStatus.get(r.account.id)?.busy) }) : null
+      ? automaticTaskSeat({ catalogForAccount: this.harnessMode === 'live' ? account => this.currentAccountCatalog(account) : undefined, catalog: this.catalog, preferred: { cli: request.cli as AgentCliForRole, model: request.model, effort: request.effort ?? null }, alternate: taskType?.alt, difficulty: options.harnessTask?.difficulty ?? options.tier?.difficulty ?? 'normal', difficultyExplicit: options.tier?.explicit === true, design: work, allowed: mission.allowedClis, rooms: cli => this.rooms(cli, this.liveByAccount()).filter(r => this.accountStatus.get(r.account.id)?.loggedIn === true && !this.accountStatus.get(r.account.id)?.busy) }) : null
     // Once a catalog is available, autonomous staffing needs a valid quota and compatible model.
     if (!harnessExplicit && request.role === 'crew' && (taskType || work) && !automatic && (!harness?.selected || work)) throw new Error('Roteamento automático: nenhuma conta com quota válida e modelo compatível. Atualize os limites em Contas ou escolha uma conta explicitamente.')
     const measured = work ? automatic : harness?.selected ?? automatic
@@ -3092,17 +3189,23 @@ export class OrbitCore {
       chosen = choice.account
       receipt.push(`conta: ${choice.reason}`)
     }
-    // The difficulty moves the seat within the chosen CLI: a cheaper model or a stronger one.
+    // Suggested risk raises effort only; an explicit hard tier may also change the model family.
     if (chosen?.kind === 'api' && chosen.model && !input.model) request.model = chosen.model
-    if (!measured && (!harnessExplicit || request.role === 'lead') && options.tier && request.cli !== 'shell' && !(chosen?.kind === 'api' && chosen.model)) {
+    const applyTier = !harnessExplicit || request.role === 'lead' || (options.tier?.difficulty === 'dificil' && !input.model && !input.effort && !input.squadRoleId && !options.keep)
+    if (!measured && applyTier && options.tier && request.cli !== 'shell' && !(chosen?.kind === 'api' && chosen.model)) {
       const selectedCatalog = chosen && this.harnessMode !== 'simulated' ? this.currentAccountCatalog(chosen) : this.catalog?.[request.cli]
       const selectionCatalog = selectedCatalog ? { ...this.catalog, [request.cli]: selectedCatalog } as Catalog : this.catalog
-      const seat = seatForDifficulty(request.cli, request.model ?? null, request.effort ?? null, options.tier.difficulty, (model) => effortsFor(selectionCatalog, request.cli, model), selectedCatalog)
+      const seat = seatForDifficulty(request.cli, request.model ?? null, request.effort ?? null, options.tier.difficulty, (model) => effortsFor(selectionCatalog, request.cli, model), selectedCatalog, options.tier.explicit)
       if (seat.changed) {
         request.model = seat.model
         request.effort = request.role === 'crew' ? input.effort ?? seat.effort : seat.effort
         receipt.push(`dificuldade: ${options.tier.difficulty === 'dificil' ? 'difícil' : 'simples'} (${options.tier.by}) → ${[seat.model ?? 'modelo padrão', seat.effort && `esforço ${EFFORT_LABEL[seat.effort]}`].filter(Boolean).join(', ')}`)
       }
+    }
+    if (options.tier?.difficulty === 'dificil') {
+      receipt.push(options.tier.explicit
+        ? `tier explícito: líder; modelo ${request.model ?? 'padrão'}; esforço ${request.effort ?? 'padrão'}`
+        : `sugestão da regra: ${options.tier.by}; modelo mantido (tabela); esforço ${request.effort ?? 'padrão'}. Passe difficulty: "dificil" para subir o modelo.`)
     }
     const account = chosen ?? this.accountFor(request.cli, request.accountId)
     if (account) receipt.push(`conta efetiva: ${account.name} (${account.id})${input.accountId ? ' · escolha explícita, sem substituição' : ' · automática'}`)
@@ -3410,6 +3513,7 @@ export class OrbitCore {
     }
     this.store.upsertPane(pane)
     this.broadcast({ type: 'pane.updated', pane })
+    if (this.store.mission(pane.missionId)?.git) safe(() => this.observeWorktrees(pane.missionId), undefined)
   }
 
   private fail(error: unknown): void {
