@@ -1,3 +1,4 @@
+import { worktreeStatus } from './worktreeStatus.ts'
 import { providerSetup } from './providerSetup.ts'
 import { catalogRevision as revisionOfCatalog } from './catalogRevision.ts'
 import { AppPlugins } from './appPlugins.ts'
@@ -120,10 +121,13 @@ export interface CoreOptions {
   browser?: BrowserEngine | null
 }
 
+const WORKTREE_LABEL = { working: 'trabalhando', blocked: 'bloqueada', review: 'em revisão', done: 'concluída' } as const
+
 const SENSITIVE_SCOPE = /dados pessoais|personal data|migra[cç][aã]o|migration|seguran[cç]a|security/i
 
 /** Orbit's domain logic: UI messages, MCP tool calls and hook reports all land here. */
 export class OrbitCore {
+  private readonly worktreeStates = new Map<string, NonNullable<GitSummary['agents'][number]['status']>>()
   private readonly appPlugins:AppPlugins
   private readonly inputJournal: InputJournal
   private readonly translate: Translate
@@ -220,7 +224,12 @@ export class OrbitCore {
     for(const pane of this.store.snapshot().panes)this.panes.restoreHistory(pane)
     this.panes.on('terminated', (id, epoch) => this.store.releaseExecution(id, epoch))
     this.panes.on('receiptError', () => { /* Keep the persisted notice pending for a later dispatch. */ })
-    this.deliveryTimer = setInterval(() => this.dispatchDeliveries(), 2000)
+    this.deliveryTimer = setInterval(() => {
+      this.dispatchDeliveries()
+      for (const mission of this.store.snapshot().missions) {
+        if (mission.git && mission.status !== 'archived') safe(() => this.observeWorktrees(mission.id), undefined)
+      }
+    }, 2000)
     this.deliveryTimer.unref()
     this.panes.on('data', (paneId, data) => {
       if (data) this.quietActivity.set(paneId, { at: Date.now(), reported: false })
@@ -383,13 +392,80 @@ export class OrbitCore {
     return git.sub && pane.cwd.endsWith(`/${git.sub}`) ? pane.cwd.slice(0, -(git.sub.length + 1)) : pane.cwd
   }
 
+  /** Includes retained attempts, so closing a terminal cannot hide its unfinished copy. */
+  private worktreePanes(missionId: string): Pane[] {
+    const history = this.store.activityHistory(missionId)
+    const panes = [
+      ...this.missionPanes(missionId),
+      ...history.attempts.flatMap(a => a.pane ? [a.pane] : []),
+      ...this.store.delegations(missionId).map(d => d.pane),
+    ]
+    const unique = new Map<number, Pane>()
+    for (const pane of panes) if (!unique.has(pane.id)) unique.set(pane.id, pane)
+    return [...unique.values()]
+  }
+
+  private worktreeAgents(missionId: string): GitSummary['agents'] {
+    const git = this.store.mission(missionId)?.git
+    if (!git) return []
+    const history = this.store.activityHistory(missionId)
+    const agents: GitSummary['agents'] = this.worktreePanes(missionId).filter(p => p.branch && p.branch !== git.branch).map(p => {
+      const dirty = dirtyFiles(this.worktreeOf(p, git))
+      const attempt = this.store.currentPaneAttempt(p.id)
+      const activity = attempt && history.activities.find(a => a.id === attempt.activityId)
+      const result = activity && history.results.findLast(r => r.attemptId === activity.activeAttemptId && r.activityRevision === activity.revision && r.status !== 'auto')
+      const required = !!activity && this.reviewRequired(missionId, activity.id)
+      const accepted = !!activity && safe(() => { this.acceptedResult(missionId, activity.id, new Set(), true); return true }, false)
+      return { paneId: p.id, title: p.title, branch: p.branch!, ahead: safe(() => commitsAhead(git.repo, git.branch, p.branch!).length, 0), dirty,
+        status: worktreeStatus({ alive: this.panes.isAlive(p.id), waiting: p.status === 'waiting', dirty: dirty.length > 0, result: result?.status ?? null, reviewRequired: required, accepted }) }
+    })
+    // UI-created terminals may close before an activity/result was ever recorded.
+    const root = join(this.dataDir, 'worktrees', missionId)
+    for (const entry of safe(() => readdirSync(root), [] as string[])) {
+      if (!/^\d+$/.test(entry) || agents.some(a => a.paneId === Number(entry))) continue
+      const path = join(root, entry)
+      if (!statSync(path).isDirectory()) continue
+      const branch = repoInfo(path).branch ?? `${git.branch}--${entry}`
+      agents.push({ paneId: Number(entry), title: `Agente #${entry}`, branch, ahead: safe(() => commitsAhead(git.repo, git.branch, branch).length, 0), dirty: dirtyFiles(path), status: 'working' })
+    }
+    return agents
+  }
+
+  /** Initial observation is silent, including after reopening the app. Never writes to a PTY. */
+  private observeWorktrees(missionId: string, agents = this.worktreeAgents(missionId)): void {
+    for (const agent of agents) {
+      const key = `${missionId}:${agent.paneId}`
+      const previous = this.worktreeStates.get(key)
+      const status = agent.status!
+      this.worktreeStates.set(key, status)
+      if (previous && previous !== status) this.event(missionId, 'worktree', `Cópia de #${agent.paneId}: ${WORKTREE_LABEL[status]}`, `${agent.branch}: ${WORKTREE_LABEL[previous]} → ${WORKTREE_LABEL[status]}`, agent.paneId)
+    }
+  }
+
+  /** Read-only admission: every refusal precedes push, PR files, terminal closure and removal. */
+  private landCheck(missionId: string): void {
+    const git = this.store.mission(missionId)?.git
+    if (!git) return
+    const pending: string[] = []
+    for (const agent of this.worktreeAgents(missionId)) {
+      if (agent.status !== 'done' || agent.dirty.length) pending.push(`#${agent.paneId} (${agent.branch}): ${WORKTREE_LABEL[agent.status!]}${agent.dirty.length ? `; ${agent.dirty.length} arquivo(s) sem commit` : ''}`)
+    }
+    const root = join(this.dataDir, 'worktrees', missionId)
+    for (const entry of safe(() => readdirSync(root), [] as string[])) {
+      const path = join(root, entry)
+      if (!statSync(path).isDirectory()) continue
+      const dirty = dirtyFiles(path)
+      if (dirty.length) pending.push(`${path}: ${dirty.length} arquivo(s) sem commit; cópia mantida`)
+    }
+    if (pending.length) throw new Error(`Cópias pendentes; nenhuma cópia foi removida nem branch enviado:\n${pending.join('\n')}`)
+  }
+
   /** Commits and files of the mission branch against its base, and every agent's branch. */
   gitSummary(missionId: string): GitSummary {
     const git = this.store.mission(missionId)?.git
     if (!git) throw new Error('Esta missão não usa um branch por agente')
-    const agents = this.missionPanes(missionId)
-      .filter((p) => p.branch && p.branch !== git.branch)
-      .map((p) => ({ paneId: p.id, title: p.title, branch: p.branch!, ahead: safe(() => commitsAhead(git.repo, git.branch, p.branch!).length, 0), dirty: safe(() => dirtyFiles(this.worktreeOf(p, git)), []) }))
+    const agents = this.worktreeAgents(missionId)
+    this.observeWorktrees(missionId, agents)
     return {
       base: git.base,
       branch: git.branch,
@@ -405,10 +481,14 @@ export class OrbitCore {
     const mission = this.store.mission(missionId)
     const git = mission?.git
     if (!mission || !git) throw new Error('Esta missão não usa um branch por agente')
-    if (git.pr) return this.prStatus(missionId)
+    if (git.pr) {
+      this.landCheck(missionId)
+      return this.prStatus(missionId)
+    }
     const title = requireText(rawTitle, 'título do PR', 200)
     if (!hasRemote(git.repo)) throw new Error('O repositório não tem um remoto "origin" para enviar o branch')
     if (commitsAhead(git.repo, git.base, git.branch).length === 0) throw new Error(`O branch ${git.branch} ainda não tem commits além de ${git.base}`)
+    this.landCheck(missionId)
     pushBranch(git.leadPath, git.branch)
     const bodyFile = join(this.dataDir, 'worktrees', missionId, 'pr-body.md')
     writeFileSync(bodyFile, String(body ?? '').slice(0, 60_000), { mode: 0o600 })
@@ -435,6 +515,11 @@ export class OrbitCore {
     const mission = this.store.mission(missionId)
     const git = mission?.git
     if (!git) return
+    // Archiving is never refused: with pending work every copy stays and the reasons go to the flow.
+    try { this.landCheck(missionId) } catch (error) {
+      this.event(missionId, 'pane.exited', 'Cópias mantidas', (error as Error).message, null)
+      return
+    }
     const root = join(this.dataDir, 'worktrees', missionId)
     const kept: string[] = []
     for (const entry of safe(() => readdirSync(root), [] as string[])) {
@@ -2496,6 +2581,7 @@ export class OrbitCore {
     }
     const alreadyCompleted = readySummary !== undefined && this.store.verifications(caller.missionId).some(v => v.inspectionId === input.inspectionId && v.completion)
     const record = this.store.saveVerification(inspection, result, input, readySummary)
+    if (this.store.mission(caller.missionId)?.git) this.observeWorktrees(caller.missionId)
     // Terminate the exact accepted execution, retaining the pane and its durable terminal history.
     // A report, process exit or rejected review alone never triggers automatic closure.
     if (inspection.scope === 'result' && input.verdict === 'accepted') {
@@ -2710,6 +2796,7 @@ export class OrbitCore {
     const policy = this.store.executionPolicy(caller.id)
     const source = status === 'done' && caller.cli !== 'shell' ? sourceRevision(policy?.roots ?? copyRoots([caller.cwd]), [this.dataDir]) : undefined
     const committed = this.store.commitActivityResult(caller, { status, summary: text, evidence, details: [criteria, details].filter(Boolean).join('\n\n'), deliveredTo, ...(source ? { source } : {}) }, { title, body }, result => this.handoffWake(caller, result, notificationText, met))
+    if (this.store.mission(caller.missionId)?.git) this.observeWorktrees(caller.missionId)
     const resultId = committed.result.id
     this.dispatchDeliveries(caller.missionId)
     if (committed.duplicate) return { deliveredTo, status, resultId, duplicate: true }
@@ -3426,6 +3513,7 @@ export class OrbitCore {
     }
     this.store.upsertPane(pane)
     this.broadcast({ type: 'pane.updated', pane })
+    if (this.store.mission(pane.missionId)?.git) safe(() => this.observeWorktrees(pane.missionId), undefined)
   }
 
   private fail(error: unknown): void {

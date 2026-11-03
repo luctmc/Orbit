@@ -137,6 +137,8 @@ export interface MissionGit {
   pr: { number: number; url: string } | null
 }
 
+export type WorktreeStatus = 'working' | 'blocked' | 'review' | 'done'
+
 /** What a mission branch has, for the PR. */
 export interface GitSummary {
   base: string
@@ -144,7 +146,7 @@ export interface GitSummary {
   commits: Array<{ sha: string; subject: string }>
   files: Array<{ path: string; added: number | null; removed: number | null }>
   /** Each agent's branch: commits the mission branch does not have yet, and uncommitted files. */
-  agents: Array<{ paneId: number; title: string; branch: string; ahead: number; dirty: string[] }>
+  agents: Array<{ paneId: number; title: string; branch: string; ahead: number; dirty: string[]; status?: WorktreeStatus }>
   remote: boolean
 }
 
@@ -890,7 +892,7 @@ export interface Card {
   updatedAt: number
 }
 
-export type MissionEventKind = 'mission.created' | 'mission.ready' | 'proposal' | 'lead.changed' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'pane.quiet' | 'handoff' | 'browser' | 'budget' | 'rescue'
+export type MissionEventKind = 'mission.created' | 'mission.ready' | 'proposal' | 'lead.changed' | 'pane.spawned' | 'pane.exited' | 'pane.waiting' | 'pane.quiet' | 'handoff' | 'browser' | 'budget' | 'rescue' | 'worktree'
 
 export interface MissionEvent {
   id: string
