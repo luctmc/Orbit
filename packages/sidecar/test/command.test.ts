@@ -125,3 +125,21 @@ test('Claude reaplica o role no resume somente quando refreshRole é explícito'
     assert.ok(command.includes(launch.taskPath))
   }
 })
+
+test('configuration isolation applies only to explicitly identified Claude helpers', () => {
+  const base = { cli: 'claude' as const, model: null, addDirs: ['/workspace'], settingsPath: '/pane/settings.json', mcpConfigPath: '/pane/mcp.json', toolProfile: 'orbit' as const }
+  const isolation = { configIsolation: true, agentRole: 'crew' as const, skillsDir: '/data/agent-skills' }
+  const line = buildCommand({ ...base, ...isolation }, '/bin/sh').args[2]!
+  assert.match(line, /--setting-sources project,local(?: |$)/)
+  assert.doesNotMatch(line, /--setting-sources project(?: |$)/)
+  assert.match(line, /--add-dir '\/data\/agent-skills'/)
+  assert.match(line, /--settings '\/pane\/settings.json'/)
+  assert.match(line, /--strict-mcp-config/)
+  for (const cli of ['claude', 'codex', 'gemini'] as const) {
+    const launch = { ...base, cli, toolProfile: 'inherit' as const }
+    for (const disabled of [{ ...isolation, configIsolation: false }, { ...isolation, agentRole: 'lead' as const }, { ...isolation, agentRole: undefined }]) {
+      assert.deepEqual(buildCommand({ ...launch, ...disabled }, '/bin/sh'), buildCommand(launch, '/bin/sh'))
+    }
+    if (cli !== 'claude') assert.deepEqual(buildCommand({ ...launch, ...isolation }, '/bin/sh'), buildCommand(launch, '/bin/sh'))
+  }
+})

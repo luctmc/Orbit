@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -102,5 +102,70 @@ test('profile changes affect the next native opening, retain writable capabiliti
     assert.equal(launches.at(-1)!.sandbox, 'danger-full-access')
     const { pane: other } = await core.spawnHelper(currentLead, { cli: 'gemini', model: null, readOnly: true, task: 'Read', title: 'Other adapter' })
     assert.equal(other.toolProfile, 'inherit')
+  } finally { await core.shutdown() }
+})
+
+test('isolation settings default safely, validate saved and incoming values and preserve legacy updates', () => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-isolation-store-')), store = new Store(root)
+  assert.equal(store.settings().agentConfigIsolation, false)
+  assert.deepEqual(store.settings().agentSkillAllowlist, ['unslop'])
+  store.saveSettings({ ...store.settings(), agentConfigIsolation: true, agentSkillAllowlist: ['custom-skill'] })
+  store.saveSettings({ resumeOnStart: true, smartClassify: false, agentsInEnglish: true })
+  assert.equal(store.settings().agentConfigIsolation, true)
+  assert.deepEqual(store.settings().agentSkillAllowlist, ['custom-skill'])
+  store.flush()
+  assert.deepEqual(new Store(root).settings().agentSkillAllowlist, ['custom-skill'])
+  for (const value of [['../escape'], ['bad/name'], ['.hidden'], ['Upper'], ['a'.repeat(65)], ['x', 'x'], Array.from({ length: 21 }, (_, i) => `s${i}`), 'unslop', null]) {
+    store.saveSettings({ ...store.settings(), agentSkillAllowlist: value as never })
+    assert.deepEqual(store.settings().agentSkillAllowlist, ['unslop'])
+  }
+  for (const value of [null, 'true', 1]) {
+    store.saveSettings({ ...store.settings(), agentConfigIsolation: true })
+    store.saveSettings({ ...store.settings(), agentConfigIsolation: value as never })
+    assert.equal(store.settings().agentConfigIsolation, false)
+  }
+  store.saveSettings({ ...store.settings(), agentSkillAllowlist: [] })
+  assert.deepEqual(store.settings().agentSkillAllowlist, [])
+  store.flush()
+  const path = join(root, 'state.json'), state = JSON.parse(readFileSync(path, 'utf8'))
+  for (const settings of [{ agentConfigIsolation: 'true', agentSkillAllowlist: ['../escape'] }, {}]) {
+    state.settings = { resumeOnStart: true, smartClassify: true, agentsInEnglish: true, ...settings }
+    writeFileSync(path, JSON.stringify(state))
+    const restored = new Store(root)
+    assert.equal(restored.settings().agentConfigIsolation, false)
+    assert.deepEqual(restored.settings().agentSkillAllowlist, ['unslop'])
+  }
+})
+
+test('core isolates only future Claude helpers and leaves the leader and other adapters unchanged', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'orbit-isolation-core-')), launches: AgentLaunch[] = []
+  const core = new OrbitCore({ dataDir: join(root, 'data'), shell: '/bin/sh', browser: null, broadcast: () => {}, run: async () => ({ code: 127, stdout: '', stderr: 'offline' }),
+    agentCommand: launch => { launches.push(structuredClone(launch)); return { file: '/bin/sh', args: ['-c', 'while read line; do :; done'] } },
+  })
+  core.setEndpoint('http://127.0.0.1:1')
+  try {
+    core.store.saveSettings({ ...core.store.settings(), agentConfigIsolation: true, agentSkillAllowlist: [] })
+    core.handle({ type: 'workspace.open', path: root })
+    core.handle({ type: 'mission.create', workspaceId: core.store.snapshot().workspaces[0]!.id, title: 'Isolation', objective: '', mode: 'agentica', allowedClis: ['claude', 'codex', 'gemini'], lead: { cli: 'claude', model: 'claude-haiku-5-5', title: 'Lead' } })
+    const lead = core.store.snapshot().panes.find(p => p.role === 'lead')!
+    assert.equal(launches[0]!.configIsolation, undefined)
+    assert.equal(existsSync(join(root, 'data', 'agent-skills')), false)
+    const { pane: helper } = await core.spawnHelper(lead, { cli: 'claude', model: 'claude-haiku-5-5', task: 'Implement', title: 'Helper' })
+    const isolated = launches.at(-1)!
+    assert.equal(isolated.configIsolation, true)
+    assert.equal(isolated.agentRole, 'crew')
+    assert.equal(isolated.skillsDir, join(realpathSync(join(root, 'data')), 'agent-skills'))
+    assert.ok(isolated.addDirs!.length)
+    assert.match(buildCommand(isolated, '/bin/sh').args[2]!, /--setting-sources project,local/)
+    for (const cli of ['codex', 'gemini'] as const) {
+      await core.spawnHelper(lead, { cli, model: null, task: `Read with ${cli}`, title: cli })
+      assert.equal(launches.at(-1)!.configIsolation, undefined)
+      assert.equal(launches.at(-1)!.skillsDir, undefined)
+    }
+    core.store.saveSettings({ ...core.store.settings(), agentConfigIsolation: false })
+    assert.equal(isolated.configIsolation, true)
+    await core.handle({ type: 'pane.restart', paneId: helper.id, resume: false })
+    assert.equal(launches.at(-1)!.configIsolation, undefined)
+    assert.equal(launches.at(-1)!.skillsDir, undefined)
   } finally { await core.shutdown() }
 })

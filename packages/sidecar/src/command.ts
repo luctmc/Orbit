@@ -10,6 +10,9 @@ export interface PaneCommand {
 /** Files Orbit prepared for this agent; every path is ours, never user text. */
 export interface AgentLaunch {
   toolProfile?: 'orbit' | 'inherit'
+  configIsolation?: boolean
+  agentRole?: 'lead' | 'crew'
+  skillsDir?: string
   cli: AgentCli
   model: string | null
   effort?: Effort | null
@@ -100,6 +103,11 @@ export function buildCommand(launch: AgentLaunch, shell: string): PaneCommand {
     if (launch.toolProfile === 'orbit') {
       if (!launch.mcpConfigPath) throw new Error('O perfil Orbit exige uma configuração MCP explícita')
       parts.push('--strict-mcp-config')
+    }
+    if (launch.configIsolation && launch.agentRole === 'crew') {
+      // Including local is required for the hooks supplied through --settings to fire.
+      parts.push('--setting-sources', 'project,local')
+      if (launch.skillsDir) parts.push('--add-dir', shellQuote(launch.skillsDir))
     }
     if (launch.settingsPath) parts.push('--settings', shellQuote(launch.settingsPath))
     // Retenção comprovada pelo Maestro em Claude 2.1.312 -p; modo interativo não foi testado.

@@ -926,6 +926,8 @@ export type AgentToolProfile = 'orbit' | 'inherit'
 export interface OrbitSettings {
   /** Claude/Codex external MCP visibility on the next opening or resume; native tools remain. */
   agentToolProfile?: AgentToolProfile
+  agentConfigIsolation?: boolean
+  agentSkillAllowlist?: string[]
   /** When Orbit opens, bring back the agents of active missions in their conversations. */
   resumeOnStart: boolean
   /** When no keyword tells an activity's type, a small model (Claude Haiku) decides. */

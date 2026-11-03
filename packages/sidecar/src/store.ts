@@ -26,7 +26,12 @@ export const RESCUE_FAILURE_LIMIT = 3
 /** Razões e evidências precisam descrever algo além de um pedido vazio de retry. */
 export const RESCUE_MIN_TEXT_LENGTH = 20
 const EVENTS_PER_MISSION = 200
-const DEFAULT_SETTINGS: OrbitSettings = { resumeOnStart: true, smartClassify: true, agentsInEnglish: true, agentToolProfile: 'orbit' }
+const DEFAULT_SETTINGS: OrbitSettings = { resumeOnStart: true, smartClassify: true, agentsInEnglish: true, agentToolProfile: 'orbit', agentConfigIsolation: false, agentSkillAllowlist: ['unslop'] }
+function skillAllowlist(value: unknown): string[] {
+  return Array.isArray(value) && value.length <= 20 && new Set(value).size === value.length
+    && value.every(name => typeof name === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(name))
+    ? [...value] : ['unslop']
+}
 const PROPOSALS_KEPT = 50
 
 export interface DelegationRecord {
@@ -111,6 +116,8 @@ export class Store {
     this.migrateFactorySeats()
     this.state.settings = { ...DEFAULT_SETTINGS, ...this.state.settings }
     if (this.state.settings.agentToolProfile !== 'orbit' && this.state.settings.agentToolProfile !== 'inherit') this.state.settings.agentToolProfile = 'orbit'
+    this.state.settings.agentConfigIsolation = this.state.settings.agentConfigIsolation === true
+    this.state.settings.agentSkillAllowlist = skillAllowlist(this.state.settings.agentSkillAllowlist)
     this.state.proposals ??= []
     this.state.disabledCatalog ??= []
     this.state.paneSpecs ??= {}
@@ -827,13 +834,16 @@ export class Store {
 
   /** null restores the default table. */
   settings(): OrbitSettings {
-    return { ...this.state.settings }
+    return { ...this.state.settings, agentSkillAllowlist: [...(this.state.settings.agentSkillAllowlist ?? ['unslop'])] }
   }
 
   saveSettings(settings: OrbitSettings): OrbitSettings {
     const profile = settings?.agentToolProfile ?? this.state.settings.agentToolProfile ?? 'orbit'
     if (profile !== 'orbit' && profile !== 'inherit') throw new Error('Perfil de ferramentas inválido')
-    this.state.settings = { resumeOnStart: settings?.resumeOnStart === true, smartClassify: settings?.smartClassify === true, agentsInEnglish: settings?.agentsInEnglish !== false, agentToolProfile: profile }
+    this.state.settings = { resumeOnStart: settings?.resumeOnStart === true, smartClassify: settings?.smartClassify === true, agentsInEnglish: settings?.agentsInEnglish !== false, agentToolProfile: profile,
+      agentConfigIsolation: (settings?.agentConfigIsolation === undefined ? this.state.settings.agentConfigIsolation : settings.agentConfigIsolation) === true,
+      agentSkillAllowlist: skillAllowlist(settings?.agentSkillAllowlist === undefined ? this.state.settings.agentSkillAllowlist : settings.agentSkillAllowlist),
+    }
     this.save()
     return this.settings()
   }
