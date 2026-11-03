@@ -450,6 +450,7 @@ export class OrbitCore {
     if (!this.store.workspace(message.workspaceId)) throw new Error('Workspace desconhecido')
     if (!MODES.includes(message.mode)) throw new Error(`Modo inválido: ${message.mode}`)
     const title = requireText(message.title, 'título', 120)
+    if (message.mode === 'squad') this.store.refreshRepositorySquad()
     const squad = message.mode === 'squad' ? this.store.squad(message.squadId ?? '') : undefined
     if (message.mode === 'squad' && !squad) throw new Error('Escolha um squad para a missão')
     const workspace = this.store.workspace(message.workspaceId)!
@@ -462,6 +463,7 @@ export class OrbitCore {
       if (!BRANCH.test(branch)) throw new Error(`Não consegui montar um nome de branch para "${title}"`)
       git = (id) => ({ repo: info.top, sub: info.sub, base: info.branch!, branch, leadPath: join(this.dataDir, 'worktrees', id, 'lider'), pr: null })
     }
+    // Selection was refreshed above, before validation; do not scan it again.
     const mission = this.store.createMission({
       workspaceId: message.workspaceId,
       title,
@@ -470,7 +472,7 @@ export class OrbitCore {
       squadId: squad?.id ?? null,
       allowedClis: allowedClis(message.allowedClis),
       budget: freshBudget(budgetLimits(message.budget)),
-    }, git, schedule?.id ?? null)
+    }, git, schedule?.id ?? null, false)
     this.broadcast({ type: 'mission.updated', mission })
     const opening = squad ? `Squad ${squad.name}. ${mission.objective || 'Sem objetivo descrito.'}` : mission.objective || 'Sem objetivo descrito.'
     this.event(mission.id, 'mission.created', startedBy ? `Missão agendada iniciada (${startedBy})` : 'Missão iniciada', opening, null)
