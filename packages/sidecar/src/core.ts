@@ -1,3 +1,4 @@
+import { prepareAgentSkills } from './agentSkills.ts'
 import { worktreeStatus } from './worktreeStatus.ts'
 import { providerSetup } from './providerSetup.ts'
 import { catalogRevision as revisionOfCatalog } from './catalogRevision.ts'
@@ -3304,6 +3305,11 @@ export class OrbitCore {
 
     if (request.cli === 'codex') launch.disabledMcp = codexDisabledMcp(this.store.disabledCatalog())
     launch.toolProfile = toolProfile
+    if (request.cli === 'claude' && request.role === 'crew' && this.store.settings().agentConfigIsolation) {
+      launch.configIsolation = true
+      launch.agentRole = request.role
+      launch.skillsDir = prepareAgentSkills(this.dataDir, this.store.settings().agentSkillAllowlist ?? ['unslop'])
+    }
     // Capabilities never depend on assignment scope, role or legacy persisted sandbox hints.
     if (request.cli === 'codex') launch.sandbox = 'danger-full-access'
     if (options.resume) launch.resume = options.resume

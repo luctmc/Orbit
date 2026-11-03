@@ -212,6 +212,10 @@ function ResumeOnStart() {
         <span>Claude e Codex carregam só as ferramentas do Orbit, além das ferramentas nativas de código. Desmarque para incluir todas as integrações configuradas. Vale na próxima abertura ou retomada; uma conversa nova evita carregar o contexto antigo.</span>
       </label>
       <label className="check">
+        <input type="checkbox" checked={settings.agentConfigIsolation === true} onChange={(e) => save({ agentConfigIsolation: e.target.checked })} />
+        <span>Isolar a configuração global dos ajudantes Claude <small>Os ajudantes não carregam suas skills, plugins nem hooks globais; só o unslop e as ferramentas do Orbit. Economiza cerca de 15 mil tokens por ajudante. Vale na próxima abertura de um ajudante.</small></span>
+      </label>
+      <label className="check">
         <input type="checkbox" checked={settings.smartClassify} onChange={(e) => save({ smartClassify: e.target.checked })} />
         <span>Quando nenhuma palavra diz o tipo da atividade, o Claude Haiku decide pela tabela (alguns segundos e uma fração de centavo; sem ele, vale o tipo padrão)</span>
       </label>
