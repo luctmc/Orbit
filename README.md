@@ -359,7 +359,7 @@ prompt; texto livre nunca vai direto para a linha de comando. O token do agente 
 ambiente dele (`ORBIT_PANE_TOKEN`) e o auto-update do Claude fica desligado nos agentes, para
 vários processos não atualizarem a mesma instalação ao mesmo tempo.
 
-O encerramento do CLI encerra o pane com seu status real. No Codex só leitura, pastas extras são referenciadas pelo caminho absoluto, sem solicitar raízes graváveis com `--add-dir`. Para um diagnóstico opt-in com as contas Claude/Codex autenticadas, execute `node scripts/verify-live-clis.mjs --live`; ele lê um arquivo sintético e verifica o retorno MCP, consumindo uso das contas. A [análise do Overclock e validação real](docs/analysis/overclock-runtime-followup.md) detalha evidências e limites.
+O encerramento do CLI encerra o pane com seu status real. No Codex só leitura, pastas extras são referenciadas pelo caminho absoluto, sem solicitar raízes graváveis com `--add-dir`. Para um diagnóstico opt-in com as contas Claude/Codex autenticadas, execute `node scripts/verify-live-clis.mjs --live`; ele lê um arquivo sintético e verifica o retorno MCP, consumindo uso das contas. A análise interna de validação (não incluída na distribuição pública) detalha evidências e limites.
 
 ### Publicar uma versão
 
