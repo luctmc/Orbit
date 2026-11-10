@@ -1,9 +1,0 @@
-{
-  "temp": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-prediction-qa-4OitZK",
-  "root": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-prediction-qa-4OitZK/workspace",
-  "port": 4328,
-  "missionId": "5f034efe-9b2c-465e-9447-32de74b2ffd0",
-  "leadId": 1,
-  "workerId": 2,
-  "submissions": "/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-prediction-qa-4OitZK/submissions.jsonl"
-}

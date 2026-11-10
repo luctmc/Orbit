@@ -1,8 +1,0 @@
-(node:6878) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-(Use `node --trace-warnings ...` to show where the warning was created)
-startup [
-  { kind: [32m'orbit-plugin-host-ready'[39m },
-  { channel: [32m'strict-csp-fixture'[39m, kind: [32m'ready'[39m }
-]
-CSP console: Refused to connect to http://127.0.0.1:5509/never because it does not appear in the connect-src directive of the Content Security Policy.
-webkit production CSP + opaque frame + static controller + worker: PASS

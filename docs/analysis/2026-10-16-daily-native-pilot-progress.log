@@ -1,4 +1,0 @@
-{"phase":"spawned","caseId":"op-build","cli":"codex","model":"gpt-6-luna","paneId":2}
-{"phase":"observed","caseId":"op-build","delivered":false,"error":"infrastructure","message":"Prazo de 180 s excedido; não haverá repetição automática","tokens":null}
-{"phase":"spawned","caseId":"bug-mean","cli":"codex","model":"gpt-6-luna","paneId":2}
-{"phase":"observed","caseId":"bug-mean","delivered":false,"error":"infrastructure","message":"Prazo de 180 s excedido; não haverá repetição automática","tokens":null}

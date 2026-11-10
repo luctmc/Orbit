@@ -1,7 +1,0 @@
-{
-  "packages": 5,
-  "adapterResources": 20,
-  "manifestVerified": true,
-  "hashesMatchSource": true,
-  "root": "apps/desktop/src-tauri/target/debug/bundle/macos/Orbit.app/Contents/Resources/sidecar/resources/skills"
-}

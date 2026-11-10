@@ -1,6 +1,0 @@
-{"phase":"spawned","caseId":"op-build","cli":"codex","model":"gpt-6-luna","paneId":2}
-{"phase":"folder-trust-confirmed","caseId":"op-build","workspace":"/private/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-native-harness-9lF4lP/9470fbf2-b7f5-49c4-a750-bce5fb50b1ad/workspace"}
-{"phase":"observed","caseId":"op-build","delivered":false,"error":"infrastructure","message":"Orçamento do piloto atingido","tokens":41314}
-{"phase":"spawned","caseId":"bug-mean","cli":"codex","model":"gpt-6-luna","paneId":2}
-{"phase":"folder-trust-confirmed","caseId":"bug-mean","workspace":"/private/var/folders/d2/vsy5l5wx56z8mmgm1bmzmplm0000gn/T/orbit-native-harness-9lF4lP/13b9554b-da9c-4f5d-83bd-0d2d2de4b9cd/workspace"}
-{"phase":"observed","caseId":"bug-mean","delivered":false,"error":"infrastructure","message":"Orçamento do piloto atingido","tokens":42951}
