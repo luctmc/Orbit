@@ -37,6 +37,8 @@ for (const file of files) {
       if (type === "email") {
         const domain = m[0].split("@").at(-1).toLowerCase();
         if (allowedDomains.has(domain) || (domain === "github.com" && /noreply/i.test(m[0]))) continue;
+        // File names such as 128x128@2x.png are not email addresses.
+        if (/\.(?:png|jpe?g|webp|gif|ico|icns|svg)$/i.test(m[0])) continue;
       }
       if (type.endsWith("-home")) {
         const name = m[0].replaceAll("\\", "/").split("/").at(-1);

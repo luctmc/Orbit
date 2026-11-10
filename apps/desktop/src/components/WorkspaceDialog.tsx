@@ -62,7 +62,7 @@ function FolderListField({ folders, onChange }: { folders: string[]; onChange: (
         )}
         <label className="sr-only" htmlFor={`${id}-typed`}>Caminho absoluto de uma pasta</label>
         <input id={`${id}-typed`} className="mono" value={typed} onChange={(e) => setTyped(e.target.value)} spellCheck={false}
-          placeholder={isTauri ? 'Ou cole o caminho da pasta' : '/Users/voce/projetos/meu-app'}
+          placeholder={isTauri ? 'Ou cole o caminho da pasta' : '/Users/USER/projects/my-app'}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add([typed]); setTyped('') } }} />
         <button type="button" className="btn btn--ghost btn--sm" disabled={!typed.trim() || folders.length >= WORKSPACE_LIMITS.folders} onClick={() => { add([typed]); setTyped('') }}><PlusIcon size={14} />Adicionar</button>
       </div>

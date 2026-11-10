@@ -36,3 +36,12 @@ For a separate history scan, install Gitleaks and run:
 \`\`\`bash
 gitleaks git --redact --log-opts="--all" .
 \`\`\`
+
+
+## 2026-11-10 public-tree minimization
+
+The public branch removes historical experiment outputs from `docs/analysis/`, `docs/plans/` and `docs/reverse-engineering/` because they include local machine paths, runtime snapshots, screenshots and account-related artifacts. This removal deliberately does **not** erase their historical Git blobs, and does **not** prove absence of sensitive data in older commits, branches, releases or mirrors. Ensure the maintainer keeps any necessary private archival copies prior to changing the public branch. The remaining source and tests use synthetic account identities; the publication scanner intentionally ignores `example.com` and `example.invalid` examples. Existing production functionality and test suites must continue passing.
+
+## Historical commit metadata
+
+Repository authorship metadata in earlier commits includes a full personal name and a real Outlook email address. That information is still visible through the Git history after a normal merge. Use GitHub's noreply email for future commits. Correcting old commits would require a carefully coordinated history rewrite; do not perform one automatically because it rewrites SHAs and may disrupt signed releases, branches, PRs, forks and collaborator clones. Evaluate whether the user's publication/privacy requirement calls for a fresh sanitized public repository instead.

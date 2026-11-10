@@ -51,7 +51,7 @@ test('accounts: each runs in its own folder, keys stay in the sidecar, logins op
   const run: Run = async (command) => {
     ran.push(command)
     const extra = command.startsWith('CLAUDE_CONFIG_DIR=') || command.startsWith('CODEX_HOME=')
-    if (command.endsWith('claude auth status')) return { code: 0, stdout: JSON.stringify(extra ? { loggedIn: false, authMethod: 'none' } : { loggedIn: true, authMethod: 'claude.ai', email: 'pessoa@exemplo.dev', subscriptionType: 'max' }), stderr: '' }
+    if (command.endsWith('claude auth status')) return { code: 0, stdout: JSON.stringify(extra ? { loggedIn: false, authMethod: 'none' } : { loggedIn: true, authMethod: 'claude.ai', email: 'pessoa@example.com', subscriptionType: 'max' }), stderr: '' }
     if (command.endsWith('codex login status')) return { code: 0, stdout: extra ? 'Not logged in\n' : 'Logged in using ChatGPT\n', stderr: '' }
     if (command.includes('codex login --with-api-key <')) return { code: 0, stdout: 'Successfully logged in\n', stderr: '' }
     return { code: 127, stdout: '', stderr: 'offline' }
@@ -69,7 +69,7 @@ test('accounts: each runs in its own folder, keys stay in the sidecar, logins op
     await ui.opened
     const { snapshot } = await ui.next('snapshot')
     assert.deepEqual(snapshot.accounts.map((a) => a.id), ['claude', 'codex', 'gemini', 'antigravity'])
-    await ui.next('account.status', (m) => m.statuses.find((s) => s.accountId === 'claude')?.email === 'pessoa@exemplo.dev')
+    await ui.next('account.status', (m) => m.statuses.find((s) => s.accountId === 'claude')?.email === 'pessoa@example.com')
 
     // A Claude account on an Anthropic-compatible provider.
     ui.send({ type: 'account.save', account: { cli: 'claude', name: 'OpenRouter', kind: 'api', baseUrl: 'https://openrouter.ai/api', model: 'anthropic/claude-sonnet-5.5', key: KEY } })

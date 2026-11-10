@@ -35,3 +35,8 @@ auth.json
 .orbit/
 .local/
 .private/
+
+# Generated diagnostics, captured accounts, archived evidence
+docs/analysis/
+docs/plans/
+docs/reverse-engineering/

@@ -8,7 +8,7 @@ import { fileDiff, folderStatus, folderTree, insideFolder, parseNumstat, parseSt
 import { startServer } from '../src/server.ts'
 import { connect, offline, ORIGIN, TOKEN } from './helpers.ts'
 
-const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, '-c', 'user.name=Teste', '-c', 'user.email=teste@exemplo.dev', '-c', 'init.defaultBranch=main', ...args], { encoding: 'utf8' })
+const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, '-c', 'user.name=Teste', '-c', 'user.email=teste@example.com', '-c', 'init.defaultBranch=main', ...args], { encoding: 'utf8' })
 
 /** A repository with one commit and then every kind of change. */
 function repo(): string {
