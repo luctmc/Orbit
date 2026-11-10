@@ -1,6 +1,0 @@
-npm notice run typecheck
-npm notice run npm run typecheck --workspaces --if-present
-npm notice run @orbit/protocol@0.1.0 typecheck
-npm notice run tsc -p .
-npm notice run @orbit/sidecar@0.1.0 typecheck
-npm notice run @orbit/desktop@0.2.14 typecheck

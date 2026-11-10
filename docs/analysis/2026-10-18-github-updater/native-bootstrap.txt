@@ -1,6 +1,0 @@
-Validação via CUA no aplicativo /Applications/Orbit.app, build local 0.2.31:
-- Antes do fix F-165: painel informou "Could not fetch a valid release JSON from the remote".
-- Após primeiro rebuild: mudança de revisão com dois PTYs ativos reproduziu F-166: "O motor do Orbit caiu várias vezes; reabra o app". Diagnóstico direto do sidecar confirmou ensureRuntimeDaemon rejeitando o motor anterior.
-- Após correção F-166, rebuild e atualização da mesma instalação: painel carregou catálogo/contas do motor preservado, exibiu "atualizado", "VERSÃO 0.2.31", "MAIS RECENTE v0.2.31", "RELEASES luctmc/Orbit", sem mensagem de erro. A busca usa a release GitHub real, sem ORBIT_UPDATE_DIR.
-- Motor de usuário permaneceu PID 45180, instanceId 8dc0256ad406f30f351b3bc2956ef062, live=2; nenhum processo de usuário foi interrompido.
-- Finalização exige ainda Official release e instalação pelo botão nativo da atualização assinada.

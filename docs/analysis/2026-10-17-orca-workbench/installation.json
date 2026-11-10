@@ -1,8 +1,0 @@
-{
-  "preservedDataFiles": 1118,
-  "allPrivateDataHashesUnchangedDuringInstall": true,
-  "dataDirectoryDeletedOrRecreated": false,
-  "installed": "/Applications/Orbit.app",
-  "version": "0.2.24",
-  "signature": "ad-hoc; codesign --verify --deep --strict --all-architectures exit 0"
-}

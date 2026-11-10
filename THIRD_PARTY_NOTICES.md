@@ -11,8 +11,7 @@ imports, packages, assets or services are included; no dependency was added. The
 and copyright below also cover this adaptation (Copyright (c) 2026 Lovecast Inc.).
 
 Orca's mutation receipts, launch preferences, preamble and compaction/usage handling were
-reviewed as architectural references; their implementation was not copied. See the pinned
-source map in `docs/analysis/2026-10-17-orca-continuity/README.md` for scope and limits.
+reviewed as architectural references; their implementation was not copied. The pinned internal research evidence was intentionally excluded from the public distribution for privacy; upstream repository links and revision references are retained in this notice.
 
 ## Orca — Lovecast Inc.
 
@@ -97,8 +96,7 @@ Pinned source and current upstream: bbdbe72eba26ede514134730eba580963e7839f3.
 `packages/sidecar/src/accountCatalog.ts` adapts the Claude `list_models` control request,
 per-model effort/fast/auto parsing, disabled-row rejection and default resolution from
 `src/shared/claude-model-list-probe.ts`. Orbit adds bounded input, its own protocol types,
-account cache and conservative fallbacks. Source hashes and reviewed files are retained in
-`docs/plans/2026-10-18-six-improvements/upstream/sources.json`.
+account cache and conservative fallbacks. The pinned upstream source references and copyright notices in this document describe the reviewed adaptation; local verification artifacts are excluded from the public source distribution for privacy.
 The complete Orca MIT license above applies to this adaptation. No Orca runtime dependency,
 branding or installed third-party plugin is included. Its plugin API remains experimental.
 

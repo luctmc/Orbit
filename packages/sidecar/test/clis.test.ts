@@ -21,7 +21,7 @@ test('versions and install methods are read from what the shell reports', () => 
   assert.equal(parseVersion('codex-cli 0.160.1'), '0.160.1')
   assert.equal(parseVersion('nada'), null)
   assert.equal(installMethod('claude', '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe'), 'npm')
-  assert.equal(installMethod('claude', '/Users/x/.local/share/claude/versions/2.1.296'), 'native')
+  assert.equal(installMethod('claude', '/Users/USER/.local/share/claude/versions/2.1.296'), 'native')
   assert.equal(installMethod('codex', '/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js'), 'npm')
   assert.equal(installMethod('codex', '/opt/homebrew/Cellar/codex/0.1/bin/codex'), 'brew')
   assert.equal(installMethod('codex', '/usr/local/bin/codex'), 'unknown')
@@ -42,7 +42,7 @@ test("Codex's catalog keeps the listed models with their own effort levels", () 
 
 test('each install method updates its own way', () => {
   const status = (patch: Partial<CliStatus>): CliStatus => ({ ...blankStatus('claude'), installed: true, ...patch })
-  assert.deepEqual(updateCommands(status({ method: 'native', path: '/Users/x/.local/share/claude/versions/2.1.296' })), ['claude update'])
+  assert.deepEqual(updateCommands(status({ method: 'native', path: '/Users/USER/.local/share/claude/versions/2.1.296' })), ['claude update'])
   assert.deepEqual(updateCommands(status({ method: 'npm', path: '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe' })), [
     'npm install -g @anthropic-ai/claude-code@latest',
     "node '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/install.cjs'",

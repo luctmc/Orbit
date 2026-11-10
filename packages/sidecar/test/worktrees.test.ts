@@ -12,7 +12,7 @@ import { parsePrStatus } from '../src/core.ts'
 import { startServer } from '../src/server.ts'
 import { connect, ORIGIN, TOKEN } from './helpers.ts'
 
-const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, '-c', 'user.name=Teste', '-c', 'user.email=teste@exemplo.dev', '-c', 'init.defaultBranch=main', ...args], { encoding: 'utf8' })
+const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, '-c', 'user.name=Teste', '-c', 'user.email=teste@example.com', '-c', 'init.defaultBranch=main', ...args], { encoding: 'utf8' })
 
 /** A repository with an "origin" (a bare repo next to it) and the workspace in its app/ folder. */
 function repo() {

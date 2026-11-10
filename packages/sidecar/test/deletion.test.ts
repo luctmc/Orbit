@@ -9,7 +9,7 @@ import type { AgentLaunch } from '../src/command.ts'
 import { startServer } from '../src/server.ts'
 import { connect, ORIGIN, TOKEN, HOMES } from './helpers.ts'
 
-const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, '-c', 'user.name=Teste', '-c', 'user.email=teste@exemplo.dev', '-c', 'init.defaultBranch=main', ...args], { encoding: 'utf8' })
+const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, '-c', 'user.name=Teste', '-c', 'user.email=teste@example.com', '-c', 'init.defaultBranch=main', ...args], { encoding: 'utf8' })
 const CLAUDE_SESSION = '11111111-2222-4333-8444-555555555555'
 const CODEX_SESSION = '0199bbbb-cccc-7ddd-8eee-ffff00001111'
 
