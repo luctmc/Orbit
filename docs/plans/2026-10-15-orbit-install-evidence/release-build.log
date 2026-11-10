@@ -39,13 +39,13 @@ dist/assets/index-BmLvBNBM.js                                   771.56 kB │ gz
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-sidecar empacotado em /Users/lucas/Documents/GitHub/Orbit/apps/desktop/build/sidecar
-[fetch-node] Node v24.21.0 (arm64) pronto em /Users/lucas/Documents/GitHub/Orbit/apps/desktop/build/node
+sidecar empacotado em /Users/USER/Documents/GitHub/Orbit/apps/desktop/build/sidecar
+[fetch-node] Node v24.21.0 (arm64) pronto em /Users/USER/Documents/GitHub/Orbit/apps/desktop/build/node
    Compiling objc2-exception-helper v0.1.1
    Compiling objc2 v0.6.5
    Compiling ring v0.17.14
    Compiling mac-notification-sys v0.6.15
-   Compiling orbit-desktop v0.2.14 (/Users/lucas/Documents/GitHub/Orbit/apps/desktop/src-tauri)
+   Compiling orbit-desktop v0.2.14 (/Users/USER/Documents/GitHub/Orbit/apps/desktop/src-tauri)
    Compiling objc2-foundation v0.3.2
    Compiling wry v0.57.0
    Compiling block2 v0.6.2
@@ -76,8 +76,8 @@ sidecar empacotado em /Users/lucas/Documents/GitHub/Orbit/apps/desktop/build/sid
    Compiling tauri-plugin-notification v2.6.0
    Compiling tauri-plugin-dialog v2.8.2
     Finished `release` profile [optimized] target(s) in 47.44s
-       Built application at: /Users/lucas/Documents/GitHub/Orbit/apps/desktop/src-tauri/target/release/orbit-desktop
-    Bundling Orbit.app (/Users/lucas/Documents/GitHub/Orbit/apps/desktop/src-tauri/target/release/bundle/macos/Orbit.app)
+       Built application at: /Users/USER/Documents/GitHub/Orbit/apps/desktop/src-tauri/target/release/orbit-desktop
+    Bundling Orbit.app (/Users/USER/Documents/GitHub/Orbit/apps/desktop/src-tauri/target/release/bundle/macos/Orbit.app)
     Finished 1 bundle at:
-        /Users/lucas/Documents/GitHub/Orbit/apps/desktop/src-tauri/target/release/bundle/macos/Orbit.app (135.57 MiB)
+        /Users/USER/Documents/GitHub/Orbit/apps/desktop/src-tauri/target/release/bundle/macos/Orbit.app (135.57 MiB)
 

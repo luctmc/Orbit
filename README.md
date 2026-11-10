@@ -1,4 +1,44 @@
-# Orbit
+# Orbit — multi-agent coding workbench
+
+Orbit is an experimental, local-first desktop workbench for coordinating multiple AI coding agents through real terminal sessions. It brings Claude Code, Codex and other supported CLIs into shared workspaces, with missions, task handoffs, execution records and recoverable agent communication.
+
+> **Project status:** early-stage developer tooling; macOS is the current native desktop target. Not affiliated with or endorsed by Anthropic, OpenAI, or other agent providers. Those tools and their accounts are installed and authenticated separately.
+
+## Why Orbit?
+
+Running multiple coding agents is easy; keeping their work coordinated, observable and recoverable is harder. Orbit explores open developer infrastructure for tracking agent responsibility, resuming interrupted work, exchanging structured results, and keeping people in control of changes.
+
+**What is available:** Tauri 2 + Rust desktop shell, React desktop UI, Node.js sidecar, PTY-based agents, JSON/WebSocket protocol, workspace and mission management, agent handoffs, local execution history and tests. See the technical documentation below for the actual supported behaviors and limitations.
+
+## Getting started
+
+For development on macOS, install Node.js 24.11+ and Rust, then run:
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run app
+```
+
+Claude Code / Codex require their own CLI installations and authentication. The desktop build and native validation commands are documented below. Some live integration scenarios require local accounts; automated tests should not depend on exposing credentials.
+
+## Contributing and security
+
+- [Contributing guide](CONTRIBUTING.md) — setup, branches, tests and pull requests
+- [Security policy](SECURITY.md) — private reporting and safe disclosure
+- [Code of conduct](CODE_OF_CONDUCT.md)
+- [Third-party notices](THIRD_PARTY_NOTICES.md) — upstream attributions and permissions
+
+**Privacy:** never commit real sessions, authentication files, account details, personal paths, screenshots with identifying information or unredacted test logs. Existing historical artifacts need ongoing review; public source alone is not proof of security. See [Open-source review checklist](docs/OPEN_SOURCE_REVIEW.md).
+
+## License
+
+The original Orbit code is offered under the [MIT License](LICENSE), subject to the separate terms and notices covering third-party content in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Third-party names and logos remain the property of their respective owners.
+
+---
+
+## Documentação técnica (Português)
 
 Orquestrador de agentes de código (Claude Code, Codex…) rodando em terminais reais, organizados em
 workspaces e missões.
@@ -368,8 +408,7 @@ existentes e, se necessário, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. A chave nunc
 Se a publicação falhar, a versão anterior continua oficial; consulte o log antes de reexecutar.
 A release aponta para o commit exato do build e só se torna latest após o upload completo.
 
-O download fica em [Releases](https://github.com/luctmc/Orbit/releases/latest). Como o repositório
-é privado, é necessário ter acesso e autenticar o GitHub CLI (`gh auth login`) para o app buscar
+O download fica em [Releases](https://github.com/luctmc/Orbit/releases/latest). O comportamento de busca de atualizações deve ser validado em releases públicas; a implementação atual pode continuar dependendo do GitHub CLI (`gh auth login`) para algumas operações
 e baixar atualizações. O Orbit verifica novas versões ao abrir e a cada seis horas; também
 permite buscar e instalar pelo app. As assinaturas do updater são preservadas; assinatura
 Developer ID/notarização Apple e suporte Intel continuam sendo trabalhos separados.

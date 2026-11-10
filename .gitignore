@@ -8,3 +8,30 @@ apps/desktop/build/
 dist-release/
 
 .research/
+
+# Private local settings and credentials
+AGENTS.local.md
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.p12
+*.p8
+*.key
+*.keystore
+*.mobileprovision
+*.sqlite
+*.sqlite3
+*.db
+*.log
+*.log.*
+*.session
+*.session.json
+credentials.json
+auth.json
+
+# Local workbench state and generated evidence
+.orbit/
+.local/
+.private/

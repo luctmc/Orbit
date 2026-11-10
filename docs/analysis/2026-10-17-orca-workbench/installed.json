@@ -1,7 +1,7 @@
 {
   "time": "2026-10-17T22:20:35.171Z",
   "version": "0.2.24",
-  "bundle": "/Users/lucas/Documents/GitHub/Orbit-default-bypass/apps/desktop/src-tauri/target/release/bundle/macos/Orbit.app",
+  "bundle": "/Users/USER/Documents/GitHub/Orbit-default-bypass/apps/desktop/src-tauri/target/release/bundle/macos/Orbit.app",
   "installed": "/Applications/Orbit.app",
   "nativePid": 53016,
   "sidecarPid": 53032,
